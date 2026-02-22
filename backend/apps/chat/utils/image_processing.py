@@ -370,6 +370,14 @@ def validate_magic_numbers(data: bytes) -> Tuple[bool, Optional[str], Optional[s
     if data[:4] == b'%PDF':
         return True, 'pdf', 'application/pdf'
     
+    # OLE/CFB (doc, xls, etc.): D0 CF 11 E0
+    if data[:4] == b'\xd0\xcf\x11\xe0':
+        return True, 'ole', 'application/octet-stream'
+    
+    # ZIP (docx, xlsx, odt): PK.. 50 4B 03 04 ou 50 4B 05 06
+    if data[:2] == b'PK' and (len(data) < 4 or data[2:4] in (b'\x03\x04', b'\x05\x06')):
+        return True, 'zip', 'application/zip'
+    
     # OGG: OggS
     if data[:4] == b'OggS':
         return True, 'ogg', 'audio/ogg'
@@ -418,11 +426,18 @@ def validate_image_data(data: bytes, media_type: str) -> Tuple[bool, Optional[st
             logger.warning(f'⚠️ [VALIDATION] Magic numbers OK mas PIL falhou: {e}')
             return False, f'Imagem não passa na validação PIL: {str(e)}', detected_format
     
-    # 4. Para outros tipos, só validar magic numbers
-    if media_type in ['video', 'audio', 'document']:
+    # 4. Para video/audio, exige magic numbers conhecidos
+    if media_type in ['video', 'audio']:
         if not is_valid_magic:
             hex_preview = data[:16].hex() if len(data) >= 16 else data.hex()
             return False, f'Magic numbers inválidos para {media_type} (primeiros bytes: {hex_preview})', None
         return True, None, detected_format
+    
+    # 5. Para document: aceitar mesmo sem magic reconhecido (txt, outros formatos)
+    if media_type == 'document':
+        if is_valid_magic:
+            return True, None, detected_format
+        # txt e outros documentos podem não ter assinatura; aceitar e usar mime declarado
+        return True, None, None
     
     return True, None, detected_format
