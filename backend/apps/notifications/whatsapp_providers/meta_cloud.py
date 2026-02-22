@@ -143,6 +143,11 @@ class MetaCloudProvider(WhatsAppSenderBase):
         quoted_message_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia áudio (PTT) via Cloud API.
+        Nota: envio por 'link' pode ser exibido como "Encaminhado" no cliente.
+        Para evitar: fazer upload via Media API e enviar com audio: { "id": media_id }.
+        """
         to = self._to_phone(phone)
         if not to:
             return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}

@@ -69,6 +69,55 @@ def is_lid_number(phone: str) -> bool:
     
     return False
 
+
+def _conversation_instance_names(wa: WhatsAppInstance) -> list:
+    """
+    Lista de instance_name usados para filtrar Conversation por instância.
+    Meta Cloud inclui phone_number_id; Evolution só instance_name e evolution_instance_name.
+    Só acrescenta valores não vazios e sem duplicatas (ordem preservada).
+    """
+    names = []
+    for raw in (
+        (wa.instance_name or '').strip(),
+        (wa.evolution_instance_name or '').strip(),
+    ):
+        if raw and raw not in names:
+            names.append(raw)
+    if getattr(wa, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+        pnid = (getattr(wa, 'phone_number_id', None) or '').strip()
+        if pnid and pnid not in names:
+            names.append(pnid)
+    return names
+
+
+def _conversation_instance_q(names: list) -> Q:
+    """
+    Constrói Q (django.db.models.Q) para filtrar Conversation por instance_name.
+    Usa iexact e exact para todos os nomes. Ignora entradas vazias.
+    """
+    q = Q()
+    for nm in names:
+        s = (nm.strip() if isinstance(nm, str) else str(nm)).strip()
+        if not s:
+            continue
+        q |= Q(instance_name__iexact=s) | Q(instance_name=s)
+    return q
+
+
+def _create_conversation_instance_name(wa: WhatsAppInstance) -> str | None:
+    """
+    instance_name a usar ao criar nova Conversation.
+    Meta Cloud: phone_number_id (alinhado ao webhook); caso contrário instance_name ou evolution_instance_name.
+    Retorno str | None; create_kwargs só deve receber instance_name quando truthy.
+    """
+    if getattr(wa, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+        pnid = (getattr(wa, 'phone_number_id', None) or '').strip()
+        if pnid:
+            return pnid
+    raw = (wa.instance_name or wa.evolution_instance_name or '').strip()
+    return raw if raw else None
+
+
 def fetch_pushname_from_evolution(instance: WhatsAppInstance, phone: str) -> str | None:
     """
     Busca pushname de um contato via Evolution API.
@@ -385,18 +434,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 id=instance_param,
                 tenant=user.tenant,
                 is_active=True
-            ).values_list('instance_name', 'evolution_instance_name').first()
+            ).first()
             if wa:
-                name1 = (wa[0] or '').strip()
-                name2 = (wa[1] or '').strip()
-                if name1 or name2:
-                    q_instance = Q()
-                    if name1:
-                        q_instance |= Q(instance_name__iexact=name1) | Q(instance_name=name1)
-                    if name2 and name2 != name1:
-                        q_instance |= Q(instance_name__iexact=name2) | Q(instance_name=name2)
-                    if q_instance:
-                        queryset = queryset.filter(q_instance)
+                names = _conversation_instance_names(wa)
+                if names:
+                    queryset = queryset.filter(_conversation_instance_q(names))
             else:
                 # Instância não encontrada (UUID inválido ou de outro tenant): não retornar conversas de outras instâncias.
                 # O cliente fará POST /start/ com instance_id e o backend resolve lá.
@@ -1644,27 +1686,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 phone_filters |= Q(contact_phone=candidate)
         
         # ✅ MULTI-INSTÂNCIA: Se instance_id ou instance_name foi informado E tenant tem 2+ instâncias,
-        # filtrar por instância. Com 1 instância, manter comportamento anterior (busca só por phone).
-        instance_name_for_filter = None
+        # filtrar por instância. Para Meta Cloud, conversas têm instance_name=phone_number_id.
+        instance_names_for_filter = []
         if instance_id:
             wa = WhatsAppInstance.objects.filter(
                 id=instance_id, tenant=request.user.tenant, is_active=True
-            ).values_list('instance_name', 'evolution_instance_name').first()
+            ).first()
             if wa:
-                instance_name_for_filter = (wa[1] or wa[0] or '').strip() or (wa[0] or '').strip()
+                instance_names_for_filter = _conversation_instance_names(wa)
         elif instance_name and str(instance_name).strip():
-            instance_name_for_filter = str(instance_name).strip()
+            instance_names_for_filter = [str(instance_name).strip()]
         
         tenant_instance_count = WhatsAppInstance.objects.filter(
             tenant=request.user.tenant, is_active=True
-        ).count() if instance_name_for_filter else 0
+        ).count() if instance_names_for_filter else 0
         
         existing_qs = Conversation.objects.filter(Q(tenant=request.user.tenant) & phone_filters)
-        if instance_name_for_filter and tenant_instance_count >= 2:
-            existing_qs = existing_qs.filter(
-                Q(instance_name__iexact=instance_name_for_filter)
-                | Q(instance_name=instance_name_for_filter)
-            )
+        if instance_names_for_filter and tenant_instance_count >= 2:
+            existing_qs = existing_qs.filter(_conversation_instance_q(instance_names_for_filter))
         existing = existing_qs.first()
         
         if existing:
@@ -1801,7 +1840,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 id=instance_id, tenant=request.user.tenant, is_active=True
             ).first()
             if wa:
-                create_instance_name = wa.instance_name or wa.evolution_instance_name
+                create_instance_name = _create_conversation_instance_name(wa)
                 create_instance_friendly = wa.friendly_name
         elif instance_name and str(instance_name).strip():
             create_instance_name = str(instance_name).strip()
@@ -1813,7 +1852,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             if wa:
                 create_instance_friendly = wa.friendly_name
         if not create_instance_name:
-            # Fallback: primeira instância ativa (comportamento anterior, 1 instância)
+            # Fallback: primeira instância ativa (comportamento anterior, 1 instância).
+            # Não usar _create_conversation_instance_name aqui para não alterar comportamento.
             wa = WhatsAppInstance.objects.filter(
                 tenant=request.user.tenant, is_active=True
             ).first()
