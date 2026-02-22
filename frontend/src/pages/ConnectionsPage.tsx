@@ -7,6 +7,7 @@ import Toast from '../components/ui/Toast'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
+import { useAuthStore } from '../stores/authStore'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
 import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown } from 'lucide-react'
@@ -24,6 +25,7 @@ interface WhatsAppInstance {
   is_default: boolean
   default_department?: string | null
   connection_state: string
+  last_error?: string
   qr_code?: string
   qr_code_expires_at?: string
   api_key?: string
@@ -35,6 +37,8 @@ interface WhatsAppInstance {
 }
 
 export default function ConnectionsPage() {
+  const { user } = useAuthStore()
+  const isAdmin = !!user?.is_admin
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showInstanceModal, setShowInstanceModal] = useState(false)
@@ -528,7 +532,26 @@ export default function ConnectionsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {Array.isArray(instances) && instances.map((instance) => (
-            <Card key={instance.id} className="p-3 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
+            <Card key={instance.id} className={`p-3 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm ${(instance.status === 'error' || instance.connection_state === 'error') ? 'border-l-4 border-l-amber-500' : ''}`}>
+              {/* Alerta: agente vê mensagem genérica; admin vê causa (token) e que a instância está desativada */}
+              {(instance.status === 'error' || instance.connection_state === 'error') && (instance.last_error || instance.integration_type === INTEGRATION_META_CLOUD) && (
+                <div className="mb-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+                  {isAdmin ? (
+                    <>
+                      <p className="font-medium">Token com problemas – instância desativada</p>
+                      <p className="mt-0.5 text-amber-700">A instância está indisponível para envio para todos até a correção. Atualize o token ou reconecte.</p>
+                      {instance.last_error && (
+                        <p className="mt-1 font-mono truncate text-amber-600" title={instance.last_error}>{instance.last_error}</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium">Canal indisponível</p>
+                      <p className="mt-0.5 text-amber-700">Contate o administrador do sistema.</p>
+                    </>
+                  )}
+                </div>
+              )}
               {/* Header com nome e badges - mais compacto */}
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className="font-semibold text-gray-900 text-sm">{instance.friendly_name}</h3>
@@ -539,7 +562,9 @@ export default function ConnectionsPage() {
                     </span>
                   )}
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                    instance.integration_type === INTEGRATION_META_CLOUD
+                    instance.status === 'error' || instance.connection_state === 'error'
+                      ? 'bg-amber-100 text-amber-800'
+                      : instance.integration_type === INTEGRATION_META_CLOUD
                       ? 'bg-green-100 text-green-800'
                       : instance.connection_state === 'open'
                       ? 'bg-green-100 text-green-800'
@@ -547,7 +572,8 @@ export default function ConnectionsPage() {
                       ? 'bg-yellow-100 text-yellow-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' :
+                    {instance.status === 'error' || instance.connection_state === 'error' ? 'Indisponível' :
+                     instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' :
                      instance.connection_state === 'open' ? 'Conectado' :
                      instance.connection_state === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>

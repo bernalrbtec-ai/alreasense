@@ -234,7 +234,9 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             if any(k in serializer.validated_data for k in credenciais_meta):
                 instance.status = 'inactive'
                 instance.connection_state = 'close'
-                instance.save(update_fields=['status', 'connection_state'])
+                instance.last_error = ''
+                instance.is_active = True
+                instance.save(update_fields=['status', 'connection_state', 'last_error', 'is_active'])
         
         CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
     

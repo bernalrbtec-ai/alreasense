@@ -1039,6 +1039,36 @@ class WhatsAppInstance(models.Model):
             self.save()
             return False
 
+    def set_meta_token_error_if_applicable(self, error_message: str) -> bool:
+        """
+        Se for instância Meta e o erro indicar token/sessão expirada ou inválida,
+        marca a instância em erro e desativa (status=error, connection_state=error,
+        last_error, is_active=False) para ficar indisponível para envio para todos.
+        Admin vê a mensagem técnica em Configurações; agente vê mensagem genérica.
+        Retorna True se atualizou a instância.
+        """
+        if not error_message or getattr(self, 'integration_type', None) != self.INTEGRATION_TYPE_META_CLOUD:
+            return False
+        err_lower = (error_message or '').lower()
+        token_indicators = (
+            'error validating access token',
+            'session has expired',
+            'access token',
+            'token expired',
+            'invalid oauth access token',
+            'token inválido',
+            'sessão expirada',
+        )
+        if not any(ind in err_lower for ind in token_indicators):
+            return False
+        self.status = 'error'
+        self.connection_state = 'error'
+        self.last_error = (error_message or '')[:500]
+        self.last_check = timezone.now()
+        self.is_active = False
+        self.save(update_fields=['status', 'connection_state', 'last_error', 'last_check', 'is_active'])
+        return True
+
     def _detect_specific_problems(self, response_text: str):
         """
         Detecta problemas específicos baseado na resposta da API.

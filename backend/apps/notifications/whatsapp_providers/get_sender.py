@@ -21,6 +21,9 @@ def get_sender(instance: Optional[WhatsAppInstance]) -> Optional[WhatsAppSenderB
     """
     if not instance:
         return None
+    if not getattr(instance, 'is_active', True):
+        logger.warning("get_sender: instância inativa (instance_id=%s), ignorando.", instance.id)
+        return None
     # Tratar integration_type None como Evolution (linhas antigas antes da coluna Meta)
     integration_type = getattr(instance, 'integration_type', None) or WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
     try:

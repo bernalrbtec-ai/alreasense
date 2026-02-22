@@ -1311,13 +1311,27 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     Message.objects.filter(id=message.id).update
                 )(status='failed', error_message=err[:500])
                 log.warning("❌ [CHAT ENVIO] Provider retornou falha (provider=%s): %s", provider_kind, err[:200])
+                # Meta: marcar instância em alerta se erro for de token/sessão (usuário vê em Configurações)
+                if provider_kind == 'meta' and instance:
+                    try:
+                        updated = await database_sync_to_async(instance.set_meta_token_error_if_applicable)(err)
+                        if updated:
+                            log.warning("⚠️ [CHAT ENVIO] Instância Meta marcada em alerta (token/sessão). Contate o administrador.")
+                    except Exception as e2:
+                        log.warning("⚠️ [CHAT ENVIO] Não foi possível marcar instância em alerta: %s", e2)
                 return
             except Exception as e:
                 log.exception("❌ [CHAT ENVIO] Erro ao enviar via provider: %s", e)
                 close_old_connections()
+                err_msg = str(e)[:500]
                 await database_sync_to_async(
                     Message.objects.filter(id=message.id).update
-                )(status='failed', error_message=str(e)[:500])
+                )(status='failed', error_message=err_msg)
+                if provider_kind == 'meta' and instance:
+                    try:
+                        await database_sync_to_async(instance.set_meta_token_error_if_applicable)(err_msg)
+                    except Exception as e2:
+                        log.warning("⚠️ [CHAT ENVIO] Não foi possível marcar instância em alerta: %s", e2)
                 return
         
         # Meta sem provider válido: não usar Evolution
