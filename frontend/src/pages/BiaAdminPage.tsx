@@ -76,6 +76,9 @@ export default function BiaAdminPage() {
   const [loadedConversationText, setLoadedConversationText] = useState<string>('')
   const [messagesLoading, setMessagesLoading] = useState(false)
 
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const verifyKey = useCallback(async () => {
     const key = accessKey.trim()
     if (!key) {
@@ -105,6 +108,20 @@ export default function BiaAdminPage() {
     const keyFromUrl = params.get('key')
     if (keyFromUrl) {
       setAccessKey(keyFromUrl)
+    }
+  }, [])
+
+  // Cancelar polling ao sair da página
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current)
+        pollingTimeoutRef.current = null
+      }
     }
   }, [])
 
@@ -249,6 +266,9 @@ export default function BiaAdminPage() {
     }
   }
 
+  const POLL_INTERVAL_MS = 2500
+  const POLL_MAX_MS = 5 * 60 * 1000 // 5 min
+
   const handleSendTest = async () => {
     const message = testMessage.trim()
     if (!message || !aiSettings?.n8n_ai_webhook_url) {
@@ -259,6 +279,24 @@ export default function BiaAdminPage() {
     setTestError(null)
     setTestMessages((prev) => [...prev, { role: 'user', content: message }])
     setTestMessage('')
+    const clearPolling = () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
+      }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current)
+        pollingTimeoutRef.current = null
+      }
+      setTestLoading(false)
+    }
+    const finishWithMessage = (content: string) => {
+      setTestMessages((prev) => {
+        const rest = prev.slice(0, -1)
+        return [...rest, { role: 'assistant' as const, content }]
+      })
+      clearPolling()
+    }
     try {
       let prompt = testSystemPrompt.trim()
       if (loadedConversationText.trim()) {
@@ -276,6 +314,46 @@ export default function BiaAdminPage() {
       }
       if (prompt) body.prompt = prompt
       const res = await api.post('/ai/gateway/test/', body)
+
+      if (res.data?.deferred && res.data?.job_id) {
+        setTestMessages((prev) => [...prev, { role: 'assistant', content: 'Deixe-me pensar...' }])
+        const jobId = res.data.job_id as string
+        const startedAt = Date.now()
+        const poll = async () => {
+          if (Date.now() - startedAt > POLL_MAX_MS) {
+            finishWithMessage('Tempo esgotado. Resultado não disponível.')
+            return
+          }
+          try {
+            const r = await api.get(`/ai/gateway/test/result/${jobId}/`)
+            const st = r.data?.status
+            if (st === 'completed') {
+              const resp = r.data?.response || {}
+              const reply = resp.reply_text ?? resp.text ?? JSON.stringify(resp, null, 2)
+              finishWithMessage(String(reply))
+              return
+            }
+            if (st === 'failed') {
+              finishWithMessage(`Erro: ${r.data?.error || 'Falha no processamento.'}`)
+              return
+            }
+          } catch (e: any) {
+            if (e.response?.status === 404) {
+              finishWithMessage('Resultado expirado ou não encontrado.')
+              return
+            }
+          }
+        }
+        pollingIntervalRef.current = setInterval(poll, POLL_INTERVAL_MS)
+        setTimeout(() => poll(), 400)
+        pollingTimeoutRef.current = setTimeout(() => {
+          if (pollingIntervalRef.current) {
+            finishWithMessage('Tempo esgotado. Resultado não disponível.')
+          }
+        }, POLL_MAX_MS)
+        return
+      }
+
       const data = res.data?.data || res.data
       const responseData = data?.response || res.data?.response || data
       const reply = responseData?.reply_text ?? responseData?.text ?? JSON.stringify(responseData || res.data, null, 2)

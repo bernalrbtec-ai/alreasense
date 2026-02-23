@@ -257,6 +257,7 @@ CSRF_TRUSTED_ORIGINS = config(
 CSRF_EXEMPT_PATHS = [
     '/webhooks/',
     '/api/health/',
+    '/api/ai/gateway/test/callback/',
 ]
 
 # Redis - Railway Configuration
@@ -435,6 +436,13 @@ N8N_RAG_WEBHOOK_URL = config('N8N_RAG_WEBHOOK_URL', default='')
 N8N_SUMMARIZE_WEBHOOK_URL = config('N8N_SUMMARIZE_WEBHOOK_URL', default='')
 # Chave única para acessar a página admin de teste/config da BIA (geral; quem tiver a chave acessa)
 BIA_ADMIN_ACCESS_KEY = config('BIA_ADMIN_ACCESS_KEY', default='')
+
+# Gateway de teste BIA: fluxo assíncrono (job_id + callback n8n)
+GATEWAY_TEST_USE_ASYNC = config('GATEWAY_TEST_USE_ASYNC', default=False, cast=bool)
+GATEWAY_TEST_CALLBACK_TOKEN = config('GATEWAY_TEST_CALLBACK_TOKEN', default='')
+GATEWAY_TEST_CALLBACK_BASE_URL = config('GATEWAY_TEST_CALLBACK_BASE_URL', default='')
+GATEWAY_TEST_RESULT_TTL_SECONDS = config('GATEWAY_TEST_RESULT_TTL_SECONDS', default=600, cast=int)
+GATEWAY_TEST_ASYNC_TIMEOUT = config('GATEWAY_TEST_ASYNC_TIMEOUT', default=15, cast=int)
 
 # Reports sync (incremental metrics - n8n/cron)
 REPORTS_SYNC_API_KEY = config('REPORTS_SYNC_API_KEY', default='')

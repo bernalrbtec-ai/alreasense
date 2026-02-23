@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import time
@@ -7,7 +8,7 @@ import requests
 
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.conf import settings
@@ -19,6 +20,8 @@ from apps.chat.models import Conversation, Message as ChatMessage
 from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, TenantSecretaryProfile, AiTranscriptionDailyMetric
+from apps.tenancy.models import Tenant
+from apps.connections.webhook_cache import get_redis_client
 from apps.ai.transcription_metrics import (
     aggregate_transcription_metrics,
     build_transcription_queryset,
@@ -315,6 +318,191 @@ MAX_KNOWLEDGE_CONTENT_LENGTH = 50000
 MAX_CHAT_MESSAGES = 50
 GATEWAY_TEST_WEBHOOK_TIMEOUT = 60
 
+# Gateway test async: Redis key prefix and TTL
+GATEWAY_TEST_RESULT_KEY_PREFIX = "gateway_test_result:"
+
+
+def _gateway_test_result_ttl():
+    return getattr(settings, 'GATEWAY_TEST_RESULT_TTL_SECONDS', 600)
+
+
+def _gateway_test_set_pending(job_id, tenant_id, request_id, trace_id):
+    """Grava job pending no Redis. Retorna True se ok, False se Redis indisponível."""
+    client = get_redis_client()
+    if not client:
+        return False
+    key = f"{GATEWAY_TEST_RESULT_KEY_PREFIX}{job_id}"
+    value = {
+        "tenant_id": str(tenant_id),
+        "status": "pending",
+        "request_id": str(request_id),
+        "trace_id": str(trace_id),
+        "created_at": timezone.now().isoformat(),
+    }
+    try:
+        client.setex(key, _gateway_test_result_ttl(), json.dumps(value))
+        return True
+    except Exception as e:
+        logger.warning("gateway_test Redis set pending failed: %s", e)
+        return False
+
+
+def _gateway_test_get_result(job_id):
+    """Retorna dict do job (tenant_id, status, response, error) ou None se não existir."""
+    client = get_redis_client()
+    if not client:
+        return None
+    key = f"{GATEWAY_TEST_RESULT_KEY_PREFIX}{job_id}"
+    try:
+        raw = client.get(key)
+        if not raw:
+            return None
+        return json.loads(raw)
+    except Exception as e:
+        logger.warning("gateway_test Redis get failed: %s", e)
+        return None
+
+
+def _gateway_test_set_result(job_id, status, response=None, error_message=None, request_id=None, trace_id=None):
+    """Atualiza job no Redis (completed/failed). Só deve ser chamado se a chave já existir."""
+    client = get_redis_client()
+    if not client:
+        return False
+    key = f"{GATEWAY_TEST_RESULT_KEY_PREFIX}{job_id}"
+    try:
+        existing = client.get(key)
+        if not existing:
+            return False
+        data = json.loads(existing)
+        data["status"] = status
+        if response is not None:
+            data["response"] = response
+        if error_message is not None:
+            data["error"] = error_message
+        if request_id is not None:
+            data["request_id"] = str(request_id)
+        if trace_id is not None:
+            data["trace_id"] = str(trace_id)
+        client.setex(key, _gateway_test_result_ttl(), json.dumps(data))
+        return True
+    except Exception as e:
+        logger.warning("gateway_test Redis set result failed: %s", e)
+        return False
+
+
+def _gateway_test_delete_result(job_id):
+    """Remove job do Redis (ex.: quando n8n responde síncrono)."""
+    client = get_redis_client()
+    if not client:
+        return
+    key = f"{GATEWAY_TEST_RESULT_KEY_PREFIX}{job_id}"
+    try:
+        client.delete(key)
+    except Exception as e:
+        logger.warning("gateway_test Redis delete failed: %s", e)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def gateway_test_callback(request):
+    """
+    Callback chamado pelo n8n ao terminar o processamento assíncrono do gateway de teste.
+    Autenticação: header X-Gateway-Callback-Token. Só atualiza chave existente no Redis.
+    """
+    token = (request.headers.get('X-Gateway-Callback-Token') or '').strip()
+    expected = (getattr(settings, 'GATEWAY_TEST_CALLBACK_TOKEN', None) or '').strip()
+    if not expected or token != expected:
+        return Response({'detail': 'Invalid token.'}, status=status.HTTP_403_FORBIDDEN)
+
+    job_id_raw = request.data.get('job_id')
+    job_id = _parse_uuid(job_id_raw)
+    if not job_id:
+        return Response({'detail': 'job_id (UUID) required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    callback_status = request.data.get('status')
+    if callback_status not in ('success', 'error'):
+        return Response({'detail': 'status must be success or error.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    response_payload = request.data.get('response')
+    error_message = (request.data.get('error_message') or '').strip()
+    request_id = _parse_uuid(request.data.get('request_id'))
+    trace_id = _parse_uuid(request.data.get('trace_id'))
+
+    # Só atualizar se a chave já existir (não criar resultado para job_id desconhecido)
+    internal_status = 'completed' if callback_status == 'success' else 'failed'
+    updated = _gateway_test_set_result(
+        job_id,
+        status=internal_status,
+        response=response_payload if callback_status == 'success' else None,
+        error_message=error_message if callback_status == 'error' else None,
+        request_id=request_id,
+        trace_id=trace_id,
+    )
+    if not updated:
+        logger.info("gateway_test callback: job inexistente ou expirado")
+        return Response({'detail': 'Job not found or expired.'}, status=status.HTTP_200_OK)
+
+    # Auditoria: criar AiGatewayAudit no callback (tenant vem do Redis)
+    job_data = _gateway_test_get_result(job_id)
+    if job_data:
+        tenant_id = job_data.get('tenant_id')
+        try:
+            tenant = Tenant.objects.get(id=tenant_id)
+        except Tenant.DoesNotExist:
+            pass
+        else:
+            reply_text = ''
+            if internal_status == 'completed' and response_payload:
+                reply_text = str(response_payload.get('reply_text') or response_payload.get('text') or '')
+            AiGatewayAudit.objects.create(
+                tenant=tenant,
+                conversation_id=None,
+                message_id=uuid.uuid4(),
+                contact_id=None,
+                department_id=None,
+                agent_id=None,
+                request_id=request_id or uuid.uuid4(),
+                trace_id=trace_id or uuid.uuid4(),
+                status='success' if internal_status == 'completed' else 'failed',
+                model_name='',
+                latency_ms=None,
+                rag_hits=None,
+                prompt_version='',
+                input_summary=_safe_summary(''),
+                output_summary=_safe_summary(reply_text),
+                handoff=False,
+                handoff_reason='',
+                error_code='' if internal_status == 'completed' else 'CALLBACK_ERROR',
+                error_message=error_message,
+                request_payload_masked={},
+                response_payload_masked=_mask_payload(response_payload) if response_payload else {},
+            )
+    return Response({'detail': 'OK'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember])
+def gateway_test_result(request, job_id):
+    """
+    Retorna o resultado de um job de teste do gateway (polling).
+    404 se job não existir ou pertencer a outro tenant.
+    """
+    job_data = _gateway_test_get_result(job_id)
+    if not job_data:
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+    job_tenant_id = job_data.get('tenant_id')
+    if not job_tenant_id or str(request.user.tenant_id) != str(job_tenant_id):
+        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    status_value = job_data.get('status', 'pending')
+    payload = {'status': status_value}
+    if status_value == 'completed':
+        payload['response'] = job_data.get('response') or {}
+    elif status_value == 'failed':
+        payload['error'] = job_data.get('error') or ''
+    return Response(payload, status=status.HTTP_200_OK)
+
+
 # Secretária IA: limites de validação (segurança e desempenho)
 SECRETARY_FORM_DATA_MAX_JSON_BYTES = 50_000
 SECRETARY_ROUTING_KEYWORDS_MAX_ITEMS = 50
@@ -553,6 +741,22 @@ def gateway_test(request):
     if messages_payload:
         payload["messages"] = messages_payload
 
+    use_async = getattr(settings, 'GATEWAY_TEST_USE_ASYNC', False)
+    job_id = None
+    webhook_timeout = GATEWAY_TEST_WEBHOOK_TIMEOUT
+    if use_async:
+        job_id = uuid.uuid4()
+        callback_base = (getattr(settings, 'GATEWAY_TEST_CALLBACK_BASE_URL', None) or '').strip().rstrip('/')
+        callback_url = f"{callback_base}/api/ai/gateway/test/callback/" if callback_base else ''
+        if not _gateway_test_set_pending(job_id, request.user.tenant_id, request_id, trace_id):
+            return Response(
+                {"error": "Serviço temporariamente indisponível (armazenamento)."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        payload["job_id"] = str(job_id)
+        payload["callback_url"] = callback_url
+        webhook_timeout = getattr(settings, 'GATEWAY_TEST_ASYNC_TIMEOUT', 15)
+
     start_time = time.monotonic()
     status_value = "success"
     error_code = ""
@@ -560,10 +764,27 @@ def gateway_test(request):
     response_payload = {}
 
     try:
-        response = requests.post(ai_webhook, json=payload, timeout=GATEWAY_TEST_WEBHOOK_TIMEOUT)
+        response = requests.post(ai_webhook, json=payload, timeout=webhook_timeout)
         response.raise_for_status()
         response_payload = response.json() if response.content else {}
+        # Resposta imediata deferred do n8n: retornar ao frontend sem criar audit
+        if use_async and job_id and isinstance(response_payload, dict):
+            if response_payload.get('deferred') and str(response_payload.get('job_id')) == str(job_id):
+                return Response({
+                    "deferred": True,
+                    "job_id": str(job_id),
+                    "message": "Deixe-me pensar...",
+                }, status=status.HTTP_200_OK)
+        # Resposta completa com use_async: remover job do Redis (callback não será chamado)
+        if use_async and job_id:
+            _gateway_test_delete_result(job_id)
     except requests.Timeout as exc:
+        if use_async and job_id:
+            return Response({
+                "deferred": True,
+                "job_id": str(job_id),
+                "message": "Deixe-me pensar...",
+            }, status=status.HTTP_200_OK)
         status_value = "failed"
         error_code = "TIMEOUT"
         error_message = str(exc)
@@ -573,6 +794,8 @@ def gateway_test(request):
             "error_message": error_message,
         }
     except requests.RequestException as exc:
+        if use_async and job_id:
+            _gateway_test_delete_result(job_id)
         status_value = "failed"
         error_code = "UPSTREAM_ERROR"
         error_message = str(exc)
@@ -582,6 +805,8 @@ def gateway_test(request):
             "error_message": error_message,
         }
     except ValueError as exc:
+        if use_async and job_id:
+            _gateway_test_delete_result(job_id)
         status_value = "failed"
         error_code = "INVALID_RESPONSE"
         error_message = str(exc)

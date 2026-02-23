@@ -381,6 +381,8 @@ export default function ConfigurationsPage() {
   const [modelTestRagItems, setModelTestRagItems] = useState<Array<{ title: string; content: string }>>([])
   const [modelTestRagLoading, setModelTestRagLoading] = useState(false)
   const modelTestRagInputRef = useRef<HTMLInputElement>(null)
+  const modelTestPollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const modelTestPollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const MAX_PROMPT_LENGTH = 10000
   const MAX_RAG_FILE_SIZE = 2 * 1024 * 1024 // 2MB
   const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
@@ -1143,6 +1145,22 @@ export default function ConfigurationsPage() {
     if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
   }
 
+  useEffect(() => {
+    return () => {
+      if (modelTestPollingIntervalRef.current) {
+        clearInterval(modelTestPollingIntervalRef.current)
+        modelTestPollingIntervalRef.current = null
+      }
+      if (modelTestPollingTimeoutRef.current) {
+        clearTimeout(modelTestPollingTimeoutRef.current)
+        modelTestPollingTimeoutRef.current = null
+      }
+    }
+  }, [])
+
+  const MODEL_TEST_POLL_INTERVAL_MS = 2500
+  const MODEL_TEST_POLL_MAX_MS = 5 * 60 * 1000
+
   const handleSendModelTest = async () => {
     if (!modelTestInput.trim() || !aiSettings) return
     if (!aiSettings.n8n_ai_webhook_url) {
@@ -1203,6 +1221,67 @@ export default function ConfigurationsPage() {
       const responseData = data.response || payload.response || null
       const requestId = payload.request_id || ''
       const traceId = payload.trace_id || ''
+
+      if (payload.deferred && payload.job_id) {
+        setModelTestMessages((prev) => [...prev, { role: 'assistant', content: 'Deixe-me pensar...' }])
+        const jobId = payload.job_id as string
+        const startedAt = Date.now()
+        const clearPolling = () => {
+          if (modelTestPollingIntervalRef.current) {
+            clearInterval(modelTestPollingIntervalRef.current)
+            modelTestPollingIntervalRef.current = null
+          }
+          if (modelTestPollingTimeoutRef.current) {
+            clearTimeout(modelTestPollingTimeoutRef.current)
+            modelTestPollingTimeoutRef.current = null
+          }
+          setModelTestLoading(false)
+        }
+        const poll = async () => {
+          if (Date.now() - startedAt > MODEL_TEST_POLL_MAX_MS) {
+            setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Tempo esgotado. Resultado não disponível.' }])
+            clearPolling()
+            return
+          }
+          try {
+            const r = await api.get(`/ai/gateway/test/result/${jobId}/`)
+            const st = r.data?.status
+            if (st === 'completed') {
+              const resp = r.data?.response || {}
+              setModelTestResponse(resp)
+              let content = ''
+              if (resp?.reply_text) content = String(resp.reply_text)
+              else if (resp?.text) content = String(resp.text)
+              else if (resp) content = typeof resp === 'string' ? resp : JSON.stringify(resp, null, 2)
+              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content }])
+              clearPolling()
+              return
+            }
+            if (st === 'failed') {
+              const errMsg = r.data?.error || 'Falha no processamento.'
+              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: `Erro: ${errMsg}` }])
+              setModelTestError(errMsg)
+              clearPolling()
+              return
+            }
+          } catch (_e: any) {
+            if (_e.response?.status === 404) {
+              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Resultado expirado ou não encontrado.' }])
+              clearPolling()
+              return
+            }
+          }
+        }
+        modelTestPollingIntervalRef.current = setInterval(poll, MODEL_TEST_POLL_INTERVAL_MS)
+        setTimeout(() => poll(), 400)
+        modelTestPollingTimeoutRef.current = setTimeout(() => {
+          if (modelTestPollingIntervalRef.current) {
+            setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Tempo esgotado. Resultado não disponível.' }])
+            clearPolling()
+          }
+        }, MODEL_TEST_POLL_MAX_MS)
+        return
+      }
 
       setModelTestRequest(requestPayload)
       setModelTestResponse(responseData)
