@@ -206,6 +206,7 @@ def _message_content_for_secretary(msg) -> str:
 def _build_secretary_context(conversation, message, profile: TenantSecretaryProfile) -> Dict[str, Any]:
     """Monta contexto para a Secretária: mensagens recentes (texto ou transcrição), RAG source=secretary, memória por contato."""
     from apps.chat.services.business_hours_service import BusinessHoursService
+    from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 
     message_limit = getattr(settings, "AI_CONTEXT_MESSAGE_LIMIT", 20)
     recent_messages = list(
@@ -309,15 +310,31 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         ),
     }
 
+    # company_context: fallback para n8n quando pgvector estiver vazio (BIA)
+    company_context = ""
+    try:
+        from apps.tenancy.models import TenantCompanyProfile
+        from apps.tenancy.rag_sync import _build_company_chunk
+        profile_company = TenantCompanyProfile.objects.filter(tenant_id=conversation.tenant_id).first()
+        if profile_company:
+            company_context = _build_company_chunk(profile_company) or ""
+    except Exception:
+        pass
+
+    contact_phone_raw = (conversation.contact_phone or "").strip()
+    contact_phone_normalized = normalize_contact_phone_for_rag(contact_phone_raw)
+
     return {
         "agent_type": "secretary",
         "tenant": {"id": str(conversation.tenant_id), "name": conversation.tenant.name},
         "business_hours": business_hours_info,
+        "company_context": company_context,
         "conversation": {
             "id": str(conversation.id),
             "status": conversation.status,
             "contact_name": conversation.contact_name,
-            "contact_phone": conversation.contact_phone,
+            "contact_phone": contact_phone_raw,
+            "contact_phone_normalized": contact_phone_normalized,
             "department": conversation.department.name if conversation.department else None,
             "department_id": str(conversation.department_id) if conversation.department_id else None,
         },
@@ -503,6 +520,9 @@ def _secretary_worker(conversation, message) -> None:
         latency_ms = int((time.time() - start_time) * 1000)
         request_id = data.get("request_id")
         trace_id = data.get("trace_id")
+        meta = data.get("meta") or {}
+        input_tokens = meta.get("input_tokens") if isinstance(meta.get("input_tokens"), int) else None
+        output_tokens = meta.get("output_tokens") if isinstance(meta.get("output_tokens"), int) else None
 
         sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Secretária IA"
         message_obj = ChatMessage.objects.create(
@@ -707,6 +727,9 @@ def _secretary_worker(conversation, message) -> None:
                 handoff=bool(suggested_department_id),
                 input_summary="",  # Não logar conteúdo completo (segurança)
                 output_summary=reply_text[:200] if reply_text else "",
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                agent_type="bia",
             )
         except Exception:
             pass
@@ -749,6 +772,10 @@ def dispatch_secretary_async(conversation, message) -> None:
         n8n_url = _resolve_n8n_ai_url(conversation.tenant)
         if not n8n_url:
             logger.info("[SECRETARY] Skip: webhook da IA não configurado (n8n_ai_webhook_url vazio) para tenant %s", conversation.tenant_id)
+            return
+        # BIA não atende grupos WhatsApp
+        if "g.us" in (conversation.contact_phone or ""):
+            logger.info("[SECRETARY] Skip: conversa de grupo (BIA não atende grupos)")
             return
     except Exception as e:
         logger.warning("[SECRETARY] Skip: exceção ao checar condições: %s", e, exc_info=True)

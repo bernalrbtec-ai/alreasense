@@ -119,11 +119,16 @@ class AiGatewayAudit(models.Model):
     request_payload_masked = models.JSONField(default=dict, blank=True)
     response_payload_masked = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # BIA: tokens e tipo de agente (preenchidos quando n8n envia meta.input_tokens / meta.output_tokens)
+    input_tokens = models.IntegerField(null=True, blank=True)
+    output_tokens = models.IntegerField(null=True, blank=True)
+    agent_type = models.CharField(max_length=50, null=True, blank=True)
 
     class Meta:
         db_table = 'ai_gateway_audit'
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
+            models.Index(fields=['tenant', 'agent_type', 'created_at']),
             models.Index(fields=['request_id']),
             models.Index(fields=['trace_id']),
             models.Index(fields=['conversation_id', 'created_at']),
