@@ -836,11 +836,12 @@ export function ChatWindow() {
         </div>
 
         {/* INICIAR ATENDIMENTO: atribui ao usuário; mantém no departamento; aparece nos dois lugares (departamento + Minhas conversas) com "X está atendendo" */}
-        {/* Mostrar quando: conversa não atribuída E (pending OU open com department) */}
-        {activeConversation && 
-         !activeConversation.assigned_to && 
-         (activeConversation.status === 'pending' || 
-          (activeConversation.status === 'open' && activeConversation.department)) && (
+        {/* Mostrar quando: conversa não atribuída E (pending OU open com department OU fallback: status !== 'closed' para payload incompleto ex. Meta) */}
+        {activeConversation &&
+         !activeConversation.assigned_to &&
+         (activeConversation.status === 'pending' ||
+          (activeConversation.status === 'open' && activeConversation.department) ||
+          activeConversation.status !== 'closed') && (
           <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
             <button
               onClick={handleStartConversation}

@@ -793,10 +793,10 @@ export function useTenantSocket() {
             });
             updateConv(data.conversation);
             
-            // ✅ CORREÇÃO CRÍTICA: Se conversa foi reaberta e usuário está na página do chat sem conversa ativa,
-            // definir automaticamente como ativa para que apareça no chat
-            if (statusReopened && isOnChatPage && !activeConv) {
-              console.log('✅ [TENANT WS] Conversa reaberta e nenhuma conversa ativa, definindo como ativa automaticamente');
+            // ✅ CORREÇÃO CRÍTICA: Se conversa foi reaberta (closed → pending/open) e usuário está na página do chat,
+            // definir como ativa para que abra/troque para essa conversa (mesmo que já houvesse outra ativa)
+            if (statusReopened && isOnChatPage) {
+              console.log('✅ [TENANT WS] Conversa reaberta, definindo como ativa (nova mensagem em conversa encerrada)');
               setActiveConversation(data.conversation);
             }
             

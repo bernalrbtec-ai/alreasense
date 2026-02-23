@@ -291,6 +291,51 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         if not conversation:
             continue
 
+        # Reabrir conversa fechada quando chega mensagem inbound (alinhado ao Evolution).
+        # Janela de despedida: não reabrir se fechou há menos de 2 min (mensagem de fechamento do menu).
+        if conversation.status == 'closed':
+            last_close_message = Message.objects.filter(
+                conversation=conversation,
+                direction='outgoing',
+                metadata__welcome_menu_close_confirmation=True,
+            ).order_by('-created_at').first()
+            in_farewell_window = False
+            if last_close_message:
+                time_since_closure = (django_timezone.now() - last_close_message.created_at).total_seconds() / 60
+                if time_since_closure < 2:
+                    in_farewell_window = True
+                    logger.info(
+                        "[META WEBHOOK] Janela de despedida ativa (%.1f min < 2 min) - conversa permanece fechada",
+                        time_since_closure,
+                    )
+            if not in_farewell_window:
+                old_status = conversation.status
+                old_dept = conversation.department.name if conversation.department else 'Nenhum'
+                if default_department:
+                    conversation.department = default_department
+                    conversation.status = 'open'
+                    logger.info(
+                        "[META WEBHOOK] Conversa %s reaberta no departamento %s (instância com departamento padrão)",
+                        normalized_phone[:16],
+                        default_department.name,
+                    )
+                else:
+                    conversation.department = None
+                    conversation.status = 'pending'
+                    logger.info(
+                        "[META WEBHOOK] Conversa %s reaberta no Inbox (Secretária IA pode responder)",
+                        normalized_phone[:16],
+                    )
+                conversation.assigned_to = None
+                conversation.save(update_fields=['status', 'department', 'assigned_to'])
+                logger.info(
+                    "[META WEBHOOK] Conversa reaberta: %s -> %s (dept: %s -> %s)",
+                    old_status,
+                    conversation.status,
+                    old_dept,
+                    conversation.department.name if conversation.department else 'Inbox',
+                )
+
         content = ''
         metadata_extra = {}
         if msg_type == 'text':
@@ -353,6 +398,10 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
             )
             # Fase 6: notificar apenas APÓS o commit, para evitar race (agente responde antes da inbound persistida)
             def _broadcast_after_commit():
+                try:
+                    broadcast_conversation_updated(conversation, message_id=str(new_msg.id))
+                except Exception as e:
+                    logger.exception("[META WEBHOOK] Erro ao broadcast conversation_updated: %s", e)
                 try:
                     broadcast_message_received(new_msg)
                 except Exception as e:
