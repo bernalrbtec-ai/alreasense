@@ -63,6 +63,7 @@ const baseNavigation = [
   { name: 'Planos', href: '/billing', icon: CreditCard },
   { name: 'Billing API', href: '/billing-api', icon: CreditCard },
   { name: 'Configurações', href: '/configurations', icon: Settings },
+  { name: 'BIA (teste)', href: '/admin/bia', icon: MessageSquare },
 ]
 
 const reportsNavigation = [

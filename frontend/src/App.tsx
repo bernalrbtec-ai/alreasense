@@ -42,6 +42,7 @@ const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPa
 const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
+const BiaAdminPage = lazy(() => import('./pages/BiaAdminPage'))
 
 // Components
 import Layout from './components/Layout'
@@ -217,6 +218,11 @@ function App() {
               <Route path="configurations" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
                   <ConfigurationsPage />
+                </Suspense>
+              } />
+              <Route path="admin/bia" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BiaAdminPage />
                 </Suspense>
               } />
               

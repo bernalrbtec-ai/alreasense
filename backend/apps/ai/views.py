@@ -321,6 +321,23 @@ SECRETARY_ROUTING_KEYWORD_MAX_LENGTH = 100
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def verify_bia_admin_key(request):
+    """
+    Valida a chave de acesso à página admin da BIA.
+    Qualquer usuário autenticado pode chamar; retorna 200 { "valid": true } se a chave bater.
+    Usado para travar o acesso à página /admin/bia com uma chave única (BIA_ADMIN_ACCESS_KEY).
+    """
+    key = (request.data.get('key') or request.query_params.get('key') or '').strip()
+    expected = (getattr(settings, 'BIA_ADMIN_ACCESS_KEY', None) or '').strip()
+    if not expected:
+        return Response({'detail': 'Chave não configurada no servidor.'}, status=status.HTTP_403_FORBIDDEN)
+    if not key or key != expected:
+        return Response({'detail': 'Chave inválida.'}, status=status.HTTP_403_FORBIDDEN)
+    return Response({'valid': True})
+
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 @throttle_classes([GatewayTestThrottle])
 def gateway_test(request):
