@@ -24,6 +24,31 @@ from apps.chat.utils.image_processing import process_image, is_valid_image
 logger = logging.getLogger(__name__)
 media_logger = logging.getLogger("flow.chat.media")
 
+# Mensagem genérica para erros internos (Evolution e Meta): não expor tracebacks ao usuário
+USER_FACING_MEDIA_ERROR_FALLBACK = "Erro ao processar mídia. Tente novamente mais tarde."
+
+
+def _user_facing_media_error(exc: Exception, max_len: int = 200) -> str:
+    """
+    Retorna mensagem de erro segura para exibir ao usuário (Evolution e Meta).
+    Evita expor erros internos (UnboundLocalError, nomes de variáveis, etc.).
+    """
+    msg = (str(exc) or "").strip()[:max_len]
+    if not msg:
+        return USER_FACING_MEDIA_ERROR_FALLBACK
+    # Erros que parecem internos do Python: substituir por mensagem genérica
+    lower = msg.lower()
+    if any(x in lower for x in (
+        "unboundlocalerror",
+        "local variable",
+        "where it is not associated",
+        "nameerror",
+        "attributeerror",
+        "cannot access",
+    )):
+        return USER_FACING_MEDIA_ERROR_FALLBACK
+    return msg
+
 
 def _parse_content_disposition_filename(header_value: Optional[str]) -> Optional[str]:
     """Extrai filename de Content-Disposition (attachment; filename="x.zip" ou filename*=UTF-8''x.zip)."""
@@ -800,9 +825,10 @@ async def handle_process_incoming_media(
     max_retries = 3
     retry_count = 0
     media_data = None
+    content_disposition_filename = None  # Definido aqui para todos os caminhos (decrypted_data ou download)
     original_mime_type = (mime_type or '').strip()
     content_type = original_mime_type or 'application/octet-stream'
-    
+
     # ✅ OPÇÃO 1: Se já temos bytes descriptografados, usar diretamente
     if decrypted_data:
         logger.info(f"✅ [INCOMING MEDIA] Usando bytes já descriptografados (não precisa baixar)")
@@ -1419,7 +1445,7 @@ async def handle_process_incoming_media(
             ).first())()
             if existing:
                 metadata = normalize_metadata(existing.metadata)
-                metadata['error'] = str(e)[:100]  # Limitar tamanho
+                metadata['error'] = _user_facing_media_error(e, max_len=200)
                 metadata.pop('processing', None)
                 existing.metadata = metadata
                 # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
