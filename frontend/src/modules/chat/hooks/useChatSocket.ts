@@ -138,21 +138,25 @@ export function useChatSocket(conversationId?: string) {
           messageConversationId
         });
         
-        // ✅ Verificar se mensagem já existe e preservar attachments existentes
-        // ✅ CORREÇÃO: Usar currentActiveConversation já obtido acima (evita múltiplas chamadas)
+        // Garantir reply_to como string (evita ReplyPreview não achar mensagem original)
+        const msgToAdd = { ...data.message };
+        if (msgToAdd.metadata?.reply_to != null) {
+          msgToAdd.metadata = { ...msgToAdd.metadata, reply_to: String(msgToAdd.metadata.reply_to) };
+        }
+
         const { getMessagesArray } = useChatStore.getState();
         const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
-        const existingMessage = messages.find((messageItem) => messageItem.id === data.message.id);
+        const incomingIdNorm = (id: unknown) => (id != null ? String(id).trim().toLowerCase() : '');
+        const existingMessage = messages.find((m) => incomingIdNorm(m.id) === incomingIdNorm(data.message.id));
         if (existingMessage && existingMessage.attachments && existingMessage.attachments.length > 0) {
-          // Se a mensagem nova não tiver attachments mas a antiga tiver, preservar
           if (!data.message.attachments || data.message.attachments.length === 0) {
             console.log('📎 [HOOK] Preservando attachments existentes na mensagem:', data.message.id);
-            addMessage({ ...data.message, attachments: existingMessage.attachments });
+            addMessage({ ...msgToAdd, attachments: existingMessage.attachments });
           } else {
-            addMessage(data.message);
+            addMessage(msgToAdd);
           }
         } else {
-          addMessage(data.message);
+          addMessage(msgToAdd);
         }
         
         // 🔔 Notificar desktop (apenas se for mensagem recebida e notificações estão habilitadas)

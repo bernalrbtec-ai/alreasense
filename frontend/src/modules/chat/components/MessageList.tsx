@@ -423,7 +423,7 @@ export function MessageList() {
         const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
         const currentMessages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
         const mergedMessages = sortedMsgs.map((serverMsg) => {
-          const existingMsg = currentMessages.find((messageItem) => messageItem.id === serverMsg.id);
+          const existingMsg = currentMessages.find((messageItem) => normalizeMessageId(messageItem.id) === normalizeMessageId(serverMsg.id));
           if (existingMsg && existingMsg.attachments && existingMsg.attachments.length > 0) {
             // Se mensagem existente tem attachments atualizados, preservar
             const serverAttachments = serverMsg.attachments || [];
@@ -1391,9 +1391,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
-    // ✅ CORREÇÃO: Usar estrutura normalizada ao invés de messages.find()
+    // ✅ CORREÇÃO: Lookup por id normalizado (byId usa chave normalizada)
     const { messages: normalizedMessages } = useChatStore.getState();
-    const currentStoreMessage = normalizedMessages.byId[message.id];
+    const currentStoreMessage = normalizedMessages.byId[normalizeMessageId(message.id)];
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
     
     // ✅ CORREÇÃO CRÍTICA: Verificar se usuário já reagiu com este emoji
@@ -1522,9 +1522,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
-    // ✅ CORREÇÃO: Usar estrutura normalizada ao invés de messages.find()
+    // ✅ CORREÇÃO: Lookup por id normalizado (byId usa chave normalizada)
     const { messages: normalizedMessages } = useChatStore.getState();
-    const currentStoreMessage = normalizedMessages.byId[message.id];
+    const currentStoreMessage = normalizedMessages.byId[normalizeMessageId(message.id)];
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
 
     const optimisticReactions = previousReactions.filter(

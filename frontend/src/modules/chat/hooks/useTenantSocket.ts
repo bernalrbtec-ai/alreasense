@@ -210,8 +210,9 @@ export function useTenantSocket() {
           }
           
           const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
-          const messageWithAttachment = messages.find(m => 
-            m.id === messageId || 
+          const normId = (id: unknown) => (id != null ? String(id).trim().toLowerCase() : '');
+          const messageWithAttachment = messages.find(m =>
+            normId(m.id) === normId(messageId) ||
             m.attachments?.some(a => a.id === attachmentId)
           );
           

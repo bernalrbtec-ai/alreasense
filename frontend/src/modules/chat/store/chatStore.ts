@@ -76,6 +76,12 @@ function normalizeConversationKey(conversationId: string | undefined | null): st
   return s.toLowerCase();
 }
 
+/** Normaliza message id para chave única (evita reply não achar mensagem original por casing). */
+function normalizeMessageId(id: string | undefined | null): string {
+  if (id == null) return '';
+  return String(id).trim().toLowerCase();
+}
+
 /**
  * ✅ HELPER: Normaliza array de mensagens para estrutura normalizada
  */
@@ -87,11 +93,11 @@ function normalizeMessages(messages: Message[]): NormalizedMessages {
   const sorted = sortMessagesByTimestamp(messages);
   
   sorted.forEach((messageItem) => {
-    const msgId = messageItem.id != null ? String(messageItem.id) : '';
+    const rawMsgId = messageItem.id != null ? String(messageItem.id) : '';
+    const msgId = normalizeMessageId(rawMsgId);
     if (msgId) byId[msgId] = messageItem;
-    
-    // Extrair e normalizar conversationId (mesma chave que getMessagesArray/setMessages)
-    const rawConvId = messageItem.conversation_id 
+
+    const rawConvId = messageItem.conversation_id
       ? String(messageItem.conversation_id)
       : (typeof messageItem.conversation === 'object' && messageItem.conversation?.id)
       ? String(messageItem.conversation.id)
@@ -99,7 +105,7 @@ function normalizeMessages(messages: Message[]): NormalizedMessages {
       ? messageItem.conversation
       : null;
     const conversationId = rawConvId ? normalizeConversationKey(rawConvId) : null;
-    
+
     if (conversationId && msgId) {
       if (!byConversationId[conversationId]) {
         byConversationId[conversationId] = [];
@@ -318,9 +324,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // ✅ Normalizar novas mensagens (byId com ids em string para lookup consistente)
     const normalized = normalizeMessages(messagesWithConv);
     
-    // ✅ Lista ordenada de IDs para esta conversa (sempre a partir das mensagens recebidas)
+    // ✅ Lista ordenada de IDs para esta conversa (ids normalizados para bater com byId)
     const sortedMsgs = sortMessagesByTimestamp(messagesWithConv);
-    const orderedIds = sortedMsgs.map((m) => (m.id != null ? String(m.id) : '')).filter(Boolean);
+    const orderedIds = sortedMsgs.map((m) => normalizeMessageId(m.id)).filter(Boolean);
     
     // ✅ Merge com mensagens existentes (preservar outras conversas)
     const updatedById = { ...state.messages.byId, ...normalized.byId };
@@ -402,54 +408,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
     
-    // ✅ Verificar se mensagem já existe (usar chave normalizada)
-    const msgIdStr = message.id != null ? String(message.id) : '';
+    const msgIdStr = normalizeMessageId(message.id);
     const existingMessage = msgIdStr ? state.messages.byId[msgIdStr] : undefined;
     const messageIds = (convKeyNorm ? state.messages.byConversationId[convKeyNorm] : null) || [];
-    
+
     if (existingMessage) {
-      // ✅ Merge inteligente de attachments
       let updatedMessage = message;
-      if (existingMessage.attachments && existingMessage.attachments.length > 0 && 
+      if (existingMessage.attachments && existingMessage.attachments.length > 0 &&
           message.attachments && message.attachments.length > 0) {
         const mergedAttachments = mergeAttachments(existingMessage.attachments, message.attachments);
         updatedMessage = { ...message, attachments: mergedAttachments };
       } else if (existingMessage.attachments && existingMessage.attachments.length > 0) {
-        // Preservar attachments existentes se nova mensagem não tem
         updatedMessage = { ...message, attachments: existingMessage.attachments };
       } else if (message.attachments && message.attachments.length > 0) {
-        // Usar novos attachments
         updatedMessage = message;
       }
-      
-      // ✅ Atualizar mensagem existente (sem reordenar)
+
       return {
         messages: {
           byId: {
             ...state.messages.byId,
-            [message.id]: updatedMessage
+            [msgIdStr]: updatedMessage
           },
           byConversationId: state.messages.byConversationId
         }
       };
     }
-    
-    // ✅ NOVA MENSAGEM: Inserir na posição correta (usar chave normalizada)
+
     const updatedMessageIds = insertMessageInOrder(
       messageIds,
-      msgIdStr || message.id,
+      msgIdStr,
       message,
       state.messages.byId
     );
-    
-    const byIdKey = msgIdStr || (message.id != null ? String(message.id) : '');
-    if (!byIdKey) return state;
+
+    if (!msgIdStr) return state;
     
     return {
       messages: {
         byId: {
           ...state.messages.byId,
-          [byIdKey]: message
+          [msgIdStr]: message
         },
         byConversationId: {
           ...state.messages.byConversationId,
@@ -460,7 +459,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   updateMessageStatus: (messageId, status, metadataPatch?: Record<string, unknown>) => set((state) => {
-    const message = state.messages.byId[messageId];
+    const key = normalizeMessageId(messageId);
+    const message = state.messages.byId[key];
     if (!message) return state;
     const next: { status: string; metadata?: Record<string, unknown> } = { status: status as string };
     if (metadataPatch && Object.keys(metadataPatch).length > 0) {
@@ -471,26 +471,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...state.messages,
         byId: {
           ...state.messages.byId,
-          [messageId]: { ...message, ...next }
+          [key]: { ...message, ...next }
         }
       }
     };
   }),
 
   updateMessageReactions: (messageId, reactions, summary) => set((state) => {
-    const message = state.messages.byId[messageId];
+    const key = normalizeMessageId(messageId);
+    const message = state.messages.byId[key];
     if (!message) return state;
-    
+
     const updatedMessage = {
       ...message,
       reactions: reactions ? [...reactions] : [],
       reactions_summary: summary ? { ...summary } : {},
     };
-    
-    // ✅ Atualizar também nas conversas se for last_message
-    // ✅ CORREÇÃO: Renomear conversation para conversationItem para evitar conflito de minificação
+
     const updatedConversations = state.conversations.map((conversationItem) => {
-      if (conversationItem.last_message?.id === messageId) {
+      if (conversationItem.last_message && normalizeMessageId(conversationItem.last_message.id) === key) {
         return {
           ...conversationItem,
           last_message: {
@@ -504,7 +503,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     });
 
     const updatedActiveConversation =
-      state.activeConversation?.last_message?.id === messageId
+      state.activeConversation?.last_message && normalizeMessageId(state.activeConversation.last_message.id) === key
         ? {
             ...state.activeConversation,
             last_message: state.activeConversation.last_message
@@ -522,7 +521,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...state.messages,
         byId: {
           ...state.messages.byId,
-          [messageId]: updatedMessage
+          [key]: updatedMessage
         }
       },
       conversations: updatedConversations,
@@ -531,7 +530,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   updateMessageDeleted: (messageId) => set((state) => {
-    const message = state.messages.byId[messageId];
+    const key = normalizeMessageId(messageId);
+    const message = state.messages.byId[key];
     if (!message) return state;
     
     const updatedMessage = {
@@ -562,7 +562,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         ...state.messages,
         byId: {
           ...state.messages.byId,
-          [messageId]: updatedMessage
+          [key]: updatedMessage
         }
       },
       activeConversation: updatedActiveConversation
@@ -570,28 +570,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   }),
 
   updateMessage: (conversationId, message) => set((state) => {
-    const messageId = message.id;
-    const messageIdStr = messageId != null ? String(messageId) : '';
-    if (!messageIdStr) return state;
+    const msgKey = normalizeMessageId(message.id);
+    if (!msgKey) return state;
     const normalizedMessage = {
       ...message,
       conversation_id: conversationId,
       conversation: conversationId
     };
-    
+
     const updatedById = {
       ...state.messages.byId,
-      [messageIdStr]: normalizedMessage
+      [msgKey]: normalizedMessage
     };
-    
-    // ✅ Garantir que messageId está na lista da conversa
+
     const convKey = normalizeConversationKey(conversationId);
     const conversationMessageIds = (convKey ? state.messages.byConversationId[convKey] : null) || [];
     const updatedByConversationId = {
       ...state.messages.byConversationId,
-      [convKey]: conversationMessageIds.includes(messageIdStr)
+      [convKey]: conversationMessageIds.includes(msgKey)
         ? conversationMessageIds
-        : [...conversationMessageIds, messageIdStr]
+        : [...conversationMessageIds, msgKey]
     };
 
     return {
