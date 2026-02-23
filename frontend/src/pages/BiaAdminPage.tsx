@@ -35,6 +35,19 @@ interface ConversationOption {
   contact_name: string | null
   contact_phone: string | null
   last_message_at?: string | null
+  department_name?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '–'
+  try {
+    const d = new Date(iso)
+    return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
 }
 
 export default function BiaAdminPage() {
@@ -177,23 +190,36 @@ export default function BiaAdminPage() {
       setMessagesLoading(true)
       setLoadedConversationText('')
       try {
-        const res = await api.get(`/chat/conversations/${selectedConversationId}/messages/`, {
-          params: { limit: 500, offset: 0 },
-        })
+        const [msgRes, convRes] = await Promise.all([
+          api.get(`/chat/conversations/${selectedConversationId}/messages/`, {
+            params: { limit: 500, offset: 0 },
+          }),
+          api.get(`/chat/conversations/${selectedConversationId}/`).catch(() => ({ data: null })),
+        ])
         if (cancelled) return
-        const list = res.data?.results ?? res.data ?? []
+        const conv = convRes.data
+        const headerParts: string[] = []
+        headerParts.push(`Departamento: ${conv?.department_name ?? '–'}`)
+        headerParts.push(`Início: ${formatDateTime(conv?.created_at)}`)
+        headerParts.push(`Última atividade: ${formatDateTime(conv?.updated_at ?? conv?.last_message_at)}`)
+        const header = headerParts.join(' | ')
+        const list = msgRes.data?.results ?? msgRes.data ?? []
         const msgs = Array.isArray(list) ? list : []
         const sorted = [...msgs].sort(
-          (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+          (a: { created_at?: string }, b: { created_at?: string }) =>
+            new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
         )
-        const lines = sorted.map((m: { direction?: string; content?: string; sender_name?: string }) => {
-          const role = m.direction === 'incoming' ? 'Cliente' : 'Atendente'
-          const name = (m.sender_name || '').trim()
-          const label = name ? `${role} (${name})` : role
-          const content = (m.content || '').trim() || '(sem texto)'
-          return `${label}: ${content}`
-        })
-        setLoadedConversationText(lines.join('\n'))
+        const lines = sorted.map(
+          (m: { direction?: string; content?: string; sender_name?: string; created_at?: string }) => {
+            const time = formatDateTime(m.created_at)
+            const role = m.direction === 'incoming' ? 'Cliente' : 'Atendente'
+            const name = (m.sender_name || '').trim()
+            const label = name ? `${role} (${name})` : role
+            const content = (m.content || '').trim() || '(sem texto)'
+            return `[${time}] ${label}: ${content}`
+          }
+        )
+        setLoadedConversationText([header, '', ...lines].join('\n'))
       } catch (e) {
         if (!cancelled) setLoadedConversationText('')
         console.error(e)
@@ -296,7 +322,7 @@ export default function BiaAdminPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6 space-y-6">
+    <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">BIA – Configuração e teste</h1>
         <p className="text-sm text-gray-600 mt-1">
@@ -304,8 +330,8 @@ export default function BiaAdminPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Coluna esquerda: Configuração */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Coluna 1: Configuração */}
         <Card className="p-6 h-fit">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Configuração</h2>
           {secretaryLoading || aiSettingsLoading ? (
@@ -341,10 +367,8 @@ export default function BiaAdminPage() {
           )}
         </Card>
 
-        {/* Coluna direita: Teste BIA */}
-        <div className="space-y-6">
-          {/* Conversa real no prompt */}
-          <Card className="p-6">
+        {/* Coluna 2: Conversa real no prompt */}
+        <Card className="p-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               Conversa real no prompt
@@ -391,14 +415,14 @@ export default function BiaAdminPage() {
                 </>
               )}
             </div>
-          </Card>
+        </Card>
 
-          {/* Testar prompt BIA */}
-          <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Testar prompt (BIA)</h2>
-            <div className="space-y-3">
-              <div>
-                <Label>Prompt de sistema (opcional)</Label>
+        {/* Coluna 3: Testar prompt BIA */}
+        <Card className="p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Testar prompt (BIA)</h2>
+          <div className="space-y-3">
+            <div>
+              <Label>Prompt de sistema (opcional)</Label>
                 <textarea
                   value={testSystemPrompt}
                   onChange={(e) => setTestSystemPrompt(e.target.value)}
@@ -406,44 +430,43 @@ export default function BiaAdminPage() {
                   className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   placeholder="Override do prompt para este teste..."
                 />
-              </div>
-              <div className="flex gap-2">
-                <textarea
-                  value={testMessage}
-                  onChange={(e) => setTestMessage(e.target.value)}
-                  rows={2}
-                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Digite uma mensagem para testar..."
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendTest()
-                    }
-                  }}
-                />
-                <Button onClick={handleSendTest} disabled={testLoading || !testMessage.trim()}>
-                  {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </Button>
-              </div>
-              {testError && <p className="text-sm text-red-600">{testError}</p>}
-              <div className="min-h-[140px] max-h-[220px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
-                {testMessages.length === 0 ? (
-                  <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
-                ) : (
-                  testMessages.map((m, i) => (
-                    <div
-                      key={i}
-                      className={`text-sm ${m.role === 'user' ? 'text-right' : ''}`}
-                    >
-                      <span className="font-medium text-gray-600">{m.role === 'user' ? 'Você' : 'BIA'}: </span>
-                      <pre className="whitespace-pre-wrap font-sans inline">{m.content}</pre>
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
-          </Card>
-        </div>
+            <div className="flex gap-2">
+              <textarea
+                value={testMessage}
+                onChange={(e) => setTestMessage(e.target.value)}
+                rows={2}
+                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder="Digite uma mensagem para testar..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    handleSendTest()
+                  }
+                }}
+              />
+              <Button onClick={handleSendTest} disabled={testLoading || !testMessage.trim()}>
+                {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </div>
+            {testError && <p className="text-sm text-red-600">{testError}</p>}
+            <div className="min-h-[140px] max-h-[220px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+              {testMessages.length === 0 ? (
+                <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+              ) : (
+                testMessages.map((m, i) => (
+                  <div
+                    key={i}
+                    className={`text-sm ${m.role === 'user' ? 'text-right' : ''}`}
+                  >
+                    <span className="font-medium text-gray-600">{m.role === 'user' ? 'Você' : 'BIA'}: </span>
+                    <pre className="whitespace-pre-wrap font-sans inline">{m.content}</pre>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   )
