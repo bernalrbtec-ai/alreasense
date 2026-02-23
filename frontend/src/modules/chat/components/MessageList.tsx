@@ -43,6 +43,55 @@ function normalizeMessageId(id: string | undefined | null): string {
   return String(id).trim().toLowerCase();
 }
 
+const TRANSFER_PREFIX = 'Conversa transferida:';
+
+/** Extrai linhas "De:" e "Para:" de texto de transferência */
+function parseTransferLines(content: string): { de: string; para: string } {
+  const deMatch = content.match(/De:\s*(.+?)(?=\n|$)/i);
+  const paraMatch = content.match(/Para:\s*(.+?)(?=\n|$)/i);
+  return {
+    de: deMatch ? deMatch[1].trim() : '',
+    para: paraMatch ? paraMatch[1].trim() : '',
+  };
+}
+
+/** Agrupa mensagens consecutivas "Conversa transferida" em um único item para exibição */
+function buildDisplayItems(messages: Message[]): Array<{ type: 'message'; message: Message } | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }> {
+  if (!Array.isArray(messages) || messages.length === 0) return [];
+  const items: Array<{ type: 'message'; message: Message } | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }> = [];
+  let i = 0;
+  while (i < messages.length) {
+    const msg = messages[i];
+    const contentTrimmed = msg.content?.trim() ?? '';
+    const isTransfer = Boolean(msg.is_internal && contentTrimmed.startsWith(TRANSFER_PREFIX));
+    if (!isTransfer) {
+      items.push({ type: 'message', message: msg });
+      i++;
+      continue;
+    }
+    const group: Message[] = [msg];
+    while (i + 1 < messages.length) {
+      const next = messages[i + 1];
+      const nextTrimmed = next.content?.trim() ?? '';
+      if (next.is_internal && nextTrimmed.startsWith(TRANSFER_PREFIX)) {
+        group.push(next);
+        i++;
+      } else {
+        break;
+      }
+    }
+    const first = parseTransferLines(group[0].content || '');
+    const last = parseTransferLines(group[group.length - 1].content || '');
+    const hasValidMerge = first.de !== '' || last.para !== '';
+    const mergedContent = hasValidMerge
+      ? `${TRANSFER_PREFIX}\nDe: ${first.de}\nPara: ${last.para}`
+      : (group[0].content || TRANSFER_PREFIX);
+    items.push({ type: 'transfer_merged', messages: group, mergedContent });
+    i++;
+  }
+  return items;
+}
+
 /**
  * ✅ NOVO: Componente para preview de mensagem respondida (reply)
  * Busca automaticamente a mensagem original se não estiver na lista ou sem conteúdo
@@ -868,6 +917,8 @@ export function MessageList() {
     safeMessagesIsArray: Array.isArray(safeMessages)
   });
 
+  const displayItems = useMemo(() => buildDisplayItems(safeMessages), [safeMessages]);
+
   return (
     <div 
       className="h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2"
@@ -972,22 +1023,42 @@ export function MessageList() {
           
           <div ref={messagesStartRef} /> {/* ✅ NOVO: Ref para topo */}
           
-          {safeMessages.map((messageItem) => {
-            // ✅ CORREÇÃO CRÍTICA: Renomear msg para messageItem para evitar conflito de minificação
-            // A variável msg pode estar sendo minificada como 'm', causando o erro
+          {displayItems.map((item) => {
+            if (item.type === 'transfer_merged') {
+              if (!item.messages.length) return null;
+              const firstMsg = item.messages[0];
+              const messageKey = `transfer-merged-${item.messages.map((m) => m.id).join('-')}`;
+              const isVisible = item.messages.some((m) => visibleMessages.has(m.id));
+              return (
+                <div
+                  key={messageKey}
+                  data-message-id={firstMsg.id}
+                  className={`flex flex-col items-center my-2 ${
+                    isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'
+                  } transition-all duration-300 ease-out`}
+                >
+                  <div className="max-w-[85%] rounded-xl px-4 py-2.5 bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 text-center border border-slate-200 dark:border-slate-600 shadow-sm">
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Notificação do sistema</p>
+                    <p className="text-sm whitespace-pre-wrap break-words">{item.mergedContent}</p>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 mt-1 block">
+                      {firstMsg.created_at && !Number.isNaN(new Date(firstMsg.created_at).getTime())
+                        ? format(new Date(firstMsg.created_at), 'HH:mm')
+                        : ''}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+            const messageItem = item.message;
             console.log('🔍 [MessageList] Renderizando mensagem:', {
               messageId: messageItem?.id,
               hasMessageItem: !!messageItem,
               messageItemType: typeof messageItem
             });
-            
-            // ✅ CORREÇÃO: Verificar se messageItem é válido antes de renderizar
             if (!messageItem || !messageItem.id) {
               console.warn('⚠️ [MessageList] messageItem inválido, pulando:', messageItem);
               return null;
             }
-            
-            // ✅ FASE 1: Key composta para evitar reutilização incorreta de componentes entre conversas
             const messageKey = messageItem.conversation_id 
               ? `${messageItem.conversation_id}-${messageItem.id}`
               : (typeof messageItem.conversation === 'string' 
@@ -995,12 +1066,12 @@ export function MessageList() {
                   : (typeof messageItem.conversation === 'object' && messageItem.conversation?.id
                       ? `${messageItem.conversation.id}-${messageItem.id}`
                       : messageItem.id));
-            
+            const isSystemNotification = Boolean(messageItem.is_internal);
             return (
             <div
               key={messageKey}
               data-message-id={messageItem.id}
-              className={`flex flex-col ${messageItem.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
+              className={`flex flex-col ${isSystemNotification ? 'items-center' : (messageItem.direction === 'outgoing' ? 'items-end' : 'items-start')} ${
                 visibleMessages.has(messageItem.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
@@ -1010,7 +1081,9 @@ export function MessageList() {
                 className={`
                   max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
                   transform transition-all duration-200 hover:shadow-lg cursor-pointer
-                  ${messageItem.direction === 'outgoing'
+                  ${isSystemNotification
+                    ? 'bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600'
+                    : messageItem.direction === 'outgoing'
                     ? 'bg-[#d9fdd3] dark:bg-green-900/30 text-gray-900 dark:text-gray-100'
                     : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
                   }
@@ -1164,7 +1237,7 @@ export function MessageList() {
                   <span className="text-xs text-gray-600">
                     {formatTime(messageItem.created_at)}
                   </span>
-                  {messageItem.direction === 'outgoing' && (
+                  {messageItem.direction === 'outgoing' && !isSystemNotification && (
                     <span className="flex-shrink-0">
                       {getStatusIcon(messageItem.status)}
                     </span>
