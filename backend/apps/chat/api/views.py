@@ -12,6 +12,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
@@ -255,6 +256,13 @@ def clean_participants_for_metadata(participants_list: list) -> list:
     
     return cleaned
 
+class ConversationListPagination(PageNumberPagination):
+    """Permite page_size na query para listagem (ex.: BIA admin pede até 100)."""
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     """
     ViewSet para conversas.
@@ -263,7 +271,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     - Admin: vê todas do tenant
     - Gerente/Agente: vê apenas dos seus departamentos
     """
-    
+    pagination_class = ConversationListPagination
     queryset = Conversation.objects.select_related(
         'tenant', 'department', 'assigned_to'
     ).prefetch_related('participants')

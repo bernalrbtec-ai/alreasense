@@ -11,6 +11,7 @@ urlpatterns = [
     path('webhook/test/', views.webhook_test, name='webhook-test'),
     path('triage/test/', views.triage_test, name='triage-test'),
     path('bia-admin/verify-key/', views.verify_bia_admin_key, name='bia-admin-verify-key'),
+    path('bia-admin/test-summarize/', views.test_summarize, name='bia-admin-test-summarize'),
     path('gateway/test/', views.gateway_test, name='gateway-test'),
     path('gateway/reply/', views.gateway_reply, name='gateway-reply'),
     path('secretary/profile/', views.secretary_profile, name='secretary-profile'),

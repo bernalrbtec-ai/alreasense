@@ -16,6 +16,7 @@ from django.utils.dateparse import parse_datetime, parse_date
 
 # from .tasks import analyze_message_async  # Removido - Celery deletado
 from apps.chat.models import Conversation, Message as ChatMessage
+from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, TenantSecretaryProfile, AiTranscriptionDailyMetric
 from apps.ai.transcription_metrics import (
@@ -335,6 +336,83 @@ def verify_bia_admin_key(request):
     if not key or key != expected:
         return Response({'detail': 'Chave inválida.'}, status=status.HTTP_403_FORBIDDEN)
     return Response({'valid': True})
+
+
+SUMMARIZE_TIMEOUT = 30
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def test_summarize(request):
+    """
+    Teste de sumarização: envia mensagens de uma conversa existente ao webhook
+    N8N_SUMMARIZE_WEBHOOK_URL e retorna o resumo. Não persiste RAG nem metadata.
+    Body: { "conversation_id": "uuid" }.
+    """
+    conversation_id = _parse_uuid(request.data.get('conversation_id'))
+    if not conversation_id:
+        return Response(
+            {'error': 'conversation_id (UUID) é obrigatório.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    summarize_url = (getattr(settings, 'N8N_SUMMARIZE_WEBHOOK_URL', None) or '').strip()
+    if not summarize_url:
+        return Response(
+            {'error': 'N8N_SUMMARIZE_WEBHOOK_URL não configurado.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    conversation = Conversation.objects.filter(
+        id=conversation_id,
+        tenant=request.user.tenant,
+    ).first()
+    if not conversation:
+        return Response(
+            {'error': 'Conversa não encontrada ou sem permissão.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    if 'g.us' in (conversation.contact_phone or ''):
+        return Response(
+            {'error': 'Conversas de grupo não são sumarizadas.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    messages_qs = ChatMessage.objects.filter(
+        conversation_id=conversation_id,
+        is_deleted=False,
+    ).order_by('created_at').values('direction', 'content', 'sender_name', 'created_at')
+    messages_list = [
+        {
+            'direction': m['direction'],
+            'content': (m['content'] or '')[:10000],
+            'sender_name': (m['sender_name'] or '')[:200],
+            'created_at': m['created_at'].isoformat() if m['created_at'] else None,
+        }
+        for m in messages_qs
+    ]
+    if not messages_list:
+        return Response(
+            {'error': 'Conversa sem mensagens.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    contact_phone_normalized = normalize_contact_phone_for_rag(conversation.contact_phone or '')
+    payload = {
+        'tenant_id': str(conversation.tenant_id),
+        'conversation_id': str(conversation.id),
+        'contact_phone': contact_phone_normalized,
+        'contact_name': (conversation.contact_name or '')[:200],
+        'messages': messages_list,
+    }
+    try:
+        resp = requests.post(summarize_url, json=payload, timeout=SUMMARIZE_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json() if resp.content else {}
+        summary = (data.get('summary') or '').strip()
+        return Response({'summary': summary or '(resposta sem campo summary)'})
+    except requests.RequestException as e:
+        logger.warning('[BIA ADMIN] Erro ao chamar summarize: %s', e)
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
 
 
 @api_view(['POST'])
