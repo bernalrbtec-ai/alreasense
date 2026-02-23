@@ -305,9 +305,9 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         else:
             content = f'[{msg_type}]'
 
-        # Reply: Meta envia context.reply_to_message_id (wamid da mensagem respondida)
+        # Reply: Meta envia context.id (wamid da mensagem respondida); reply_to_message_id é usado ao enviar
         context = msg.get('context') or {}
-        reply_to_wamid = context.get('reply_to_message_id')
+        reply_to_wamid = context.get('id') or context.get('reply_to_message_id')
         if reply_to_wamid:
             original_message = Message.objects.filter(
                 message_id=reply_to_wamid,
