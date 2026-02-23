@@ -305,6 +305,28 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         else:
             content = f'[{msg_type}]'
 
+        # Reply: Meta envia context.reply_to_message_id (wamid da mensagem respondida)
+        context = msg.get('context') or {}
+        reply_to_wamid = context.get('reply_to_message_id')
+        if reply_to_wamid:
+            original_message = Message.objects.filter(
+                message_id=reply_to_wamid,
+                conversation=conversation,
+            ).first()
+            if original_message:
+                metadata_extra['reply_to'] = str(original_message.id)
+                logger.info(
+                    "[META WEBHOOK] Reply detectado: reply_to_message_id=%s -> UUID interno=%s (provider=meta)",
+                    reply_to_wamid[:24] + "...",
+                    metadata_extra['reply_to'],
+                )
+            else:
+                metadata_extra['reply_to_meta_message_id'] = reply_to_wamid
+                logger.warning(
+                    "[META WEBHOOK] Reply: mensagem original não encontrada reply_to_message_id=%s (provider=meta)",
+                    reply_to_wamid[:24] + "...",
+                )
+
         # Para mídia sem legenda: não usar placeholder [document]/[image] (evita texto redundante no chat)
         message_defaults = {
             'conversation': conversation,
