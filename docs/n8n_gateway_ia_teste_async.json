@@ -1,0 +1,287 @@
+{
+  "name": "Sense - Gateway IA teste (assíncrono - deferred + callback)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gateway-ia",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-001",
+      "name": "Webhook Sense IA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "sense-ia-gateway",
+      "notes": "POST /gateway-ia. Sense envia job_id e callback_url quando GATEWAY_TEST_USE_ASYNC=true."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Router: detecta se é fluxo deferred (job_id + callback_url) e repassa o body.\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst hasDefer = !!(body.job_id && body.callback_url);\nreturn [{ json: { ...body, _defer: hasDefer, _job_id: body.job_id || null } }];"
+      },
+      "id": "code-router",
+      "name": "Router deferred",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "cond-defer", "leftValue": "={{ $json._defer }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-defer",
+      "name": "Tem job_id e callback_url?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"deferred\": true, \"job_id\": $json._job_id } }}",
+        "options": {}
+      },
+      "id": "respond-deferred",
+      "name": "Responder deferred",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [660, -120],
+      "notes": "Resposta imediata ao Sense. Depois o fluxo continua em background."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Montar prompt e modelo (branch async). Entrada = mesmo item do Router (body + _defer, _job_id).\nconst body = $input.first().json;\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : 'Você é um assistente prestativo.';\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst context = knowledgeItems.map(i => `## ${i.title || 'Documento'}\\n${i.content || ''}`).join('\\n\\n');\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\nconst knowledgeItemsCount = knowledgeItems.length;\nconst useChat = Array.isArray(body.messages) && body.messages.length > 0;\n\nif (useChat) {\n  const systemContent = [systemPrompt, context ? 'Contexto para consulta:\\n' + context : ''].filter(Boolean).join('\\n\\n');\n  const messages = [\n    { role: 'system', content: systemContent },\n    ...body.messages.map(m => ({ role: (m.role || 'user').toLowerCase(), content: String(m.content || '') }))\n  ];\n  return [{ json: { useChat: true, model, messages, knowledgeItemsCount, callback_url: body.callback_url, job_id: body.job_id, request_id: body.request_id, trace_id: body.trace_id } }];\n}\n\nconst userMessage = (body.message && body.message.content) ? String(body.message.content) : '';\nconst fullPrompt = [\n  systemPrompt,\n  context ? 'Contexto para consulta:\\n' + context : '',\n  userMessage ? 'Mensagem do usuário: ' + userMessage : ''\n].filter(Boolean).join('\\n\\n');\n\nreturn [{ json: { useChat: false, model, fullPrompt, knowledgeItemsCount, callback_url: body.callback_url, job_id: body.job_id, request_id: body.request_id, trace_id: body.trace_id } }];\n"
+      },
+      "id": "montar-async",
+      "name": "Montar prompt (async)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, -120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "use-chat", "leftValue": "={{ $json.useChat }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-chat-async",
+      "name": "Usar chat? (async)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, messages: $json.messages, stream: false } }}",
+        "options": {}
+      },
+      "id": "ollama-chat-async",
+      "name": "Ollama chat (async)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -220],
+      "notes": "Ajuste a URL para sua instância Ollama."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, prompt: $json.fullPrompt, stream: false } }}",
+        "options": {}
+      },
+      "id": "ollama-gen-async",
+      "name": "Ollama generate (async)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, -20],
+      "notes": "Ajuste a URL para sua instância Ollama."
+    },
+    {
+      "parameters": {},
+      "id": "merge-async",
+      "name": "Merge (async)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1540, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Formatar resposta da IA e anexar dados do callback (job_id, callback_url, request_id, trace_id).\nconst ollama = $input.first().json;\nconst prev = $('Montar prompt (async)').first().json;\nconst replyText = (ollama.message && ollama.message.content)\n  ? String(ollama.message.content).trim()\n  : (ollama.response && String(ollama.response).trim())\n    ? String(ollama.response).trim()\n    : '(Sem resposta do modelo.)';\nconst latencyMs = ollama.eval_duration ? Math.round(ollama.eval_duration * 1000) : 0;\n\nreturn [{\n  json: {\n    reply_text: replyText,\n    status: 'success',\n    meta: {\n      model: ollama.model || prev.model,\n      latency_ms: latencyMs,\n      rag_hits: prev.knowledgeItemsCount || 0\n    },\n    callback_url: prev.callback_url,\n    job_id: prev.job_id,\n    request_id: prev.request_id,\n    trace_id: prev.trace_id\n  }\n}];\n"
+      },
+      "id": "formatar-async",
+      "name": "Formatar resposta (async)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, -120]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Montar body do callback para o Sense.\nconst d = $input.first().json;\nreturn [{\n  json: {\n    job_id: d.job_id,\n    status: 'success',\n    request_id: d.request_id || null,\n    trace_id: d.trace_id || null,\n    response: {\n      reply_text: d.reply_text,\n      meta: d.meta || {}\n    }\n  }\n}];\n"
+      },
+      "id": "build-callback",
+      "name": "Montar body callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1980, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Montar prompt (async)').first().json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Gateway-Callback-Token", "value": "COLOQUE_O_MESMO_VALOR_DE_GATEWAY_TEST_CALLBACK_TOKEN_DA_SENSE" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "http-callback",
+      "name": "POST callback Sense",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2200, -120],
+      "notes": "Token: use variável de ambiente GATEWAY_TEST_CALLBACK_TOKEN ou credencial. URL vem do payload (callback_url)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Montar prompt (branch síncrono - mesmo contrato do webhook).\nconst body = $input.first().json;\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : 'Você é um assistente prestativo.';\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst context = knowledgeItems.map(i => `## ${i.title || 'Documento'}\\n${i.content || ''}`).join('\\n\\n');\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\nconst knowledgeItemsCount = knowledgeItems.length;\nconst useChat = Array.isArray(body.messages) && body.messages.length > 0;\n\nif (useChat) {\n  const systemContent = [systemPrompt, context ? 'Contexto para consulta:\\n' + context : ''].filter(Boolean).join('\\n\\n');\n  const messages = [\n    { role: 'system', content: systemContent },\n    ...body.messages.map(m => ({ role: (m.role || 'user').toLowerCase(), content: String(m.content || '') }))\n  ];\n  return [{ json: { useChat: true, model, messages, knowledgeItemsCount } }];\n}\n\nconst userMessage = (body.message && body.message.content) ? String(body.message.content) : '';\nconst fullPrompt = [\n  systemPrompt,\n  context ? 'Contexto para consulta:\\n' + context : '',\n  userMessage ? 'Mensagem do usuário: ' + userMessage : ''\n].filter(Boolean).join('\\n\\n');\n\nreturn [{ json: { useChat: false, model, fullPrompt, knowledgeItemsCount } }];\n"
+      },
+      "id": "montar-sync",
+      "name": "Montar prompt (sync)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "use-chat-sync", "leftValue": "={{ $json.useChat }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-chat-sync",
+      "name": "Usar chat? (sync)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, messages: $json.messages, stream: false } }}",
+        "options": {}
+      },
+      "id": "ollama-chat-sync",
+      "name": "Ollama chat (sync)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 20]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, prompt: $json.fullPrompt, stream: false } }}",
+        "options": {}
+      },
+      "id": "ollama-gen-sync",
+      "name": "Ollama generate (sync)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {},
+      "id": "merge-sync",
+      "name": "Merge (sync)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1320, 120]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ollama = $input.first().json;\nconst prev = $('Montar prompt (sync)').first().json;\nconst replyText = (ollama.message && ollama.message.content)\n  ? String(ollama.message.content).trim()\n  : (ollama.response && String(ollama.response).trim())\n    ? String(ollama.response).trim()\n    : '(Sem resposta do modelo.)';\nconst latencyMs = ollama.eval_duration ? Math.round(ollama.eval_duration * 1000) : 0;\n\nreturn [{\n  json: {\n    reply_text: replyText,\n    status: 'success',\n    meta: {\n      model: ollama.model || prev.model,\n      latency_ms: latencyMs,\n      rag_hits: prev.knowledgeItemsCount || 0\n    }\n  }\n}];\n"
+      },
+      "id": "formatar-sync",
+      "name": "Formatar resposta (sync)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-sync",
+      "name": "Responder resposta completa",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1760, 120]
+    }
+  ],
+  "connections": {
+    "Webhook Sense IA": { "main": [[{ "node": "Router deferred", "type": "main", "index": 0 }]] },
+    "Router deferred": { "main": [[{ "node": "Tem job_id e callback_url?", "type": "main", "index": 0 }]] },
+    "Tem job_id e callback_url?": {
+      "main": [
+        [{ "node": "Responder deferred", "type": "main", "index": 0 }],
+        [{ "node": "Montar prompt (sync)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Responder deferred": { "main": [[{ "node": "Montar prompt (async)", "type": "main", "index": 0 }]] },
+    "Montar prompt (async)": { "main": [[{ "node": "Usar chat? (async)", "type": "main", "index": 0 }]] },
+    "Usar chat? (async)": {
+      "main": [
+        [{ "node": "Ollama chat (async)", "type": "main", "index": 0 }],
+        [{ "node": "Ollama generate (async)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ollama chat (async)": { "main": [[{ "node": "Merge (async)", "type": "main", "index": 0 }]] },
+    "Ollama generate (async)": { "main": [[{ "node": "Merge (async)", "type": "main", "index": 1 }]] },
+    "Merge (async)": { "main": [[{ "node": "Formatar resposta (async)", "type": "main", "index": 0 }]] },
+    "Formatar resposta (async)": { "main": [[{ "node": "Montar body callback", "type": "main", "index": 0 }]] },
+    "Montar body callback": { "main": [[{ "node": "POST callback Sense", "type": "main", "index": 0 }]] },
+    "Montar prompt (sync)": { "main": [[{ "node": "Usar chat? (sync)", "type": "main", "index": 0 }]] },
+    "Usar chat? (sync)": {
+      "main": [
+        [{ "node": "Ollama chat (sync)", "type": "main", "index": 0 }],
+        [{ "node": "Ollama generate (sync)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Ollama chat (sync)": { "main": [[{ "node": "Merge (sync)", "type": "main", "index": 0 }]] },
+    "Ollama generate (sync)": { "main": [[{ "node": "Merge (sync)", "type": "main", "index": 1 }]] },
+    "Merge (sync)": { "main": [[{ "node": "Formatar resposta (sync)", "type": "main", "index": 0 }]] },
+    "Formatar resposta (sync)": { "main": [[{ "node": "Responder resposta completa", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": false }
+}

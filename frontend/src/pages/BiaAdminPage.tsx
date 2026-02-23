@@ -69,6 +69,9 @@ export default function BiaAdminPage() {
   const [testMessages, setTestMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [testLoading, setTestLoading] = useState(false)
   const [testError, setTestError] = useState<string | null>(null)
+  const [aiModelOptions, setAiModelOptions] = useState<string[]>([])
+  const [testSelectedModel, setTestSelectedModel] = useState<string>('')
+  const [aiModelsLoading, setAiModelsLoading] = useState(false)
 
   const [conversations, setConversations] = useState<ConversationOption[]>([])
   const [conversationsLoading, setConversationsLoading] = useState(false)
@@ -156,6 +159,7 @@ export default function BiaAdminPage() {
     const load = async () => {
       setSecretaryLoading(true)
       setAiSettingsLoading(true)
+      setAiModelsLoading(true)
       try {
         const [profileRes, settingsRes] = await Promise.all([
           api.get('/ai/secretary/profile/'),
@@ -164,14 +168,31 @@ export default function BiaAdminPage() {
         const profile = profileRes.data
         setSecretaryProfile(profile)
         setPromptDraft(profile?.prompt ?? '')
-        if (settingsRes?.data) {
-          setAiSettings(settingsRes.data)
+        const settings = settingsRes?.data
+        if (settings) {
+          setAiSettings(settings)
+        }
+        try {
+          const modelsRes = await api.get('/ai/models/')
+          const models = Array.isArray(modelsRes.data?.models) ? modelsRes.data.models : []
+          setAiModelOptions(models)
+          if (models.length > 0 && settings?.agent_model && models.includes(settings.agent_model)) {
+            setTestSelectedModel(settings.agent_model)
+          } else if (models.length > 0) {
+            setTestSelectedModel(models[0])
+          } else if (settings?.agent_model) {
+            setTestSelectedModel(settings.agent_model)
+          }
+        } catch {
+          setAiModelOptions([])
+          if (settings?.agent_model) setTestSelectedModel(settings.agent_model)
         }
       } catch (e) {
         console.error(e)
       } finally {
         setSecretaryLoading(false)
         setAiSettingsLoading(false)
+        setAiModelsLoading(false)
       }
     }
     load()
@@ -306,10 +327,11 @@ export default function BiaAdminPage() {
         prompt = prompt.slice(0, MAX_PROMPT_LENGTH)
         setTestError(`Prompt truncado a ${MAX_PROMPT_LENGTH} caracteres (limite do backend).`)
       }
+      const model = testSelectedModel || aiSettings?.agent_model || 'llama3.2'
       const body: any = {
         message,
-        model: aiSettings.agent_model || 'llama3.2',
-        context: { action: 'model_test', model: aiSettings.agent_model || 'llama3.2' },
+        model,
+        context: { action: 'model_test', model },
         messages: [...testMessages, { role: 'user', content: message }],
       }
       if (prompt) body.prompt = prompt
@@ -499,6 +521,36 @@ export default function BiaAdminPage() {
         <Card className="p-6">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Testar prompt (BIA)</h2>
           <div className="space-y-3">
+            <div>
+              <Label htmlFor="bia-test-model">Modelo</Label>
+              <select
+                id="bia-test-model"
+                value={testSelectedModel || aiSettings?.agent_model || ''}
+                onChange={(e) => setTestSelectedModel(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                disabled={aiModelsLoading}
+              >
+                {aiModelOptions.length === 0 ? (
+                  <option value={aiSettings?.agent_model || 'llama3.2'}>
+                    {aiSettings?.agent_model || 'llama3.2'}
+                  </option>
+                ) : (
+                  aiModelOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))
+                )}
+              </select>
+              {aiModelsLoading && (
+                <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>
+              )}
+              {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Configure o webhook de modelos em Configurações &gt; IA para listar modelos.
+                </p>
+              )}
+            </div>
             <div>
               <Label>Prompt de sistema (opcional)</Label>
                 <textarea

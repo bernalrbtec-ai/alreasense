@@ -1,0 +1,298 @@
+{
+  "name": "Sense - Gateway IA (teste e Secretária)",
+  "nodes": [
+    {
+      "parameters": { "options": {} },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [1200, 560],
+      "id": "ee9ca076-def7-44f2-be07-4a661d943a72",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gateway-ia",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "dd2d57cd-12ef-4ea3-810a-880fab765f4c",
+      "name": "Webhook Sense IA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-880, 560],
+      "webhookId": "sense-ia-gateway",
+      "notesInFlow": true,
+      "notes": "URL: POST /webhook/gateway-ia. Com GATEWAY_TEST_USE_ASYNC=true o Sense envia job_id e callback_url."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Router: detecta fluxo deferred (job_id + callback_url) e repassa o body.\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst hasDefer = !!(body.job_id && body.callback_url);\nreturn [{ json: { ...body, _defer: hasDefer, _job_id: body.job_id || null } }];"
+      },
+      "id": "a1-router-deferred",
+      "name": "Router deferred",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-672, 560]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "cond-defer", "leftValue": "={{ $json._defer }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b2-if-defer",
+      "name": "Tem job_id e callback_url?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-464, 560]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"deferred\": true, \"job_id\": $json._job_id } }}",
+        "options": {}
+      },
+      "id": "c3-respond-deferred",
+      "name": "Responder deferred",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [-256, 360],
+      "notes": "Resposta imediata ao Sense. Fluxo segue em background."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Igual ao Montar prompt e modelo, mas repassa callback_url, job_id, request_id, trace_id para o callback.\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nfunction normalizarConteudo(msg) {\n  const c = (msg && msg.content != null) ? (typeof msg.content === 'string' ? msg.content : String(msg.content)) : '';\n  const t = c.trim();\n  if (t === '') return '[Áudio em processamento]';\n  return c;\n}\n\nconst isSecretary = (body.action === 'secretary' || body.agent_type === 'secretary');\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst bh = body.business_hours || {};\nconst isOpen = bh.is_open === true;\nconst nextOpen = (bh.next_open_time || '').trim();\nlet businessHoursInstrucao = '';\nif (isSecretary) {\n  if (!isOpen) {\n    businessHoursInstrucao = ' A empresa está FECHADA no momento. Informe isso de forma cordial e, se houver next_open_time, diga quando reabrimos. Ofereça registrar um retorno (anotar contato e assunto para a equipe retornar). Se o cliente quiser retorno: CONFIRME o assunto e o departamento/área antes de finalizar; depois CONFIRME o agendamento, despeça-se e encerre. Quando você de fato registrar o retorno (após confirmar assunto e departamento), ao final da sua mensagem adicione exatamente estas linhas (o sistema remove antes de enviar ao cliente): REGISTRAR_RETORNO, ASSUNTO_RETORNO: <resumo do assunto em uma frase>, DEPARTAMENTO_RETORNO: <uuid do departamento da lista que você recebeu>. Ao se despedir após registrar o retorno, adicione também a linha FECHAR_CONVERSA para o sistema encerrar a conversa no app. Use o uuid que mais fizer sentido ou o primeiro da lista se não souber. Não sugira departamentos para atendimento imediato.';\n    if (nextOpen) businessHoursInstrucao += ' Próxima abertura: ' + nextOpen + '.';\n  } else {\n    businessHoursInstrucao = ' A empresa está ABERTA. Atenda normalmente.';\n  }\n}\nconst audioInstrucao = ' Mensagens de áudio do usuário chegam como \"[Áudio] <transcrição>\" ou \"[Áudio em processamento]\" quando a transcrição ainda não está pronta; responda com naturalidade.';\nconst defaultSecretaryPrompt = 'Você é a secretária virtual da empresa. Use o contexto abaixo (dados da empresa, histórico do contato e departamentos) para responder de forma cordial e objetiva. Quando o cliente relatar problema ou pedir ajuda, responda com empatia e seriedade; evite risadas no texto (ahahaha, kkk, hahaha) para não parecer que está debochando.' + businessHoursInstrucao + audioInstrucao + ' Se o assunto for claramente de um departamento específico e a empresa estiver aberta, ao final da resposta você pode indicar em uma linha: SUGERIR_DEPARTAMENTO: <uuid do departamento> e RESUMO_PARA_DEPARTAMENTO: <resumo em uma frase>. Caso contrário, apenas responda normalmente.';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : (isSecretary ? defaultSecretaryPrompt : 'Você é um assistente prestativo.');\n\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst contextParts = [];\nif (knowledgeItems.length > 0) {\n  contextParts.push(knowledgeItems.map(i => '## ' + (i.title || 'Documento') + '\\n' + (i.content || '')).join('\\n\\n'));\n}\nif (isSecretary && Array.isArray(body.memory_items) && body.memory_items.length > 0) {\n  contextParts.push('Histórico relevante do contato:\\n' + body.memory_items.map(m => '- ' + (m.content || '')).join('\\n'));\n}\nif (isSecretary && Array.isArray(body.departments) && body.departments.length > 0) {\n  contextParts.push('Departamentos para encaminhamento (id, nome, palavras-chave):\\n' + body.departments.map(d => '- ' + d.id + ': ' + d.name + ' (' + (d.routing_keywords || []).join(', ') + ')').join('\\n'));\n}\nconst context = contextParts.filter(Boolean).join('\\n\\n');\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\nconst knowledgeItemsCount = knowledgeItems.length;\nfunction uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)).replace('y', () => ((Math.floor(Math.random()*4)+8).toString(16))); }\nconst requestId = body.request_id || body.metadata?.request_id || uuid();\nconst traceId = body.trace_id || body.metadata?.trace_id || uuid();\nconst useChat = Array.isArray(body.messages) && body.messages.length > 0;\nconst cb = { callback_url: body.callback_url, job_id: body.job_id, request_id: body.request_id, trace_id: body.trace_id };\n\nif (useChat) {\n  const systemContent = [systemPrompt, context ? 'Contexto para consulta:\\n' + context : ''].filter(Boolean).join('\\n\\n');\n  const messages = [\n    { role: 'system', content: systemContent },\n    ...body.messages.map(m => { const role = (m.role || (m.direction === 'incoming' ? 'user' : 'assistant')).toLowerCase(); const content = normalizarConteudo(m); return { role: role === 'user' || role === 'assistant' ? role : 'user', content }; })\n  ];\n  return [{ json: { useChat: true, model, messages, knowledgeItemsCount, isSecretary, requestId, traceId, ...cb } }];\n}\nconst userMessage = normalizarConteudo(body.message || {});\nconst fullPrompt = [systemPrompt, context ? 'Contexto para consulta:\\n' + context : '', 'Mensagem do usuário: ' + userMessage].filter(Boolean).join('\\n\\n');\nreturn [{ json: { useChat: false, model, fullPrompt, knowledgeItemsCount, isSecretary, requestId, traceId, ...cb } }];\n"
+      },
+      "id": "d4-montar-async",
+      "name": "Montar prompt e modelo (async)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-48, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "cond-chat-a", "leftValue": "={{ $json.useChat }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e5-if-chat-async",
+      "name": "Usar chat? (async)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [168, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $json.model, \"messages\": $json.messages, \"stream\": false } }}",
+        "options": {}
+      },
+      "id": "f6-ollama-chat-async",
+      "name": "Chamar Ollama (chat) async",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [384, 248],
+      "notes": "Ajuste a URL para sua instância Ollama."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $json.model, \"prompt\": $json.fullPrompt, \"stream\": false } }}",
+        "options": {}
+      },
+      "id": "g7-ollama-gen-async",
+      "name": "Chamar Ollama (generate) async",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [384, 472],
+      "notes": "Ajuste a URL para sua instância Ollama."
+    },
+    {
+      "parameters": {},
+      "id": "h8-merge-async",
+      "name": "Merge (async)",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [600, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ollama = $input.first().json;\nconst prev = $('Montar prompt e modelo (async)').first().json;\nlet replyText = (ollama.message && ollama.message.content)\n  ? String(ollama.message.content).trim()\n  : (ollama.response && String(ollama.response).trim())\n    ? String(ollama.response).trim()\n    : '(Sem resposta do modelo.)';\nconst evalDurationNs = ollama.eval_duration || 0;\nconst latencyMs = evalDurationNs > 0 ? Math.round(evalDurationNs / 1e6) : 0;\nconst out = {\n  reply_text: replyText,\n  status: 'success',\n  meta: { model: ollama.model || prev.model, latency_ms: latencyMs, rag_hits: prev.knowledgeItemsCount || 0 },\n  request_id: prev.requestId || prev.request_id || null,\n  trace_id: prev.traceId || prev.trace_id || null,\n  callback_url: prev.callback_url,\n  job_id: prev.job_id\n};\nif (prev.isSecretary && replyText) {\n  const lines = replyText.split('\\n');\n  let suggested_department_id = null, summary_for_department = null, register_return = false, return_subject = null, return_department_id = null, close_conversation = false;\n  for (const line of lines) {\n    const t = line.trim();\n    const depMatch = t.match(/SUGERIR_DEPARTAMENTO:\\s*([a-fA-F0-9-]{36})/i);\n    const sumMatch = t.match(/RESUMO_PARA_DEPARTAMENTO:\\s*(.+)/i);\n    if (depMatch) suggested_department_id = depMatch[1].trim();\n    if (sumMatch) summary_for_department = sumMatch[1].trim().slice(0, 2000);\n    if (/^REGISTRAR_RETORNO$/i.test(t)) register_return = true;\n    const subMatch = t.match(/ASSUNTO_RETORNO:\\s*(.+)/i);\n    if (subMatch) return_subject = subMatch[1].trim().slice(0, 500);\n    const retDeptMatch = t.match(/DEPARTAMENTO_RETORNO:\\s*([a-fA-F0-9-]{36})/i);\n    if (retDeptMatch) return_department_id = retDeptMatch[1].trim();\n    if (/^FECHAR_CONVERSA$/i.test(t)) close_conversation = true;\n  }\n  const cleanLines = lines.filter(l => {\n    const t = l.trim();\n    return !/SUGERIR_DEPARTAMENTO:/i.test(t) && !/RESUMO_PARA_DEPARTAMENTO:/i.test(t) && !/^REGISTRAR_RETORNO$/i.test(t) && !/ASSUNTO_RETORNO:/i.test(t) && !/DEPARTAMENTO_RETORNO:/i.test(t) && !/^FECHAR_CONVERSA$/i.test(t);\n  });\n  out.reply_text = cleanLines.join('\\n').replace(/\\n\\n+/g, '\\n\\n').trim() || '(Sem resposta do modelo.)';\n  let stripPrefix = (out.reply_text || '').replace(/^\\s*Bia disse:\\s*\\n?/i, '').trim();\n  if (stripPrefix) out.reply_text = stripPrefix;\n  if (suggested_department_id) out.suggested_department_id = suggested_department_id;\n  if (summary_for_department) out.summary_for_department = summary_for_department;\n  if (register_return && return_subject) { out.register_return = true; out.return_subject = return_subject; if (return_department_id) out.return_department_id = return_department_id; }\n  if (close_conversation) out.close_conversation = true;\n}\nreturn [{ json: out }];\n"
+      },
+      "id": "i9-formatar-async",
+      "name": "Formatar resposta (async)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [816, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nreturn [{ json: {\n  job_id: d.job_id,\n  status: 'success',\n  request_id: d.request_id || null,\n  trace_id: d.trace_id || null,\n  response: { reply_text: d.reply_text, meta: d.meta || {}, suggested_department_id: d.suggested_department_id, summary_for_department: d.summary_for_department, register_return: d.register_return, return_subject: d.return_subject, return_department_id: d.return_department_id, close_conversation: d.close_conversation }\n} }];\n"
+      },
+      "id": "j10-build-callback",
+      "name": "Montar body callback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1032, 360]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Montar prompt e modelo (async)').first().json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "X-Gateway-Callback-Token", "value": "COLOQUE_O_MESMO_VALOR_DE_GATEWAY_TEST_CALLBACK_TOKEN_DA_SENSE" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "k11-http-callback",
+      "name": "POST callback Sense",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1248, 360],
+      "notes": "Configure o header X-Gateway-Callback-Token com o mesmo valor do Sense."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "cond-chat", "leftValue": "={{ $json.useChat }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "49fdd4a1-993c-4124-8d84-50f95109ed6c",
+      "name": "Usar chat com histórico?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [-272, 560]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $json.model, \"messages\": $json.messages, \"stream\": false } }}",
+        "options": {}
+      },
+      "id": "7c01ee5c-f53b-48ab-958f-63b3634a6d00",
+      "name": "Chamar Ollama (chat)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-48, 448],
+      "notesInFlow": true,
+      "notes": "Ajuste a URL para sua instância Ollama (ex.: credencial + /api/chat). Usado quando há histórico (messages)."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://172.16.20.66:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": $json.model, \"prompt\": $json.fullPrompt, \"stream\": false } }}",
+        "options": {}
+      },
+      "id": "450f4e48-288b-4cce-82f4-d48bd8932808",
+      "name": "Chamar Ollama (generate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-48, 656],
+      "notesInFlow": true,
+      "notes": "Ajuste a URL para sua instância Ollama. Usado quando não há histórico (uma única mensagem)."
+    },
+    {
+      "parameters": {},
+      "id": "79cd48d1-e9b4-4edc-991c-8d21fa63e96b",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [176, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Entrada: body do webhook (Sense envia action, messages, message, knowledge_items, memory_items, departments, model, prompt, etc.)\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nfunction normalizarConteudo(msg) {\n  const c = (msg && msg.content != null) ? (typeof msg.content === 'string' ? msg.content : String(msg.content)) : '';\n  const t = c.trim();\n  if (t === '') return '[Áudio em processamento]';\n  return c;\n}\n\nconst isSecretary = (body.action === 'secretary' || body.agent_type === 'secretary');\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst bh = body.business_hours || {};\nconst isOpen = bh.is_open === true;\nconst nextOpen = (bh.next_open_time || '').trim();\nlet businessHoursInstrucao = '';\nif (isSecretary) {\n  if (!isOpen) {\n    businessHoursInstrucao = ' A empresa está FECHADA no momento. Informe isso de forma cordial e, se houver next_open_time, diga quando reabrimos. Ofereça registrar um retorno (anotar contato e assunto para a equipe retornar). Se o cliente quiser retorno: CONFIRME o assunto e o departamento/área antes de finalizar; depois CONFIRME o agendamento, despeça-se e encerre. Quando você de fato registrar o retorno (após confirmar assunto e departamento), ao final da sua mensagem adicione exatamente estas linhas (o sistema remove antes de enviar ao cliente): REGISTRAR_RETORNO, ASSUNTO_RETORNO: <resumo do assunto em uma frase>, DEPARTAMENTO_RETORNO: <uuid do departamento da lista que você recebeu>. Ao se despedir após registrar o retorno, adicione também a linha FECHAR_CONVERSA para o sistema encerrar a conversa no app. Use o uuid que mais fizer sentido ou o primeiro da lista se não souber. Não sugira departamentos para atendimento imediato.';\n    if (nextOpen) businessHoursInstrucao += ' Próxima abertura: ' + nextOpen + '.';\n  } else {\n    businessHoursInstrucao = ' A empresa está ABERTA. Atenda normalmente.';\n  }\n}\nconst audioInstrucao = ' Mensagens de áudio do usuário chegam como \"[Áudio] <transcrição>\" ou \"[Áudio em processamento]\" quando a transcrição ainda não está pronta; responda com naturalidade.';\nconst defaultSecretaryPrompt = 'Você é a secretária virtual da empresa. Use o contexto abaixo (dados da empresa, histórico do contato e departamentos) para responder de forma cordial e objetiva. Quando o cliente relatar problema ou pedir ajuda, responda com empatia e seriedade; evite risadas no texto (ahahaha, kkk, hahaha) para não parecer que está debochando.' + businessHoursInstrucao + audioInstrucao + ' Se o assunto for claramente de um departamento específico e a empresa estiver aberta, ao final da resposta você pode indicar em uma linha: SUGERIR_DEPARTAMENTO: <uuid do departamento> e RESUMO_PARA_DEPARTAMENTO: <resumo em uma frase>. Caso contrário, apenas responda normalmente.';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : (isSecretary ? defaultSecretaryPrompt : 'Você é um assistente prestativo.');\n\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst contextParts = [];\nif (knowledgeItems.length > 0) {\n  contextParts.push(knowledgeItems.map(i => '## ' + (i.title || 'Documento') + '\\n' + (i.content || '')).join('\\n\\n'));\n}\nif (isSecretary && Array.isArray(body.memory_items) && body.memory_items.length > 0) {\n  contextParts.push('Histórico relevante do contato:\\n' + body.memory_items.map(m => '- ' + (m.content || '')).join('\\n'));\n}\nif (isSecretary && Array.isArray(body.departments) && body.departments.length > 0) {\n  contextParts.push('Departamentos para encaminhamento (id, nome, palavras-chave):\\n' + body.departments.map(d => '- ' + d.id + ': ' + d.name + ' (' + (d.routing_keywords || []).join(', ') + ')').join('\\n'));\n}\nconst context = contextParts.filter(Boolean).join('\\n\\n');\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\nconst knowledgeItemsCount = knowledgeItems.length;\n\nfunction uuid() { return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random()*16).toString(16)).replace('y', () => ((Math.floor(Math.random()*4)+8).toString(16))); }\nconst requestId = body.request_id || body.metadata?.request_id || uuid();\nconst traceId = body.trace_id || body.metadata?.trace_id || uuid();\n\nconst useChat = Array.isArray(body.messages) && body.messages.length > 0;\n\nif (useChat) {\n  const systemContent = [systemPrompt, context ? 'Contexto para consulta:\\n' + context : ''].filter(Boolean).join('\\n\\n');\n  const messages = [\n    { role: 'system', content: systemContent },\n    ...body.messages.map(m => {\n      const role = (m.role || (m.direction === 'incoming' ? 'user' : 'assistant')).toLowerCase();\n      const content = normalizarConteudo(m);\n      return { role: role === 'user' || role === 'assistant' ? role : 'user', content };\n    })\n  ];\n  return [{ json: { useChat: true, model, messages, knowledgeItemsCount, isSecretary, requestId, traceId } }];\n}\n\nconst userMessage = normalizarConteudo(body.message || {});\nconst fullPrompt = [\n  systemPrompt,\n  context ? 'Contexto para consulta:\\n' + context : '',\n  'Mensagem do usuário: ' + userMessage\n].filter(Boolean).join('\\n\\n');\n\nreturn [{ json: { useChat: false, model, fullPrompt, knowledgeItemsCount, isSecretary, requestId, traceId } }];\n"
+      },
+      "id": "8ce70da0-36c2-48e0-9003-3820a806f4d8",
+      "name": "Montar prompt e modelo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-256, 560]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ollama = $input.first().json;\nconst prev = $('Montar prompt e modelo').first().json;\nlet replyText = (ollama.message && ollama.message.content)\n  ? String(ollama.message.content).trim()\n  : (ollama.response && String(ollama.response).trim())\n    ? String(ollama.response).trim()\n    : '(Sem resposta do modelo.)';\nconst evalDurationNs = ollama.eval_duration || 0;\nconst latencyMs = evalDurationNs > 0 ? Math.round(evalDurationNs / 1e6) : 0;\n\nconst out = {\n  reply_text: replyText,\n  status: 'success',\n  meta: {\n    model: ollama.model || prev.model,\n    latency_ms: latencyMs,\n    rag_hits: prev.knowledgeItemsCount || 0\n  },\n  request_id: prev.requestId || null,\n  trace_id: prev.traceId || null\n};\n\nif (prev.isSecretary && replyText) {\n  const lines = replyText.split('\\n');\n  let suggested_department_id = null;\n  let summary_for_department = null;\n  let register_return = false;\n  let return_subject = null;\n  let return_department_id = null;\n  let close_conversation = false;\n  for (const line of lines) {\n    const t = line.trim();\n    const depMatch = t.match(/SUGERIR_DEPARTAMENTO:\\s*([a-fA-F0-9-]{36})/i);\n    const sumMatch = t.match(/RESUMO_PARA_DEPARTAMENTO:\\s*(.+)/i);\n    if (depMatch) suggested_department_id = depMatch[1].trim();\n    if (sumMatch) summary_for_department = sumMatch[1].trim().slice(0, 2000);\n    if (/^REGISTRAR_RETORNO$/i.test(t)) register_return = true;\n    const subMatch = t.match(/ASSUNTO_RETORNO:\\s*(.+)/i);\n    if (subMatch) return_subject = subMatch[1].trim().slice(0, 500);\n    const retDeptMatch = t.match(/DEPARTAMENTO_RETORNO:\\s*([a-fA-F0-9-]{36})/i);\n    if (retDeptMatch) return_department_id = retDeptMatch[1].trim();\n    if (/^FECHAR_CONVERSA$/i.test(t)) close_conversation = true;\n  }\n  const cleanLines = lines.filter(l => {\n    const t = l.trim();\n    return !/SUGERIR_DEPARTAMENTO:/i.test(t) && !/RESUMO_PARA_DEPARTAMENTO:/i.test(t)\n      && !/^REGISTRAR_RETORNO$/i.test(t) && !/ASSUNTO_RETORNO:/i.test(t) && !/DEPARTAMENTO_RETORNO:/i.test(t)\n      && !/^FECHAR_CONVERSA$/i.test(t);\n  });\n  out.reply_text = cleanLines.join('\\n').replace(/\\n\\n+/g, '\\n\\n').trim() || '(Sem resposta do modelo.)';\n  let stripPrefix = (out.reply_text || '').replace(/^\\s*Bia disse:\\s*\\n?/i, '').trim();\n  if (stripPrefix) out.reply_text = stripPrefix;\n  if (suggested_department_id) out.suggested_department_id = suggested_department_id;\n  if (summary_for_department) out.summary_for_department = summary_for_department;\n  if (register_return && return_subject) {\n    out.register_return = true;\n    out.return_subject = return_subject;\n    if (return_department_id) out.return_department_id = return_department_id;\n  }\n  if (close_conversation) out.close_conversation = true;\n}\n\nreturn [{ json: out }];\n"
+      },
+      "id": "7fd071f0-20a1-4c3f-99dd-29f3cd5860c5",
+      "name": "Formatar resposta para o Sense",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 560]
+    },
+    {
+      "parameters": {
+        "content": "## Fluxo com suporte a deferred\nQuando o Sense envia job_id e callback_url (GATEWAY_TEST_USE_ASYNC=true): ramo superior → resposta imediata \"deferred\" + processamento em background + POST no callback.\nQuando não envia: ramo inferior → mesmo fluxo de sempre → Respond to Webhook com a resposta.",
+        "height": 420,
+        "width": 1200
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [-920, 432],
+      "typeVersion": 1,
+      "id": "c04fb70c-622a-40da-aa1b-7e8be2c8551c",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "Webhook Sense IA": { "main": [[{ "node": "Router deferred", "type": "main", "index": 0 }]] },
+    "Router deferred": { "main": [[{ "node": "Tem job_id e callback_url?", "type": "main", "index": 0 }]] },
+    "Tem job_id e callback_url?": {
+      "main": [
+        [{ "node": "Responder deferred", "type": "main", "index": 0 }],
+        [{ "node": "Montar prompt e modelo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Responder deferred": { "main": [[{ "node": "Montar prompt e modelo (async)", "type": "main", "index": 0 }]] },
+    "Montar prompt e modelo (async)": { "main": [[{ "node": "Usar chat? (async)", "type": "main", "index": 0 }]] },
+    "Usar chat? (async)": {
+      "main": [
+        [{ "node": "Chamar Ollama (chat) async", "type": "main", "index": 0 }],
+        [{ "node": "Chamar Ollama (generate) async", "type": "main", "index": 0 }]
+      ]
+    },
+    "Chamar Ollama (chat) async": { "main": [[{ "node": "Merge (async)", "type": "main", "index": 0 }]] },
+    "Chamar Ollama (generate) async": { "main": [[{ "node": "Merge (async)", "type": "main", "index": 1 }]] },
+    "Merge (async)": { "main": [[{ "node": "Formatar resposta (async)", "type": "main", "index": 0 }]] },
+    "Formatar resposta (async)": { "main": [[{ "node": "Montar body callback", "type": "main", "index": 0 }]] },
+    "Montar body callback": { "main": [[{ "node": "POST callback Sense", "type": "main", "index": 0 }]] },
+    "Montar prompt e modelo": { "main": [[{ "node": "Usar chat com histórico?", "type": "main", "index": 0 }]] },
+    "Usar chat com histórico?": {
+      "main": [
+        [{ "node": "Chamar Ollama (chat)", "type": "main", "index": 0 }],
+        [{ "node": "Chamar Ollama (generate)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Chamar Ollama (chat)": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Chamar Ollama (generate)": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Formatar resposta para o Sense", "type": "main", "index": 0 }]] },
+    "Formatar resposta para o Sense": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "templateCredsSetupCompleted": true }
+}
