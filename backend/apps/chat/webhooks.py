@@ -2831,8 +2831,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             except Exception as e:
                 logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
 
-            # BIA (Secretária IA): desativada – em reconstrução (Fase 0 do plano RAG BIA).
-            # Será reativada na Fase 5 com nova arquitetura (pgvector na infra n8n).
+            # BIA (Secretária IA): dispara para mensagens incoming no Inbox (inclui conversas reabertas)
+            if secretary_responds_instead:
+                try:
+                    from apps.ai.secretary_service import dispatch_secretary_async
+                    dispatch_secretary_async(conversation, message)
+                except Exception as e:
+                    logger.error(f"❌ [BIA] Erro ao disparar secretária: {e}", exc_info=True)
         else:
             logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
         
