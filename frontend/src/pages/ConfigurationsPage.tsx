@@ -1709,23 +1709,25 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const handleSaveSecretaryProfile = async () => {
+  const handleSaveSecretaryProfile = async (profileOverride?: Partial<SecretaryProfile> | null) => {
     if (!secretaryProfile) return
+    const profileToSave: SecretaryProfile =
+      profileOverride != null ? { ...secretaryProfile, ...profileOverride } : secretaryProfile
     const errors: Record<string, string> = {}
-    if (secretaryProfile.inbox_idle_minutes < 0 || secretaryProfile.inbox_idle_minutes > 1440) {
+    if (profileToSave.inbox_idle_minutes < 0 || profileToSave.inbox_idle_minutes > 1440) {
       errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
     }
     setSecretaryProfileErrors(errors)
     if (Object.keys(errors).length > 0) return
-    
+
+    const hadOverride = profileOverride != null
     const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
     try {
       setSecretaryProfileSaving(true)
-      const response = await api.put('/ai/secretary/profile/', secretaryProfile)
-      
-      // ✅ CORREÇÃO: Atualizar com os dados retornados do servidor (garante sincronização)
+      const response = await api.put('/ai/secretary/profile/', profileToSave)
+
       if (response.data) {
-        const savedProfile = {
+        const savedProfile: SecretaryProfile = {
           form_data: response.data?.form_data ?? {},
           prompt: response.data?.prompt ?? '',
           signature_name: response.data?.signature_name ?? '',
@@ -1733,17 +1735,15 @@ export default function ConfigurationsPage() {
           is_active: response.data?.is_active ?? false,
           inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
         }
-        console.log('[SECRETARY SAVE] Dados retornados do servidor:', {
-          form_data_keys: Object.keys(savedProfile.form_data),
-          form_data: savedProfile.form_data,
-          is_active: savedProfile.is_active
-        })
         setSecretaryProfile(savedProfile)
       }
-      
+
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
     } catch (error: any) {
+      if (hadOverride) {
+        setSecretaryProfile(secretaryProfile)
+      }
       const apiErrors = error.response?.data?.errors || {}
       if (apiErrors && typeof apiErrors === 'object') {
         setSecretaryProfileErrors(apiErrors)
@@ -2726,9 +2726,11 @@ export default function ConfigurationsPage() {
                         <input
                           type="checkbox"
                           checked={secretaryProfile.is_active}
+                          disabled={secretaryProfileSaving}
                           onChange={(e) => {
-                            setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })
-                            handleSaveSecretaryProfile()
+                            const isActive = e.target.checked
+                            setSecretaryProfile((prev) => (prev ? { ...prev, is_active: isActive } : prev))
+                            handleSaveSecretaryProfile({ is_active: isActive })
                           }}
                           className="sr-only peer"
                         />
