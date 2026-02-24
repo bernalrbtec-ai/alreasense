@@ -25,6 +25,8 @@ const WS_BASE_URL = getWsBaseUrl();
 // ✅ SINGLETON global para WebSocket do tenant - garante apenas UMA conexão
 // Isso previne múltiplas conexões quando useTenantSocket é chamado várias vezes
 let globalWebSocket: WebSocket | null = null;
+/** Tenant ao qual a conexão global atual pertence. Se o usuário trocar de tenant, a conexão deve ser fechada e recriada. */
+let globalWebSocketTenantId: string | null = null;
 let globalWebSocketRefs: Set<() => void> = new Set(); // Callbacks para notificar todas as instâncias
 
 // ✅ SINGLETON global para prevenir toasts duplicados ACROSS múltiplas instâncias
@@ -1018,27 +1020,56 @@ export function useTenantSocket() {
       return;
     }
 
-    const tenantId = user.tenant_id;
-    
-    if (!tenantId) {
+    // ✅ Sempre ler do store agora (evita closure com tenant antigo após troca de usuário/tenant)
+    const { token: tokenFromStore, user: currentUser } = useAuthStore.getState();
+    const tenantId = currentUser?.tenant_id ?? user?.tenant_id;
+    const tenantIdStr = tenantId != null ? String(tenantId) : null;
+
+    if (!tenantIdStr) {
       console.log('⏸️ [TENANT WS] Aguardando tenant_id...');
       return;
     }
 
-    // ✅ SINGLETON: Se já existe conexão global ativa, reutilizar
-    if (globalWebSocket?.readyState === WebSocket.OPEN) {
-      console.log('✅ [TENANT WS] Reutilizando conexão WebSocket global existente');
+    const connectedTenantStr = globalWebSocketTenantId != null ? String(globalWebSocketTenantId) : null;
+    const isSameTenant = connectedTenantStr === tenantIdStr;
+
+    // ✅ CRÍTICO: Só reutilizar se a conexão for do MESMO tenant. Caso contrário, fechar e reconectar (evita toast/conversas de outro tenant).
+    if (globalWebSocket?.readyState === WebSocket.OPEN && isSameTenant) {
+      console.log('✅ [TENANT WS] Reutilizando conexão WebSocket global existente (mesmo tenant)');
       socketRef.current = globalWebSocket;
       return;
     }
+    if (globalWebSocket?.readyState === WebSocket.OPEN && !isSameTenant) {
+      console.warn('🔄 [TENANT WS] Tenant mudou: fechando conexão antiga e reconectando para o tenant atual');
+      globalWebSocket.close();
+      globalWebSocket = null;
+      globalWebSocketTenantId = null;
+      socketRef.current = null;
+      try {
+        useChatStore.getState().reset();
+      } catch (e) {
+        console.warn('⚠️ [TENANT WS] Erro ao limpar store ao trocar tenant:', e);
+      }
+    }
 
-    // ✅ SINGLETON: Se já está conectando, aguardar
-    if (globalWebSocket?.readyState === WebSocket.CONNECTING) {
+    // ✅ SINGLETON: Se já está conectando para o MESMO tenant, aguardar
+    if (globalWebSocket?.readyState === WebSocket.CONNECTING && isSameTenant) {
       console.log('⏸️ [TENANT WS] Conexão global já está conectando, aguardando...');
       return;
     }
+    if (globalWebSocket?.readyState === WebSocket.CONNECTING && !isSameTenant) {
+      globalWebSocket?.close();
+      globalWebSocket = null;
+      globalWebSocketTenantId = null;
+      socketRef.current = null;
+      try {
+        useChatStore.getState().reset();
+      } catch (e) {
+        console.warn('⚠️ [TENANT WS] Erro ao limpar store ao trocar tenant:', e);
+      }
+    }
 
-    // Não reconectar se esta instância já está conectada
+    // Não reconectar se esta instância já está conectada ao tenant correto (socketRef pode ser o global)
     if (socketRef.current?.readyState === WebSocket.CONNECTING ||
         socketRef.current?.readyState === WebSocket.OPEN) {
       return;
@@ -1047,10 +1078,9 @@ export function useTenantSocket() {
     // ✅ Sempre ler token AGORA do store/axios (nunca usar closure) – store pode ter token "preso" vindo do persist/localStorage
     const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
     const tokenFromApi = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const { token: tokenFromStore, user: currentUser } = useAuthStore.getState();
     const currentToken = tokenFromApi || tokenFromStore;
     
-    if (!currentToken || !currentUser?.tenant_id) {
+    if (!currentToken || !tenantIdStr) {
       console.warn('⚠️ [TENANT WS] Token ou tenant_id não disponível. Token do API:', !!tokenFromApi, 'Token do store:', !!tokenFromStore);
       return;
     }
@@ -1058,11 +1088,11 @@ export function useTenantSocket() {
     // ✅ DEBUG: Log sem expor token (apenas tamanho e formato)
     const parts = currentToken.split('.');
     console.log('🔌 [TENANT WS] Conectando WebSocket:', {
-      tenantId: currentUser.tenant_id,
+      tenantId: tenantIdStr,
       tokenLength: currentToken.length,
       tokenParts: parts.length,
       tokenFrom: tokenFromApi ? 'api' : 'store',
-      userEmail: currentUser.email,
+      userEmail: currentUser?.email,
       wsBaseUrl: WS_BASE_URL
     });
     
@@ -1088,11 +1118,12 @@ export function useTenantSocket() {
     }
 
     const encodedToken = encodeURIComponent(currentToken);
-    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${encodedToken}`;
+    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantIdStr}/?token=${encodedToken}`;
 
     try {
       const ws = new WebSocket(wsUrl);
       globalWebSocket = ws; // ✅ Guardar como singleton global
+      globalWebSocketTenantId = tenantIdStr; // ✅ Registrar tenant da conexão (evita reutilizar após troca de tenant)
       socketRef.current = ws;
 
       ws.onopen = () => {
@@ -1124,6 +1155,7 @@ export function useTenantSocket() {
         console.warn('🔌 [TENANT WS] Conexão fechada:', event.code, event.reason);
         socketRef.current = null;
         globalWebSocket = null; // ✅ Limpar singleton global
+        globalWebSocketTenantId = null;
 
         // ✅ Token inválido ou expirado (4001) → limpar sessão e redirecionar para login
         if (event.code === 4001) {
