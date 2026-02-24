@@ -2290,18 +2290,25 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as e:
                             logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
                 
-                    # ✅ CORREÇÃO: Ao reabrir conversa fechada, respeitar default_department da instância.
-                    # Se a instância tem departamento configurado, manter no departamento (não Inbox).
-                    # Só colocar no Inbox (department=None) quando instância não tem departamento,
-                    # para que a Secretária IA possa responder.
-                    if default_department:
+                    # Ao reabrir conversa fechada: se BIA (Secretária IA) está ativa, sempre colocar no Inbox
+                    # para ela responder; senão respeitar default_department da instância.
+                    from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
+                    secretary_responds = (
+                        TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                        and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                    )
+                    if secretary_responds:
+                        conversation.department = None
+                        conversation.status = 'pending' if not from_me else 'open'
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (BIA ativa, secretária pode responder)")
+                    elif default_department:
                         conversation.department = default_department
                         conversation.status = 'open'
                         logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no departamento {default_department.name} (instância com departamento padrão)")
                     else:
                         conversation.department = None
                         conversation.status = 'pending' if not from_me else 'open'
-                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (Secretária IA pode responder)")
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (sem departamento padrão)")
                     # Reaberta vai para a fila: sem agente atribuído
                     conversation.assigned_to = None
                     conversation.save(update_fields=['status', 'department', 'assigned_to'])
@@ -2768,6 +2775,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Isso garante que tarefas sejam criadas mesmo se mensagem foi recebida anteriormente
         # mas a tarefa não foi criada (por erro, por exemplo)
         if direction == 'incoming':
+            secretary_responds_instead = False  # evita NameError se o try abaixo falhar antes de definir
             logger.info(f"🔍 [BUSINESS HOURS] Verificando horário de atendimento para mensagem recebida...")
             logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
             logger.info(f"   Department: {conversation.department.name if conversation.department else 'None'}")

@@ -311,7 +311,20 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
             if not in_farewell_window:
                 old_status = conversation.status
                 old_dept = conversation.department.name if conversation.department else 'Nenhum'
-                if default_department:
+                # Alinhado ao Evolution: se BIA ativa, reabrir no Inbox; senão respeitar default_department
+                from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
+                secretary_responds = (
+                    TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                )
+                if secretary_responds:
+                    conversation.department = None
+                    conversation.status = 'pending'
+                    logger.info(
+                        "[META WEBHOOK] Conversa %s reaberta no Inbox (BIA ativa, secretária pode responder)",
+                        normalized_phone[:16],
+                    )
+                elif default_department:
                     conversation.department = default_department
                     conversation.status = 'open'
                     logger.info(
@@ -323,7 +336,7 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                     conversation.department = None
                     conversation.status = 'pending'
                     logger.info(
-                        "[META WEBHOOK] Conversa %s reaberta no Inbox (Secretária IA pode responder)",
+                        "[META WEBHOOK] Conversa %s reaberta no Inbox (sem departamento padrão)",
                         normalized_phone[:16],
                     )
                 conversation.assigned_to = None
@@ -407,6 +420,32 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 except Exception as e:
                     logger.exception("[META WEBHOOK] Erro ao broadcast message_received: %s", e)
             transaction.on_commit(_broadcast_after_commit)
+
+            # BIA (Secretária IA): disparar quando mensagem incoming no Inbox e secretária ativa (inclui conversas reabertas).
+            # Callback roda após commit; dispatch_secretary_async revalida condições e ignora grupos no worker.
+            if conversation.department_id is None:
+                _conv_id, _msg_id, _tenant_id = conversation.id, new_msg.id, tenant.id
+
+                def _dispatch_bia_after_commit():
+                    try:
+                        from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
+                        from apps.ai.secretary_service import dispatch_secretary_async
+                        if (
+                            TenantAiSettings.objects.filter(tenant_id=_tenant_id).filter(secretary_enabled=True).exists()
+                            and TenantSecretaryProfile.objects.filter(tenant_id=_tenant_id).filter(is_active=True).exists()
+                        ):
+                            conv = Conversation.objects.filter(pk=_conv_id).first()
+                            msg = Message.objects.filter(pk=_msg_id).first()
+                            if conv and msg:
+                                dispatch_secretary_async(conv, msg)
+                                logger.info(
+                                    "[META WEBHOOK] BIA disparada para conversation_id=%s message_id=%s (provider=meta)",
+                                    str(_conv_id),
+                                    str(_msg_id),
+                                )
+                    except Exception as e:
+                        logger.exception("[META WEBHOOK] Erro ao disparar BIA: %s", e)
+                transaction.on_commit(_dispatch_bia_after_commit)
 
             # Mídia Meta: criar placeholder (se possível) e sempre enfileirar download via Graph API
             if msg_type in ('image', 'video', 'document', 'audio') and metadata_extra.get('meta_media_id'):
