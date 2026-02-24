@@ -353,6 +353,8 @@ export default function BiaAdminPage() {
         messages: [...messages, { role: 'user', content: message }],
       }
       if (prompt.length > 0) body.prompt = prompt
+      // Teste da aba Configuração = mesmo payload da produção (secretary + RAG + business_hours + company_context)
+      if (tab === 'config') body.simulate_production = true
       const res = await api.post('/ai/gateway/test/', body)
 
       if (res.data?.deferred && res.data?.job_id) {

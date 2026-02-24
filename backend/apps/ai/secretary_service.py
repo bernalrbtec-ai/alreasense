@@ -6,6 +6,7 @@ construção de contexto para o gateway (RAG + memória por contato), worker ass
 import logging
 import threading
 import time
+import uuid
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -352,6 +353,120 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         "metadata": {"model": secretary_model},
         "prompt": prompt,
     }
+
+
+def build_secretary_payload_for_test(
+    tenant,
+    message_text: str,
+    messages_list: List[Dict[str, Any]],
+    prompt: str,
+    model: str,
+    conversation_id: str,
+    message_id: str,
+    request_id: str,
+    trace_id: str,
+) -> Dict[str, Any]:
+    """
+    Monta o payload no mesmo formato da produção (action=secretary) para o teste
+    da área de Configuração da BIA. Inclui business_hours, company_context,
+    knowledge_items (RAG), departments; conversa é isolada (messages_list).
+    """
+    from apps.chat.services.business_hours_service import BusinessHoursService
+    from apps.tenancy.models import TenantCompanyProfile
+    from apps.tenancy.rag_sync import _build_company_chunk
+
+    tenant_id = str(tenant.id)
+    is_open, next_open_time = BusinessHoursService.is_business_hours(tenant, department=None)
+    business_hours_info = {
+        "is_open": is_open,
+        "next_open_time": next_open_time,
+        "status_text": "ABERTA" if is_open else "FECHADA",
+        "status_message": (
+            "A empresa está ABERTA no momento. Atenda normalmente."
+            if is_open
+            else (
+                "A empresa está FECHADA no momento."
+                + (f" Retornamos em: {next_open_time}" if next_open_time else "")
+            )
+        ),
+    }
+    company_context = ""
+    try:
+        profile_company = TenantCompanyProfile.objects.filter(tenant_id=tenant_id).first()
+        if profile_company:
+            company_context = _build_company_chunk(profile_company) or ""
+    except Exception:
+        pass
+    query_embedding = embed_text(message_text) if message_text else []
+    knowledge_items = get_secretary_rag_context(
+        tenant_id,
+        query_embedding,
+        limit=getattr(settings, "AI_RAG_TOP_K", 5),
+    )
+    departments = []
+    try:
+        from apps.authn.models import Department
+        for dept in Department.objects.filter(tenant=tenant).order_by("name"):
+            departments.append({
+                "id": str(dept.id),
+                "name": getattr(dept, "name", "") or "",
+                "routing_keywords": getattr(dept, "routing_keywords", []) or [],
+            })
+    except Exception:
+        pass
+    now_iso = timezone.now().isoformat()
+    _msg_list = list(messages_list) if messages_list else []
+    context_messages = []
+    for i, m in enumerate(_msg_list):
+        role = (m.get("role") or "user").strip().lower()
+        content = str(m.get("content") or "")
+        if role == "user":
+            direction, sender_name = "incoming", "Cliente"
+        elif role == "system":
+            direction, sender_name = "outgoing", "Sistema"
+        else:
+            direction, sender_name = "outgoing", "Bia"
+        context_messages.append({
+            "id": str(uuid.uuid4()) if i < len(_msg_list) - 1 else message_id,
+            "direction": direction,
+            "content": content,
+            "created_at": now_iso,
+            "sender_name": sender_name,
+        })
+    payload = {
+        "protocol_version": "v1",
+        "action": "secretary",
+        "agent_type": "secretary",
+        "request_id": request_id,
+        "trace_id": trace_id,
+        "tenant_id": tenant_id,
+        "tenant": {"id": tenant_id, "name": getattr(tenant, "name", "") or ""},
+        "business_hours": business_hours_info,
+        "company_context": company_context,
+        "conversation": {
+            "id": conversation_id,
+            "status": "open",
+            "contact_name": "Teste",
+            "contact_phone": "",
+            "contact_phone_normalized": "",
+            "department": None,
+            "department_id": None,
+        },
+        "message": {
+            "id": message_id,
+            "direction": "incoming",
+            "content": message_text,
+            "created_at": now_iso,
+        },
+        "messages": context_messages,
+        "knowledge_items": knowledge_items,
+        "memory_items": [],
+        "departments": departments,
+        "model": model,
+        "metadata": {"model": model, "source": "test"},
+        "prompt": prompt,
+    }
+    return payload
 
 
 def _send_typing_indicator(conversation, typing_seconds: float = SECRETARY_TYPING_DELAY_SECONDS) -> None:

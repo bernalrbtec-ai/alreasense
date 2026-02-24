@@ -30,6 +30,7 @@ from apps.ai.transcription_metrics import (
 )
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.ai.throttling import GatewayReplyThrottle, GatewayTestThrottle
+from apps.ai.secretary_service import build_secretary_payload_for_test
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
 logger = logging.getLogger(__name__)
@@ -713,33 +714,50 @@ def gateway_test(request):
         if first_department:
             department_id = first_department.id
 
-    payload = {
-        "protocol_version": "v1",
-        "action": "chat",
-        "request_id": str(request_id),
-        "trace_id": str(trace_id),
-        "tenant_id": str(request.user.tenant_id),
-        "conversation_id": str(conversation_id),
-        "contact_id": str(contact_id),
-        "department_id": str(department_id) if department_id else None,
-        "agent_id": str(agent_id) if agent_id else None,
-        "message": {
-            "id": str(message_id),
-            "direction": request.data.get("direction", "incoming"),
-            "content": message_text,
-            "created_at": timezone.now().isoformat(),
-        },
-        "metadata": {
-            "source": "test",
-            "model": selected_model,
-        },
-    }
-    if custom_prompt:
-        payload["prompt"] = custom_prompt
-    if knowledge_items_payload:
-        payload["knowledge_items"] = knowledge_items_payload
-    if messages_payload:
-        payload["messages"] = messages_payload
+    simulate_production = request.data.get("simulate_production") is True
+    if simulate_production:
+        logger.info(
+            "[GATEWAY TEST] simulate_production=true: enviando payload secretary (RAG, business_hours, company_context)"
+        )
+        payload = build_secretary_payload_for_test(
+            tenant=request.user.tenant,
+            message_text=message_text,
+            messages_list=messages_payload,
+            prompt=custom_prompt or "",
+            model=selected_model,
+            conversation_id=str(conversation_id),
+            message_id=str(message_id),
+            request_id=str(request_id),
+            trace_id=str(trace_id),
+        )
+    else:
+        payload = {
+            "protocol_version": "v1",
+            "action": "chat",
+            "request_id": str(request_id),
+            "trace_id": str(trace_id),
+            "tenant_id": str(request.user.tenant_id),
+            "conversation_id": str(conversation_id),
+            "contact_id": str(contact_id),
+            "department_id": str(department_id) if department_id else None,
+            "agent_id": str(agent_id) if agent_id else None,
+            "message": {
+                "id": str(message_id),
+                "direction": request.data.get("direction", "incoming"),
+                "content": message_text,
+                "created_at": timezone.now().isoformat(),
+            },
+            "metadata": {
+                "source": "test",
+                "model": selected_model,
+            },
+        }
+        if custom_prompt:
+            payload["prompt"] = custom_prompt
+        if knowledge_items_payload:
+            payload["knowledge_items"] = knowledge_items_payload
+        if messages_payload:
+            payload["messages"] = messages_payload
 
     use_async = getattr(settings, 'GATEWAY_TEST_USE_ASYNC', False)
     job_id = None
