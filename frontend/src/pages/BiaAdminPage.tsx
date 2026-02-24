@@ -427,21 +427,33 @@ export default function BiaAdminPage() {
 
   const effectiveModel = testSelectedModel || aiSettings?.agent_model || 'llama3.2'
 
-  const testArea = (
+  const modelSelect = (
+    <div>
+      <Label htmlFor="bia-test-model">Modelo</Label>
+      <select
+        id="bia-test-model"
+        value={effectiveModel}
+        onChange={(e) => setTestSelectedModel(e.target.value)}
+        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+        disabled={aiModelsLoading}
+      >
+        {aiModelOptions.length === 0 ? (
+          <option value={aiSettings?.agent_model || 'llama3.2'}>{aiSettings?.agent_model || 'llama3.2'}</option>
+        ) : (
+          aiModelOptions.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))
+        )}
+      </select>
+      {aiModelsLoading && <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>}
+      {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
+        <p className="text-xs text-amber-600 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
+      )}
+    </div>
+  )
+
+  const testAreaChat = (
     <div className="space-y-3">
-      <div>
-        <Label>Prompt de sistema (opcional)</Label>
-        <p className="text-xs text-gray-500 mt-0 mb-1">
-          Vazio: usa o prompt padrão da Configuração. Preenchido: usa só este texto no teste (o padrão não é alterado).
-        </p>
-        <textarea
-          value={testSystemPrompt}
-          onChange={(e) => setTestSystemPrompt(e.target.value)}
-          rows={2}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-          placeholder="Deixe vazio para usar o prompt da Configuração, ou escreva aqui para usar só este no teste"
-        />
-      </div>
       <div className="flex gap-2">
         <textarea
           value={testMessage}
@@ -473,6 +485,35 @@ export default function BiaAdminPage() {
           ))
         )}
       </div>
+    </div>
+  )
+
+  /** Área de teste na Config: só modelo + chat (usa sempre o prompt da BIA). */
+  const testAreaConfig = (
+    <div className="space-y-4">
+      {modelSelect}
+      {testAreaChat}
+    </div>
+  )
+
+  /** Área de teste na Homologação: modelo + prompt opcional + chat. */
+  const testAreaHomolog = (
+    <div className="space-y-4">
+      {modelSelect}
+      <div>
+        <Label>Prompt de sistema (opcional)</Label>
+        <p className="text-xs text-gray-500 mt-0 mb-1">
+          Vazio: usa o prompt da Configuração. Preenchido: usa só este texto no teste.
+        </p>
+        <textarea
+          value={testSystemPrompt}
+          onChange={(e) => setTestSystemPrompt(e.target.value)}
+          rows={2}
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Deixe vazio para usar o prompt da Configuração"
+        />
+      </div>
+      {testAreaChat}
     </div>
   )
 
@@ -552,38 +593,14 @@ export default function BiaAdminPage() {
             )}
           </Card>
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Modelo e teste</h2>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">AREA DE TESTE DO MODELO</h2>
             <p className="text-sm text-gray-600 mb-4">
               O teste usa o webhook definido em Configurações &gt; IA.
             </p>
             {aiSettingsLoading ? (
               <LoadingSpinner />
             ) : (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="bia-test-model">Modelo (fonte da verdade para Homologação)</Label>
-                  <select
-                    id="bia-test-model"
-                    value={effectiveModel}
-                    onChange={(e) => setTestSelectedModel(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
-                    disabled={aiModelsLoading}
-                  >
-                    {aiModelOptions.length === 0 ? (
-                      <option value={aiSettings?.agent_model || 'llama3.2'}>{aiSettings?.agent_model || 'llama3.2'}</option>
-                    ) : (
-                      aiModelOptions.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))
-                    )}
-                  </select>
-                  {aiModelsLoading && <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>}
-                  {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
-                    <p className="text-xs text-amber-600 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
-                  )}
-                </div>
-                {testArea}
-              </div>
+              testAreaConfig
             )}
           </Card>
         </div>
@@ -592,12 +609,19 @@ export default function BiaAdminPage() {
       {activeTab === 'homolog' && (
         <div id="bia-tab-homolog" role="tabpanel" aria-labelledby="bia-tab-homolog-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Testar com contexto</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Escolha o modelo, opcionalmente um prompt só para o teste, e envie uma mensagem. A conversa real selecionada à direita será enviada como contexto no prompt (se houver).
+            </p>
+            {testAreaHomolog}
+          </Card>
+          <Card className="p-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               Conversa real no prompt
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Selecione uma conversa. Ela será enviada como contexto no prompt ao testar ao lado. Modelo usado: <strong>{effectiveModel}</strong> (definido em Configuração).
+              Selecione uma conversa. Ela será enviada como contexto no prompt ao testar ao lado.
             </p>
             <div className="space-y-3">
               <div>
@@ -620,32 +644,12 @@ export default function BiaAdminPage() {
                   <Loader2 className="h-4 w-4 animate-spin" /> Carregando mensagens...
                 </p>
               )}
-              {loadedConversationText && !messagesLoading && (
-                <>
-                  <div className="rounded border border-gray-200 bg-gray-50 p-3 max-h-[280px] overflow-y-auto">
-                    <Label className="text-gray-700 text-xs">Conversa carregada (será enviada no prompt)</Label>
-                    <pre className="mt-1 text-sm whitespace-pre-wrap font-sans">{loadedConversationText}</pre>
-                  </div>
-                  {loadedConversationText.length > 8000 && (
-                    <p className="text-xs text-amber-600">
-                      Conversa longa: pode ser truncada no envio (máx. {MAX_PROMPT_LENGTH.toLocaleString()} caracteres).
-                    </p>
-                  )}
-                </>
+              {!selectedConversationId && !conversationsLoading && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  Nenhuma conversa selecionada. O teste usará só o prompt de sistema.
+                </p>
               )}
             </div>
-          </Card>
-          <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Testar com contexto</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Envie uma mensagem para testar a BIA com a conversa carregada à esquerda (se houver). O mesmo modelo da Configuração será usado.
-            </p>
-            {!selectedConversationId && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
-                Nenhuma conversa selecionada. Selecione uma à esquerda para enviá-la como contexto no prompt do teste.
-              </p>
-            )}
-            {testArea}
           </Card>
         </div>
       )}
