@@ -2773,16 +2773,6 @@ export default function ConfigurationsPage() {
                         </p>
                       </div>
                       <div>
-                        <Label htmlFor="secretary_signature_name">Nome da Secretária</Label>
-                        <Input
-                          id="secretary_signature_name"
-                          value={secretaryProfile.signature_name || ''}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
-                          placeholder="Bia"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
                         <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (min)</Label>
                         <Input
                           id="secretary_inbox_idle_minutes"
