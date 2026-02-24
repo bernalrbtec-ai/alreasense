@@ -383,7 +383,7 @@ export default function ConfigurationsPage() {
   const modelTestRagInputRef = useRef<HTMLInputElement>(null)
   const modelTestPollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const modelTestPollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const MAX_PROMPT_LENGTH = 10000
+  const MAX_PROMPT_LENGTH = 1_000_000  // ~1 MB em texto típico
   const MAX_RAG_FILE_SIZE = 2 * 1024 * 1024 // 2MB
   const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
   const [gatewayAuditLoading, setGatewayAuditLoading] = useState(false)

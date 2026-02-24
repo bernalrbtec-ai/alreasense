@@ -15,7 +15,8 @@ import { api } from '../lib/api'
 
 const BIA_KEY_STORAGE = 'bia_admin_key_valid'
 /** Limite do prompt no gateway (backend rejeita acima disso). */
-const MAX_PROMPT_LENGTH = 10000
+/** Limite do prompt no gateway (~1 MB em texto típico). */
+const MAX_PROMPT_LENGTH = 1_000_000
 
 interface SecretaryProfile {
   is_active: boolean
