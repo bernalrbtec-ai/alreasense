@@ -33,6 +33,30 @@ def _server_time_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _build_system_data_block(
+    tenant_name: str,
+    business_hours: Dict[str, Any],
+    server_time_utc: str,
+) -> str:
+    """
+    Bloco com dados reais do sistema. Colocado NO INÍCIO do prompt para o modelo
+    ver primeiro e não ignorar (nome da empresa, horário, data/hora UTC).
+    """
+    name = (tenant_name or "").strip() or "(nome não definido)"
+    is_open = business_hours.get("is_open", True)
+    status_msg = (business_hours.get("status_message") or "").strip()
+    if not status_msg:
+        status_msg = "ABERTA" if is_open else "FECHADA"
+    return (
+        "=== DADOS DO SISTEMA (OBRIGATÓRIO: use exatamente; não invente nem traduza) ===\n"
+        f"Nome da empresa: {name}\n"
+        f"Horário de atendimento agora: {status_msg}\n"
+        f"is_open: {str(is_open).lower()}\n"
+        f"Data/hora atual do servidor (UTC): {server_time_utc}\n"
+        "=== FIM DOS DADOS DO SISTEMA ===\n\n"
+    )
+
+
 SOURCE_SECRETARY = "secretary"
 SECRETARY_N8N_TIMEOUT = 20
 SECRETARY_N8N_RETRY_DELAY = 2
@@ -332,10 +356,16 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     contact_phone_raw = (conversation.contact_phone or "").strip()
     contact_phone_normalized = normalize_contact_phone_for_rag(contact_phone_raw)
 
+    server_time_utc = _server_time_utc_iso()
+    tenant_name = getattr(conversation.tenant, "name", "") or ""
+    prompt_with_data = _build_system_data_block(
+        tenant_name, business_hours_info, server_time_utc
+    ) + (prompt or "").strip()
+
     return {
         "agent_type": "secretary",
-        "server_time_utc": _server_time_utc_iso(),
-        "tenant": {"id": str(conversation.tenant_id), "name": conversation.tenant.name},
+        "server_time_utc": server_time_utc,
+        "tenant": {"id": str(conversation.tenant_id), "name": tenant_name},
         "business_hours": business_hours_info,
         "company_context": company_context,
         "conversation": {
@@ -359,7 +389,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         "departments": departments,
         "model": secretary_model,
         "metadata": {"model": secretary_model},
-        "prompt": prompt,
+        "prompt": prompt_with_data,
     }
 
 
@@ -441,15 +471,20 @@ def build_secretary_payload_for_test(
             "created_at": now_iso,
             "sender_name": sender_name,
         })
+    server_time_utc = _server_time_utc_iso()
+    tenant_name = getattr(tenant, "name", "") or ""
+    prompt_with_data = _build_system_data_block(
+        tenant_name, business_hours_info, server_time_utc
+    ) + (prompt or "").strip()
     payload = {
         "protocol_version": "v1",
         "action": "secretary",
         "agent_type": "secretary",
         "request_id": request_id,
         "trace_id": trace_id,
-        "server_time_utc": _server_time_utc_iso(),
+        "server_time_utc": server_time_utc,
         "tenant_id": tenant_id,
-        "tenant": {"id": tenant_id, "name": getattr(tenant, "name", "") or ""},
+        "tenant": {"id": tenant_id, "name": tenant_name},
         "business_hours": business_hours_info,
         "company_context": company_context,
         "conversation": {
@@ -473,7 +508,7 @@ def build_secretary_payload_for_test(
         "departments": departments,
         "model": model,
         "metadata": {"model": model, "source": "test"},
-        "prompt": prompt,
+        "prompt": prompt_with_data,
     }
     return payload
 
