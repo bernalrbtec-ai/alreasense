@@ -4,7 +4,7 @@
  * Modelo é definido apenas na aba Configuração (fonte da verdade).
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical } from 'lucide-react'
+import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Label } from '../components/ui/Label'
@@ -63,11 +63,16 @@ export default function BiaAdminPage() {
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
 
   const [promptDraft, setPromptDraft] = useState('')
-  const [testMessage, setTestMessage] = useState('')
   const [testSystemPrompt, setTestSystemPrompt] = useState('')
-  const [testMessages, setTestMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
-  const [testLoading, setTestLoading] = useState(false)
-  const [testError, setTestError] = useState<string | null>(null)
+  // Estado independente por aba: Config e Homolog têm histórico de teste separado.
+  const [testMessageConfig, setTestMessageConfig] = useState('')
+  const [testMessagesConfig, setTestMessagesConfig] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const [testLoadingConfig, setTestLoadingConfig] = useState(false)
+  const [testErrorConfig, setTestErrorConfig] = useState<string | null>(null)
+  const [testMessageHomolog, setTestMessageHomolog] = useState('')
+  const [testMessagesHomolog, setTestMessagesHomolog] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
+  const [testLoadingHomolog, setTestLoadingHomolog] = useState(false)
+  const [testErrorHomolog, setTestErrorHomolog] = useState<string | null>(null)
   const [aiModelOptions, setAiModelOptions] = useState<string[]>([])
   const [testSelectedModel, setTestSelectedModel] = useState<string>('')
   const [aiModelsLoading, setAiModelsLoading] = useState(false)
@@ -291,16 +296,25 @@ export default function BiaAdminPage() {
   const POLL_INTERVAL_MS = 2500
   const POLL_MAX_MS = 5 * 60 * 1000 // 5 min
 
-  const handleSendTest = async () => {
-    const message = testMessage.trim()
+  type TestTab = 'config' | 'homolog'
+
+  const handleSendTest = async (tab: TestTab) => {
+    const isConfig = tab === 'config'
+    const message = (isConfig ? testMessageConfig : testMessageHomolog).trim()
+    const setMessage = isConfig ? setTestMessageConfig : setTestMessageHomolog
+    const messages = isConfig ? testMessagesConfig : testMessagesHomolog
+    const setMessages = isConfig ? setTestMessagesConfig : setTestMessagesHomolog
+    const setError = isConfig ? setTestErrorConfig : setTestErrorHomolog
+    const setLoading = isConfig ? setTestLoadingConfig : setTestLoadingHomolog
+
     if (!message || !aiSettings?.n8n_ai_webhook_url) {
-      setTestError(aiSettings?.n8n_ai_webhook_url ? 'Digite uma mensagem.' : 'Configure o webhook em Configurações > IA.')
+      setError(aiSettings?.n8n_ai_webhook_url ? 'Digite uma mensagem.' : 'Configure o webhook em Configurações > IA.')
       return
     }
-    setTestLoading(true)
-    setTestError(null)
-    setTestMessages((prev) => [...prev, { role: 'user', content: message }])
-    setTestMessage('')
+    setLoading(true)
+    setError(null)
+    setMessages((prev) => [...prev, { role: 'user', content: message }])
+    setMessage('')
     const clearPolling = () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
@@ -310,39 +324,39 @@ export default function BiaAdminPage() {
         clearTimeout(pollingTimeoutRef.current)
         pollingTimeoutRef.current = null
       }
-      setTestLoading(false)
+      setLoading(false)
     }
     const finishWithMessage = (content: string) => {
-      setTestMessages((prev) => {
+      setMessages((prev) => {
         const rest = prev.slice(0, -1)
         return [...rest, { role: 'assistant' as const, content }]
       })
       clearPolling()
     }
     try {
-      // Área de teste preenchida → usa só ela; vazia → usa o prompt da Configuração (promptDraft).
-      const testPrompt = testSystemPrompt.trim()
+      // Config: sempre promptDraft. Homolog: testSystemPrompt ou promptDraft + conversa real.
+      const testPrompt = isConfig ? '' : testSystemPrompt.trim()
       const defaultPrompt = (promptDraft ?? '').trim()
       let prompt = testPrompt || defaultPrompt
-      if (loadedConversationText.trim()) {
+      if (!isConfig && loadedConversationText.trim()) {
         prompt = (prompt ? prompt + '\n\n' : '') + '---\nConversa real (contexto):\n' + loadedConversationText.trim()
       }
       if (prompt.length > MAX_PROMPT_LENGTH) {
         prompt = prompt.slice(0, MAX_PROMPT_LENGTH)
-        setTestError(`Prompt truncado a ${MAX_PROMPT_LENGTH} caracteres (limite do backend).`)
+        setError(`Prompt truncado a ${MAX_PROMPT_LENGTH} caracteres (limite do backend).`)
       }
       const model = testSelectedModel || aiSettings?.agent_model || 'llama3.2'
       const body: any = {
         message,
         model,
         context: { action: 'model_test', model },
-        messages: [...testMessages, { role: 'user', content: message }],
+        messages: [...messages, { role: 'user', content: message }],
       }
       if (prompt.length > 0) body.prompt = prompt
       const res = await api.post('/ai/gateway/test/', body)
 
       if (res.data?.deferred && res.data?.job_id) {
-        setTestMessages((prev) => [...prev, { role: 'assistant', content: 'Deixe-me pensar...' }])
+        setMessages((prev) => [...prev, { role: 'assistant', content: 'Deixe-me pensar...' }])
         const jobId = res.data.job_id as string
         const startedAt = Date.now()
         const poll = async () => {
@@ -383,14 +397,14 @@ export default function BiaAdminPage() {
       const data = res.data?.data || res.data
       const responseData = data?.response || res.data?.response || data
       const reply = responseData?.reply_text ?? responseData?.text ?? JSON.stringify(responseData || res.data, null, 2)
-      setTestMessages((prev) => [...prev, { role: 'assistant', content: reply }])
-      setTestError(null)
+      setMessages((prev) => [...prev, { role: 'assistant', content: reply }])
+      setError(null)
     } catch (e: any) {
       const msg = e.response?.data?.error || e.response?.data?.detail || e.message || 'Erro ao testar.'
-      setTestError(msg)
-      setTestMessages((prev) => [...prev, { role: 'assistant', content: `Erro: ${msg}` }])
+      setError(msg)
+      setMessages((prev) => [...prev, { role: 'assistant', content: `Erro: ${msg}` }])
     } finally {
-      setTestLoading(false)
+      setLoading(false)
     }
   }
 
@@ -452,35 +466,119 @@ export default function BiaAdminPage() {
     </div>
   )
 
-  const testAreaChat = (
+  /** Chat da aba Configuração (histórico independente). */
+  const testAreaChatConfig = (
     <div className="space-y-3">
       <div className="flex gap-2">
         <textarea
-          value={testMessage}
-          onChange={(e) => setTestMessage(e.target.value)}
+          value={testMessageConfig}
+          onChange={(e) => setTestMessageConfig(e.target.value)}
           rows={2}
           className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
           placeholder="Digite uma mensagem para testar..."
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              handleSendTest()
+              handleSendTest('config')
             }
           }}
         />
-        <Button onClick={handleSendTest} disabled={testLoading || !testMessage.trim()}>
-          {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        <Button onClick={() => handleSendTest('config')} disabled={testLoadingConfig || !testMessageConfig.trim()}>
+          {testLoadingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
-      {testError && <p className="text-sm text-red-600">{testError}</p>}
+      {testErrorConfig && <p className="text-sm text-red-600">{testErrorConfig}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500">Histórico do teste</span>
+        {testMessagesConfig.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={testLoadingConfig}
+            onClick={() => { setTestMessagesConfig([]); setTestErrorConfig(null) }}
+            className="text-xs"
+            aria-label="Limpar histórico do chat"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            Limpar histórico
+          </Button>
+        )}
+      </div>
       <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
-        {testMessages.length === 0 ? (
+        {testMessagesConfig.length === 0 ? (
           <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
         ) : (
-          testMessages.map((m, i) => (
-            <div key={i} className={`text-sm ${m.role === 'user' ? 'text-right' : ''}`}>
-              <span className="font-medium text-gray-600">{m.role === 'user' ? 'Você' : 'BIA'}: </span>
-              <pre className="whitespace-pre-wrap font-sans inline">{m.content}</pre>
+          testMessagesConfig.map((m, i) => (
+            <div
+              key={i}
+              className={`text-sm rounded-lg px-3 py-2 max-w-[90%] ${
+                m.role === 'user'
+                  ? 'ml-auto bg-blue-100 text-blue-900 border border-blue-200'
+                  : 'mr-auto bg-white text-gray-800 border border-gray-200'
+              }`}
+            >
+              <span className="font-medium text-gray-600 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
+  /** Chat da aba Homologação (histórico independente). */
+  const testAreaChatHomolog = (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <textarea
+          value={testMessageHomolog}
+          onChange={(e) => setTestMessageHomolog(e.target.value)}
+          rows={2}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Digite uma mensagem para testar..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSendTest('homolog')
+            }
+          }}
+        />
+        <Button onClick={() => handleSendTest('homolog')} disabled={testLoadingHomolog || !testMessageHomolog.trim()}>
+          {testLoadingHomolog ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </Button>
+      </div>
+      {testErrorHomolog && <p className="text-sm text-red-600">{testErrorHomolog}</p>}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-gray-500">Histórico do teste</span>
+        {testMessagesHomolog.length > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={testLoadingHomolog}
+            onClick={() => { setTestMessagesHomolog([]); setTestErrorHomolog(null) }}
+            className="text-xs"
+            aria-label="Limpar histórico do chat"
+          >
+            <Trash2 className="h-3.5 w-3.5 mr-1" />
+            Limpar histórico
+          </Button>
+        )}
+      </div>
+      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+        {testMessagesHomolog.length === 0 ? (
+          <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+        ) : (
+          testMessagesHomolog.map((m, i) => (
+            <div
+              key={i}
+              className={`text-sm rounded-lg px-3 py-2 max-w-[90%] ${
+                m.role === 'user'
+                  ? 'ml-auto bg-blue-100 text-blue-900 border border-blue-200'
+                  : 'mr-auto bg-white text-gray-800 border border-gray-200'
+              }`}
+            >
+              <span className="font-medium text-gray-600 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
             </div>
           ))
         )}
@@ -492,7 +590,7 @@ export default function BiaAdminPage() {
   const testAreaConfig = (
     <div className="space-y-4">
       {modelSelect}
-      {testAreaChat}
+      {testAreaChatConfig}
     </div>
   )
 
@@ -513,7 +611,7 @@ export default function BiaAdminPage() {
           placeholder="Deixe vazio para usar o prompt da Configuração"
         />
       </div>
-      {testAreaChat}
+      {testAreaChatHomolog}
     </div>
   )
 
