@@ -7,6 +7,7 @@ import logging
 import threading
 import time
 import uuid
+from datetime import datetime, timezone as dt_utc
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -25,6 +26,12 @@ from apps.ai.models import (
 from apps.ai.vector_store import search_knowledge, search_memory_for_contact
 
 logger = logging.getLogger(__name__)
+
+
+def _server_time_utc_iso() -> str:
+    """Data/hora atual em UTC (ISO 8601). Enviada em todos os payloads ao n8n para o fluxo não perder contexto de tempo."""
+    return datetime.now(dt_utc).isoformat()
+
 
 SOURCE_SECRETARY = "secretary"
 SECRETARY_N8N_TIMEOUT = 20
@@ -327,6 +334,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
 
     return {
         "agent_type": "secretary",
+        "server_time_utc": _server_time_utc_iso(),
         "tenant": {"id": str(conversation.tenant_id), "name": conversation.tenant.name},
         "business_hours": business_hours_info,
         "company_context": company_context,
@@ -439,6 +447,7 @@ def build_secretary_payload_for_test(
         "agent_type": "secretary",
         "request_id": request_id,
         "trace_id": trace_id,
+        "server_time_utc": _server_time_utc_iso(),
         "tenant_id": tenant_id,
         "tenant": {"id": tenant_id, "name": getattr(tenant, "name", "") or ""},
         "business_hours": business_hours_info,

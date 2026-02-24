@@ -30,7 +30,7 @@ from apps.ai.transcription_metrics import (
 )
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.ai.throttling import GatewayReplyThrottle, GatewayTestThrottle
-from apps.ai.secretary_service import build_secretary_payload_for_test
+from apps.ai.secretary_service import build_secretary_payload_for_test, _server_time_utc_iso
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
 logger = logging.getLogger(__name__)
@@ -736,6 +736,7 @@ def gateway_test(request):
             "action": "chat",
             "request_id": str(request_id),
             "trace_id": str(trace_id),
+            "server_time_utc": _server_time_utc_iso(),
             "tenant_id": str(request.user.tenant_id),
             "conversation_id": str(conversation_id),
             "contact_id": str(contact_id),

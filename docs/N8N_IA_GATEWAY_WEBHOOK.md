@@ -110,12 +110,15 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
 **URL:** Configurado em `TenantAiSettings.n8n_ai_webhook_url`
 
 **Payload recebido:**
+- **server_time_utc** (string): data/hora atual do servidor em UTC (ISO 8601). Enviada em todos os payloads (chat e secretary) para o fluxo usar e não perder contexto de tempo (ex.: "2026-02-24T12:34:56.123456+00:00").
+
 ```json
 {
   "protocol_version": "v1",
   "action": "chat",
   "request_id": "uuid",
   "trace_id": "uuid",
+  "server_time_utc": "2026-02-24T12:34:56.123456+00:00",
   "tenant_id": "uuid",
   "conversation_id": "uuid",
   "contact_id": "uuid",
