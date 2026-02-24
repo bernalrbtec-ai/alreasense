@@ -7,7 +7,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import datetime, timezone as dt_utc
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def _server_time_utc_iso() -> str:
     """Data/hora atual em UTC (ISO 8601). Enviada em todos os payloads ao n8n para o fluxo não perder contexto de tempo."""
-    return datetime.now(dt_utc).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 SOURCE_SECRETARY = "secretary"
