@@ -8,6 +8,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -40,21 +41,30 @@ def _build_system_data_block(
 ) -> str:
     """
     Bloco com dados reais do sistema. Colocado NO INÍCIO do prompt para o modelo
-    ver primeiro e não ignorar (nome da empresa, horário, data/hora UTC).
+    ver primeiro e não ignorar (nome da empresa, data/hora atual, grade de horário, status).
     """
     name = (tenant_name or "").strip() or "(nome não definido)"
     is_open = business_hours.get("is_open", True)
     status_msg = (business_hours.get("status_message") or "").strip()
     if not status_msg:
         status_msg = "ABERTA" if is_open else "FECHADA"
-    return (
-        "=== DADOS DO SISTEMA (OBRIGATÓRIO: use exatamente; não invente nem traduza) ===\n"
-        f"Nome da empresa: {name}\n"
-        f"Horário de atendimento agora: {status_msg}\n"
-        f"is_open: {str(is_open).lower()}\n"
-        f"Data/hora atual do servidor (UTC): {server_time_utc}\n"
-        "=== FIM DOS DADOS DO SISTEMA ===\n\n"
-    )
+    lines = [
+        "=== DADOS DO SISTEMA (OBRIGATÓRIO: use exatamente; não invente nem traduza) ===",
+        f"Nome da empresa: {name}",
+        f"Data/hora atual do servidor (UTC): {server_time_utc}",
+    ]
+    current_dt = business_hours.get("current_datetime_readable")
+    if current_dt:
+        lines.append(f"Data/hora atual (use para responder 'hoje é X', 'agora são Y'): {current_dt}")
+    schedule = business_hours.get("schedule_text")
+    if schedule:
+        lines.append(f"Grade de horário de atendimento: {schedule}")
+    lines.extend([
+        f"Horário de atendimento agora: {status_msg}",
+        f"is_open: {str(is_open).lower()}",
+        "=== FIM DOS DADOS DO SISTEMA ===\n",
+    ])
+    return "\n".join(lines) + "\n"
 
 
 SOURCE_SECRETARY = "secretary"
@@ -269,17 +279,30 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
                 "created_at": message.created_at.isoformat(),
                 "sender_name": getattr(message, "sender_name", "") or "",
             })
+    business_hours_obj = BusinessHoursService.get_business_hours(
+        conversation.tenant, conversation.department
+    )
     is_open, next_open_time = BusinessHoursService.is_business_hours(
         conversation.tenant, conversation.department
     )
+    schedule_text = BusinessHoursService.format_schedule_text(business_hours_obj)
+    tz_name = (getattr(business_hours_obj, "timezone", None) if business_hours_obj else None) or "America/Sao_Paulo"
+    try:
+        utc_now = datetime.now(timezone.utc)
+        local_dt = utc_now.astimezone(ZoneInfo(tz_name))
+        day_names_pt = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+        current_datetime_readable = f"{day_names_pt[local_dt.weekday()]}, {local_dt.strftime('%d/%m/%Y')}, {local_dt.strftime('%H:%M')}"
+    except Exception as e:
+        logger.debug("[SECRETARY] Data/hora legível (timezone=%s): %s", tz_name, e)
+        current_datetime_readable = ""
     # Log detalhado para debug de timezone
     from django.utils import timezone as django_timezone
-    utc_now = django_timezone.now()
+    utc_now_django = django_timezone.now()
     logger.info(
         "[SECRETARY] Business hours check: is_open=%s, next_open_time=%s, UTC_now=%s",
         is_open,
         next_open_time,
-        utc_now.strftime('%Y-%m-%d %H:%M:%S %Z'),
+        utc_now_django.strftime('%Y-%m-%d %H:%M:%S %Z'),
     )
     query_text = current_msg_content if current_msg_content else (message.content or "").strip()
     query_embedding = embed_text(query_text) if query_text else []
@@ -326,11 +349,9 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     prompt = (getattr(profile, "prompt", None) or "").strip()
     
     # ✅ MELHORIA: Incluir informação de horário de forma explícita no contexto
-    # Mesmo que o prompt personalizado não mencione, garantir que a IA tenha acesso claro
     business_hours_info = {
         "is_open": is_open,
         "next_open_time": next_open_time,
-        # Formatação explícita para facilitar uso pela IA
         "status_text": "ABERTA" if is_open else "FECHADA",
         "status_message": (
             f"A empresa está ABERTA no momento. Atenda normalmente."
@@ -340,6 +361,8 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
                 + (f" Retornamos em: {next_open_time}" if next_open_time else "")
             )
         ),
+        "schedule_text": schedule_text,
+        "current_datetime_readable": current_datetime_readable,
     }
 
     # company_context: fallback para n8n quando pgvector estiver vazio (BIA)
@@ -414,7 +437,18 @@ def build_secretary_payload_for_test(
     from apps.tenancy.rag_sync import _build_company_chunk
 
     tenant_id = str(tenant.id)
+    business_hours_obj = BusinessHoursService.get_business_hours(tenant, department=None)
     is_open, next_open_time = BusinessHoursService.is_business_hours(tenant, department=None)
+    schedule_text = BusinessHoursService.format_schedule_text(business_hours_obj)
+    tz_name = (getattr(business_hours_obj, "timezone", None) if business_hours_obj else None) or "America/Sao_Paulo"
+    try:
+        utc_now = datetime.now(timezone.utc)
+        local_dt = utc_now.astimezone(ZoneInfo(tz_name))
+        day_names_pt = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado", "Domingo"]
+        current_datetime_readable = f"{day_names_pt[local_dt.weekday()]}, {local_dt.strftime('%d/%m/%Y')}, {local_dt.strftime('%H:%M')}"
+    except Exception as e:
+        logger.debug("[SECRETARY TEST] Data/hora legível (timezone=%s): %s", tz_name, e)
+        current_datetime_readable = ""
     business_hours_info = {
         "is_open": is_open,
         "next_open_time": next_open_time,
@@ -427,6 +461,8 @@ def build_secretary_payload_for_test(
                 + (f" Retornamos em: {next_open_time}" if next_open_time else "")
             )
         ),
+        "schedule_text": schedule_text,
+        "current_datetime_readable": current_datetime_readable,
     }
     company_context = ""
     try:

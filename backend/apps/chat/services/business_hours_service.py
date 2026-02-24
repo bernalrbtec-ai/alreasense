@@ -249,6 +249,40 @@ class BusinessHoursService:
             return f"{day_name}, {time_str}"
         
         return "Em breve"
+
+    @staticmethod
+    def format_schedule_text(business_hours: Optional[BusinessHours]) -> str:
+        """
+        Retorna texto legível da grade de horário para a BIA informar ao cliente
+        (ex.: "Segunda a Sexta: 08:00 às 18:00. Sábado e Domingo: fechado.").
+        """
+        if not business_hours:
+            return "Não configurado."
+        day_configs = [
+            ('Segunda-feira', business_hours.monday_enabled, business_hours.monday_start, business_hours.monday_end),
+            ('Terça-feira', business_hours.tuesday_enabled, business_hours.tuesday_start, business_hours.tuesday_end),
+            ('Quarta-feira', business_hours.wednesday_enabled, business_hours.wednesday_start, business_hours.wednesday_end),
+            ('Quinta-feira', business_hours.thursday_enabled, business_hours.thursday_start, business_hours.thursday_end),
+            ('Sexta-feira', business_hours.friday_enabled, business_hours.friday_start, business_hours.friday_end),
+            ('Sábado', business_hours.saturday_enabled, business_hours.saturday_start, business_hours.saturday_end),
+            ('Domingo', business_hours.sunday_enabled, business_hours.sunday_start, business_hours.sunday_end),
+        ]
+        open_days = [(name, start, end) for name, enabled, start, end in day_configs if enabled and start and end]
+        if not open_days:
+            return "Todos os dias: fechado."
+        first_start, first_end = open_days[0][1], open_days[0][2]
+        if all(s == first_start and e == first_end for _, s, e in open_days):
+            day_names = [d[0] for d in open_days]
+            if len(day_names) == 7:
+                return f"Todos os dias: {first_start.strftime('%H:%M')} às {first_end.strftime('%H:%M')}."
+            if len(day_names) == 5 and day_names == ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira']:
+                return f"Segunda a Sexta: {first_start.strftime('%H:%M')} às {first_end.strftime('%H:%M')}. Sábado e Domingo: fechado."
+            return f"{', '.join(day_names)}: {first_start.strftime('%H:%M')} às {first_end.strftime('%H:%M')}. Demais dias: fechado."
+        parts = [f"{n}: {s.strftime('%H:%M')} às {e.strftime('%H:%M')}" for n, s, e in open_days]
+        closed = [n for n, en, s, e in day_configs if not (en and s and e)]
+        if closed:
+            parts.append(f"{', '.join(closed)}: fechado")
+        return ". ".join(parts)
     
     @staticmethod
     def get_after_hours_message(tenant, department=None, sync_status=False) -> Optional[AfterHoursMessage]:
