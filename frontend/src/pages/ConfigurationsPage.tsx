@@ -1740,6 +1740,20 @@ export default function ConfigurationsPage() {
 
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
+      // Persistir também o modelo da BIA: enviar secretary_model alinhado ao que está no select (se não estiver na lista, gravar vazio).
+      if (aiSettings) {
+        try {
+          const secretaryModel =
+            aiSettings.secretary_model && aiModelOptions.includes(aiSettings.secretary_model)
+              ? aiSettings.secretary_model
+              : ''
+          const settingsRes = await api.put('/ai/settings/', { ...aiSettings, secretary_model: secretaryModel })
+          if (settingsRes?.data) setAiSettings(settingsRes.data)
+        } catch (settingsErr: any) {
+          console.error('Erro ao salvar modelo da BIA:', settingsErr)
+          showErrorToast('salvar', 'Modelo da BIA', settingsErr)
+        }
+      }
     } catch (error: any) {
       if (hadOverride) {
         setSecretaryProfile(secretaryProfile)
@@ -2738,6 +2752,26 @@ export default function ConfigurationsPage() {
                       </label>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="secretary_model">Modelo da BIA</Label>
+                        <select
+                          id="secretary_model"
+                          value={aiSettings?.secretary_model && aiModelOptions.includes(aiSettings.secretary_model) ? aiSettings.secretary_model : ''}
+                          onChange={(e) => setAiSettings((prev) => (prev ? { ...prev, secretary_model: e.target.value } : prev))}
+                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          disabled={!aiSettings || aiModelOptions.length === 0}
+                        >
+                          <option value="">Padrão (modelo do agente)</option>
+                          {aiModelOptions.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Se não escolher, a BIA usa o mesmo modelo do agente.
+                        </p>
+                      </div>
                       <div>
                         <Label htmlFor="secretary_signature_name">Nome da Secretária</Label>
                         <Input
