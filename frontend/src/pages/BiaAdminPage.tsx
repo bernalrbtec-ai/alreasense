@@ -1,11 +1,10 @@
 /**
- * Página admin da BIA: configuração do prompt, webhook e teste.
+ * Página admin da BIA: Configuração (prompt, modelo, teste) e Homologação (conversa real + teste).
  * Acesso travado por chave única (BIA_ADMIN_ACCESS_KEY).
- * Layout: colunas lado a lado (config | teste BIA).
- * Opção de carregar conversa real do banco e enviá-la no prompt do teste.
+ * Modelo é definido apenas na aba Configuração (fonte da verdade).
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Lock, Send, Save, Loader2, MessageSquare } from 'lucide-react'
+import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Label } from '../components/ui/Label'
@@ -14,7 +13,6 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 
 const BIA_KEY_STORAGE = 'bia_admin_key_valid'
-/** Limite do prompt no gateway (backend rejeita acima disso). */
 /** Limite do prompt no gateway (~1 MB em texto típico). */
 const MAX_PROMPT_LENGTH = 1_000_000
 
@@ -82,6 +80,8 @@ export default function BiaAdminPage() {
 
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [activeTab, setActiveTab] = useState<'config' | 'homolog'>('config')
 
   const verifyKey = useCallback(async () => {
     const key = accessKey.trim()
@@ -320,7 +320,10 @@ export default function BiaAdminPage() {
       clearPolling()
     }
     try {
-      let prompt = testSystemPrompt.trim()
+      // Área de teste preenchida → usa só ela; vazia → usa o prompt da Configuração (promptDraft).
+      const testPrompt = testSystemPrompt.trim()
+      const defaultPrompt = (promptDraft ?? '').trim()
+      let prompt = testPrompt || defaultPrompt
       if (loadedConversationText.trim()) {
         prompt = (prompt ? prompt + '\n\n' : '') + '---\nConversa real (contexto):\n' + loadedConversationText.trim()
       }
@@ -335,7 +338,7 @@ export default function BiaAdminPage() {
         context: { action: 'model_test', model },
         messages: [...testMessages, { role: 'user', content: message }],
       }
-      if (prompt) body.prompt = prompt
+      if (prompt.length > 0) body.prompt = prompt
       const res = await api.post('/ai/gateway/test/', body)
 
       if (res.data?.deferred && res.data?.job_id) {
@@ -422,60 +425,179 @@ export default function BiaAdminPage() {
     )
   }
 
+  const effectiveModel = testSelectedModel || aiSettings?.agent_model || 'llama3.2'
+
+  const testArea = (
+    <div className="space-y-3">
+      <div>
+        <Label>Prompt de sistema (opcional)</Label>
+        <p className="text-xs text-gray-500 mt-0 mb-1">
+          Vazio: usa o prompt padrão da Configuração. Preenchido: usa só este texto no teste (o padrão não é alterado).
+        </p>
+        <textarea
+          value={testSystemPrompt}
+          onChange={(e) => setTestSystemPrompt(e.target.value)}
+          rows={2}
+          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Deixe vazio para usar o prompt da Configuração, ou escreva aqui para usar só este no teste"
+        />
+      </div>
+      <div className="flex gap-2">
+        <textarea
+          value={testMessage}
+          onChange={(e) => setTestMessage(e.target.value)}
+          rows={2}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          placeholder="Digite uma mensagem para testar..."
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSendTest()
+            }
+          }}
+        />
+        <Button onClick={handleSendTest} disabled={testLoading || !testMessage.trim()}>
+          {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        </Button>
+      </div>
+      {testError && <p className="text-sm text-red-600">{testError}</p>}
+      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+        {testMessages.length === 0 ? (
+          <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+        ) : (
+          testMessages.map((m, i) => (
+            <div key={i} className={`text-sm ${m.role === 'user' ? 'text-right' : ''}`}>
+              <span className="font-medium text-gray-600">{m.role === 'user' ? 'Você' : 'BIA'}: </span>
+              <pre className="whitespace-pre-wrap font-sans inline">{m.content}</pre>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )
+
   return (
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">BIA – Configuração e teste</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Prompt da secretária, webhook e área de teste. Alterações do prompt são salvas no perfil da BIA.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">BIA – Configuração e Homologação</h1>
+          <p className="text-sm text-gray-600 mt-1">
+            Configure o prompt e o modelo na aba Configuração. Use Homologação para testar com conversa real.
+          </p>
+        </div>
+        <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1" role="tablist" aria-label="Abas BIA">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'config'}
+            aria-controls="bia-tab-config"
+            id="bia-tab-config-trigger"
+            onClick={() => setActiveTab('config')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'config'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+            Configuração
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'homolog'}
+            aria-controls="bia-tab-homolog"
+            id="bia-tab-homolog-trigger"
+            onClick={() => setActiveTab('homolog')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'homolog'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <FlaskConical className="h-4 w-4" aria-hidden />
+            Homologação
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Coluna 1: Configuração */}
-        <Card className="p-6 h-fit">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Configuração</h2>
-          {secretaryLoading || aiSettingsLoading ? (
-            <LoadingSpinner />
-          ) : (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="bia-prompt">Prompt da BIA</Label>
-                <textarea
-                  id="bia-prompt"
-                  value={promptDraft}
-                  onChange={(e) => {
-                    setPromptDraft(e.target.value)
-                    if (saveError) setSaveError(null)
-                  }}
-                  rows={10}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Instruções do sistema para a BIA..."
-                />
-                <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
-                  {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                  Salvar prompt
-                </Button>
-                {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
+      {activeTab === 'config' && (
+        <div id="bia-tab-config" role="tabpanel" aria-labelledby="bia-tab-config-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Prompt da BIA</h2>
+            {secretaryLoading || aiSettingsLoading ? (
+              <LoadingSpinner />
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="bia-prompt">Instruções do sistema</Label>
+                  <textarea
+                    id="bia-prompt"
+                    value={promptDraft}
+                    onChange={(e) => {
+                      setPromptDraft(e.target.value)
+                      if (saveError) setSaveError(null)
+                    }}
+                    rows={12}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Instruções do sistema para a BIA..."
+                  />
+                  <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
+                    {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Salvar prompt
+                  </Button>
+                  {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
+                </div>
               </div>
-              <div>
-                <Label>Webhook do Gateway IA</Label>
-                <p className="text-sm text-gray-600 mt-1 font-mono bg-gray-50 px-2 py-1 rounded truncate">
-                  {aiSettings?.n8n_ai_webhook_url || 'Não configurado. Configure em Configurações > IA.'}
-                </p>
+            )}
+          </Card>
+          <Card className="p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Modelo e teste</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              O teste usa o webhook definido em Configurações &gt; IA.
+            </p>
+            {aiSettingsLoading ? (
+              <LoadingSpinner />
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="bia-test-model">Modelo (fonte da verdade para Homologação)</Label>
+                  <select
+                    id="bia-test-model"
+                    value={effectiveModel}
+                    onChange={(e) => setTestSelectedModel(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                    disabled={aiModelsLoading}
+                  >
+                    {aiModelOptions.length === 0 ? (
+                      <option value={aiSettings?.agent_model || 'llama3.2'}>{aiSettings?.agent_model || 'llama3.2'}</option>
+                    ) : (
+                      aiModelOptions.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))
+                    )}
+                  </select>
+                  {aiModelsLoading && <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>}
+                  {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
+                    <p className="text-xs text-amber-600 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
+                  )}
+                </div>
+                {testArea}
               </div>
-            </div>
-          )}
-        </Card>
+            )}
+          </Card>
+        </div>
+      )}
 
-        {/* Coluna 2: Conversa real no prompt */}
-        <Card className="p-6">
+      {activeTab === 'homolog' && (
+        <div id="bia-tab-homolog" role="tabpanel" aria-labelledby="bia-tab-homolog-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="p-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               Conversa real no prompt
             </h2>
             <p className="text-sm text-gray-600 mb-4">
-              Selecione uma conversa do banco. Ela será carregada e enviada como contexto no prompt ao testar a BIA abaixo.
+              Selecione uma conversa. Ela será enviada como contexto no prompt ao testar ao lado. Modelo usado: <strong>{effectiveModel}</strong> (definido em Configuração).
             </p>
             <div className="space-y-3">
               <div>
@@ -488,14 +610,10 @@ export default function BiaAdminPage() {
                 >
                   <option value="">Nenhuma (só prompt de sistema)</option>
                   {conversations.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.contact_name || c.contact_phone || c.id}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.contact_name || c.contact_phone || c.id}</option>
                   ))}
                 </select>
-                {conversationsLoading && (
-                  <p className="text-xs text-gray-500 mt-1">Carregando conversas...</p>
-                )}
+                {conversationsLoading && <p className="text-xs text-gray-500 mt-1">Carregando conversas...</p>}
               </div>
               {messagesLoading && selectedConversationId && (
                 <p className="text-sm text-gray-500 flex items-center gap-1">
@@ -504,7 +622,7 @@ export default function BiaAdminPage() {
               )}
               {loadedConversationText && !messagesLoading && (
                 <>
-                  <div className="rounded border border-gray-200 bg-gray-50 p-3 max-h-[200px] overflow-y-auto">
+                  <div className="rounded border border-gray-200 bg-gray-50 p-3 max-h-[280px] overflow-y-auto">
                     <Label className="text-gray-700 text-xs">Conversa carregada (será enviada no prompt)</Label>
                     <pre className="mt-1 text-sm whitespace-pre-wrap font-sans">{loadedConversationText}</pre>
                   </div>
@@ -516,89 +634,21 @@ export default function BiaAdminPage() {
                 </>
               )}
             </div>
-        </Card>
-
-        {/* Coluna 3: Testar prompt BIA */}
-        <Card className="p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Testar prompt (BIA)</h2>
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="bia-test-model">Modelo</Label>
-              <select
-                id="bia-test-model"
-                value={testSelectedModel || aiSettings?.agent_model || ''}
-                onChange={(e) => setTestSelectedModel(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
-                disabled={aiModelsLoading}
-              >
-                {aiModelOptions.length === 0 ? (
-                  <option value={aiSettings?.agent_model || 'llama3.2'}>
-                    {aiSettings?.agent_model || 'llama3.2'}
-                  </option>
-                ) : (
-                  aiModelOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))
-                )}
-              </select>
-              {aiModelsLoading && (
-                <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>
-              )}
-              {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Configure o webhook de modelos em Configurações &gt; IA para listar modelos.
-                </p>
-              )}
-            </div>
-            <div>
-              <Label>Prompt de sistema (opcional)</Label>
-                <textarea
-                  value={testSystemPrompt}
-                  onChange={(e) => setTestSystemPrompt(e.target.value)}
-                  rows={2}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  placeholder="Override do prompt para este teste..."
-                />
-            </div>
-            <div className="flex gap-2">
-              <textarea
-                value={testMessage}
-                onChange={(e) => setTestMessage(e.target.value)}
-                rows={2}
-                className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
-                placeholder="Digite uma mensagem para testar..."
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSendTest()
-                  }
-                }}
-              />
-              <Button onClick={handleSendTest} disabled={testLoading || !testMessage.trim()}>
-                {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              </Button>
-            </div>
-            {testError && <p className="text-sm text-red-600">{testError}</p>}
-            <div className="min-h-[140px] max-h-[220px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
-              {testMessages.length === 0 ? (
-                <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
-              ) : (
-                testMessages.map((m, i) => (
-                  <div
-                    key={i}
-                    className={`text-sm ${m.role === 'user' ? 'text-right' : ''}`}
-                  >
-                    <span className="font-medium text-gray-600">{m.role === 'user' ? 'Você' : 'BIA'}: </span>
-                    <pre className="whitespace-pre-wrap font-sans inline">{m.content}</pre>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </Card>
-      </div>
+          </Card>
+          <Card className="p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Testar com contexto</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Envie uma mensagem para testar a BIA com a conversa carregada à esquerda (se houver). O mesmo modelo da Configuração será usado.
+            </p>
+            {!selectedConversationId && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
+                Nenhuma conversa selecionada. Selecione uma à esquerda para enviá-la como contexto no prompt do teste.
+              </p>
+            )}
+            {testArea}
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
