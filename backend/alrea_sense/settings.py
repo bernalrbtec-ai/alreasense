@@ -448,6 +448,8 @@ GATEWAY_TEST_ASYNC_TIMEOUT = config('GATEWAY_TEST_ASYNC_TIMEOUT', default=15, ca
 REPORTS_SYNC_API_KEY = config('REPORTS_SYNC_API_KEY', default='')
 N8N_TRIAGE_WEBHOOK = config('N8N_TRIAGE_WEBHOOK', default='')
 N8N_MODELS_WEBHOOK = config('N8N_MODELS_WEBHOOK', default='')
+# Webhook genérico n8n para ações utilitárias (ex.: suggest_keywords; futuras ações via body.action)
+N8N_UTILITY_WEBHOOK = config('N8N_UTILITY_WEBHOOK', default='')
 AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
 

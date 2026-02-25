@@ -1,5 +1,5 @@
 from rest_framework import generics, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -404,6 +404,68 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         # ✅ INVALIDAR CACHE: por chave exata (funciona sem Redis)
         if tenant_id:
             CacheManager.invalidate_department_cache_for_tenant(tenant_id)
+
+    @action(detail=False, methods=['post'], url_path='suggest-keywords')
+    def suggest_keywords(self, request):
+        """
+        Gera sugestões de palavras-chave para roteamento via n8n (webhook genérico) -> Qwen.
+        Body: { "name": "Suporte Técnico", "count": 10 }
+        Sense envia para N8N_UTILITY_WEBHOOK: { "action": "suggest_keywords", "department_name": "...", "count": N }
+        Retorno: { "keywords": ["computador", "não liga", ...] }
+        """
+        import logging
+        import requests
+        from django.conf import settings
+
+        logger = logging.getLogger(__name__)
+        name = (request.data.get('name') or '').strip()
+        count = request.data.get('count')
+        if count is None:
+            count = 10
+        try:
+            count = max(1, min(int(count), 30))
+        except (TypeError, ValueError):
+            count = 10
+
+        if not name:
+            return Response(
+                {'detail': 'Campo "name" (nome do departamento) é obrigatório.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        url = getattr(settings, 'N8N_UTILITY_WEBHOOK', '') or ''
+        if not url:
+            return Response(
+                {'detail': 'Webhook utilitário não configurado (N8N_UTILITY_WEBHOOK).'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            resp = requests.post(
+                url,
+                json={
+                    'action': 'suggest_keywords',
+                    'department_name': name,
+                    'count': count,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            try:
+                data = resp.json() if resp.content else {}
+            except (ValueError, TypeError):
+                data = {}
+            keywords = data.get('keywords')
+            if not isinstance(keywords, list):
+                keywords = []
+            keywords = [str(k).strip().lower() for k in keywords if k is not None and str(k).strip()]
+            return Response({'keywords': keywords[:count]})
+        except requests.RequestException as e:
+            logger.warning('[DEPARTMENTS] Erro ao chamar n8n utility (suggest_keywords): %s', e)
+            return Response(
+                {'detail': 'Serviço de sugestão temporariamente indisponível.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
 
 class UserViewSet(viewsets.ModelViewSet):
