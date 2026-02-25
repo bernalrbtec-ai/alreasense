@@ -223,8 +223,9 @@ def _resolve_n8n_ai_url(tenant) -> str:
 
 def _message_content_for_secretary(msg) -> str:
     """
-    Conteúdo de uma mensagem para o contexto da secretária: texto ou transcrição de áudio.
-    Usa msg.content se preenchido; senão, anexos de áudio com transcription; se áudio sem transcrição, placeholder.
+    Conteúdo de uma mensagem para o contexto da secretária: texto, transcrição de áudio ou placeholder de mídia.
+    Usa msg.content se preenchido; senão, anexos de áudio com transcription; se áudio sem transcrição, placeholder;
+    se só imagem/vídeo (sem texto), devolve "[Imagem]" ou "[Vídeo]" para a BIA orientar encaminhamento.
     """
     text = (getattr(msg, "content", None) or "").strip()
     if text:
@@ -232,17 +233,26 @@ def _message_content_for_secretary(msg) -> str:
     attachments = getattr(msg, "attachments", None)
     if not attachments:
         return ""
-    audio_attachments = [a for a in attachments.all() if (getattr(a, "mime_type", "") or "").lower().find("audio") >= 0]
-    if not audio_attachments:
-        return ""
-    transcriptions = []
-    for a in audio_attachments:
-        t = (getattr(a, "transcription", None) or "").strip()
-        if t:
-            transcriptions.append(t)
-    if transcriptions:
-        return "[Áudio] " + (" ".join(transcriptions) if len(transcriptions) > 1 else transcriptions[0])
-    return "[Áudio em processamento]"
+    att_list = list(attachments.all())
+    audio_attachments = [a for a in att_list if (getattr(a, "mime_type", "") or "").lower().find("audio") >= 0]
+    image_attachments = [a for a in att_list if (getattr(a, "mime_type", "") or "").lower().startswith("image/")]
+    video_attachments = [a for a in att_list if (getattr(a, "mime_type", "") or "").lower().startswith("video/")]
+    if audio_attachments:
+        transcriptions = []
+        for a in audio_attachments:
+            t = (getattr(a, "transcription", None) or "").strip()
+            if t:
+                transcriptions.append(t)
+        if transcriptions:
+            return "[Áudio] " + (" ".join(transcriptions) if len(transcriptions) > 1 else transcriptions[0])
+        return "[Áudio em processamento]"
+    if image_attachments or video_attachments:
+        if image_attachments and not video_attachments:
+            return "[Imagem]"
+        if video_attachments and not image_attachments:
+            return "[Vídeo]"
+        return "[Imagem e vídeo]"
+    return ""
 
 
 def _build_secretary_context(conversation, message, profile: TenantSecretaryProfile) -> Dict[str, Any]:
@@ -387,6 +397,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
 
     return {
         "agent_type": "secretary",
+        "use_memory": getattr(profile, "use_memory", False),
         "server_time_utc": server_time_utc,
         "tenant": {"id": str(conversation.tenant_id), "name": tenant_name},
         "business_hours": business_hours_info,

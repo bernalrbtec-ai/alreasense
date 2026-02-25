@@ -26,8 +26,8 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
     Ao fechar conversa (status=closed), dispara pipeline de resumo em background (summarize → rag-upsert).
     BIA: resumos são gravados no pgvector para a BIA usar quando o contato voltar.
     Idempotência: se metadata.conversation_summary_at já existir, não dispara.
-    Grupos (g.us) são ignorados. Se N8N_SUMMARIZE_WEBHOOK_URL ou N8N_RAG_WEBHOOK_URL
-    estiverem vazios, o pipeline sai sem exceção (não quebra o fechamento).
+    Grupos (g.us) são ignorados. Só dispara se o tenant tiver TenantSecretaryProfile com use_memory=True.
+    Se N8N_SUMMARIZE_WEBHOOK_URL ou N8N_RAG_WEBHOOK_URL estiverem vazios, o pipeline sai sem exceção.
     """
     if created:
         return
@@ -36,6 +36,13 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
     metadata = instance.metadata or {}
     if metadata.get("conversation_summary_at"):
         return
+    if "g.us" in (instance.contact_phone or ""):
+        return
+    from apps.ai.models import TenantSecretaryProfile
     from apps.chat.conversation_summary_pipeline import run_conversation_summary_pipeline
+
+    profile = TenantSecretaryProfile.objects.filter(tenant_id=instance.tenant_id).first()
+    if not profile or not getattr(profile, "use_memory", False):
+        return
     run_conversation_summary_pipeline(str(instance.id))
 

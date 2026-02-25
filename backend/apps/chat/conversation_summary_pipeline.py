@@ -27,7 +27,11 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
     """Implementação do pipeline: busca mensagens, POST summarize, POST rag-upsert, atualiza metadata."""
     close_old_connections()
     try:
-        conversation = Conversation.objects.filter(id=conversation_id).first()
+        conversation = (
+            Conversation.objects.filter(id=conversation_id)
+            .select_related("assigned_to", "department")
+            .first()
+        )
         if not conversation:
             logger.warning("[CONVERSATION SUMMARY] Conversa não encontrada: %s", conversation_id)
             return
@@ -37,6 +41,16 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             return
         if "g.us" in (conversation.contact_phone or ""):
             logger.info("[CONVERSATION SUMMARY] Skip: conversa de grupo: %s", conversation_id)
+            return
+
+        from apps.ai.models import TenantSecretaryProfile
+
+        profile = TenantSecretaryProfile.objects.filter(tenant_id=conversation.tenant_id).first()
+        if not profile or not getattr(profile, "use_memory", False):
+            logger.info(
+                "[CONVERSATION SUMMARY] Skip: tenant sem perfil ou use_memory=False: %s",
+                conversation_id,
+            )
             return
 
         summarize_url = getattr(settings, "N8N_SUMMARIZE_WEBHOOK_URL", "") or ""
@@ -65,20 +79,33 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             return
 
         contact_phone_normalized = normalize_contact_phone_for_rag(conversation.contact_phone or "")
+        closed_at = conversation.updated_at if conversation.updated_at else timezone.now()
         summarize_payload = {
             "tenant_id": str(conversation.tenant_id),
             "conversation_id": str(conversation.id),
             "contact_phone": contact_phone_normalized,
             "contact_name": (conversation.contact_name or "")[: 200],
             "messages": messages_list,
+            "assigned_to_id": str(conversation.assigned_to_id) if conversation.assigned_to_id else None,
+            "assigned_to_name": (
+                (getattr(conversation.assigned_to, "get_full_name", None) and conversation.assigned_to.get_full_name())
+                if conversation.assigned_to
+                else None
+            )
+            or (getattr(conversation.assigned_to, "name", None) if conversation.assigned_to else None)
+            or "",
+            "department_id": str(conversation.department_id) if conversation.department_id else None,
+            "department_name": (conversation.department.name if conversation.department else None) or "",
+            "closed_at": closed_at.isoformat(),
         }
         summary = None
+        summarize_response_data = {}
         for attempt in range(MAX_RETRIES + 1):
             try:
                 resp = requests.post(summarize_url, json=summarize_payload, timeout=SUMMARIZE_TIMEOUT)
                 resp.raise_for_status()
-                data = resp.json() if resp.content else {}
-                summary = (data.get("summary") or "").strip()
+                summarize_response_data = resp.json() if resp.content else {}
+                summary = (summarize_response_data.get("summary") or "").strip()
                 break
             except Exception as e:
                 logger.warning(
@@ -94,6 +121,25 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             logger.warning("[CONVERSATION SUMMARY] Resposta summarize sem summary: %s", conversation_id)
             return
 
+        subject = summarize_response_data.get("subject")
+        sentiment = summarize_response_data.get("sentiment")
+        satisfaction = summarize_response_data.get("satisfaction")
+        if subject is None:
+            subject = ""
+        if sentiment is None:
+            sentiment = ""
+        if satisfaction is None:
+            satisfaction = ""
+
+        who_attended_id = str(conversation.assigned_to_id) if conversation.assigned_to_id else None
+        who_attended_name = ""
+        if conversation.assigned_to:
+            who_attended_name = (
+                getattr(conversation.assigned_to, "get_full_name", None)
+                and conversation.assigned_to.get_full_name()
+            ) or getattr(conversation.assigned_to, "name", None) or ""
+        department_name = (conversation.department.name if conversation.department else None) or ""
+
         rag_payload = {
             "tenant_id": str(conversation.tenant_id),
             "source": "conversation_summary",
@@ -101,7 +147,14 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             "metadata": {
                 "contact_phone": contact_phone_normalized,
                 "conversation_id": str(conversation.id),
-                "created_at": conversation.updated_at.isoformat() if conversation.updated_at else timezone.now().isoformat(),
+                "created_at": closed_at.isoformat(),
+                "closed_at": closed_at.isoformat(),
+                "subject": subject,
+                "sentiment": sentiment,
+                "satisfaction": satisfaction,
+                "who_attended_id": who_attended_id,
+                "who_attended_name": who_attended_name,
+                "department_name": department_name,
             },
         }
         for attempt in range(MAX_RETRIES + 1):
