@@ -278,7 +278,7 @@ export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'meta' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories'>('config')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories' | 'auditoria-ia'>('config')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -2215,12 +2215,249 @@ export default function ConfigurationsPage() {
               <FileText className="h-4 w-4" />
               RAG e Lembranças
             </button>
+            <button
+              type="button"
+              onClick={() => setAiSubTab('auditoria-ia')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'auditoria-ia' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Auditoria IA
+            </button>
           </div>
 
           {aiSubTab === 'rag-memories' ? (
             <RagMemoriesManager />
           ) : aiSubTab === 'ia-assistente' ? (
             <BiaAdminPage />
+          ) : aiSubTab === 'auditoria-ia' ? (
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Auditoria IA</h3>
+                  <p className="text-sm text-gray-600">Histórico das chamadas (testes e produção).</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadGatewayAudit()}
+                  disabled={gatewayAuditLoading}
+                >
+                  {gatewayAuditLoading ? 'Atualizando...' : 'Atualizar'}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="gateway_audit_request_id">Request ID</Label>
+                  <Input
+                    id="gateway_audit_request_id"
+                    value={gatewayAuditRequestId}
+                    onChange={(e) => setGatewayAuditRequestId(e.target.value)}
+                    placeholder="uuid"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gateway_audit_trace_id">Trace ID</Label>
+                  <Input
+                    id="gateway_audit_trace_id"
+                    value={gatewayAuditTraceId}
+                    onChange={(e) => setGatewayAuditTraceId(e.target.value)}
+                    placeholder="uuid"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="gateway_audit_status">Status</Label>
+                  <select
+                    id="gateway_audit_status"
+                    value={gatewayAuditStatus}
+                    onChange={(e) => setGatewayAuditStatus(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="success">Success</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="gateway_audit_model">Modelo</Label>
+                  <Input
+                    id="gateway_audit_model"
+                    value={gatewayAuditModelName}
+                    onChange={(e) => setGatewayAuditModelName(e.target.value)}
+                    placeholder="Ex: gpt-4o, llama3"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <Label htmlFor="gateway_audit_from">De (data/hora)</Label>
+                  <Input
+                    id="gateway_audit_from"
+                    type="datetime-local"
+                    value={gatewayAuditFrom}
+                    onChange={(e) => setGatewayAuditFrom(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="gateway_audit_to">Até (data/hora)</Label>
+                  <Input
+                    id="gateway_audit_to"
+                    type="datetime-local"
+                    value={gatewayAuditTo}
+                    onChange={(e) => setGatewayAuditTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2 mb-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => loadGatewayAudit({ offset: 0 })}
+                  disabled={gatewayAuditLoading}
+                >
+                  Filtrar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setGatewayAuditRequestId('')
+                    setGatewayAuditTraceId('')
+                    setGatewayAuditStatus('all')
+                    setGatewayAuditModelName('')
+                    setGatewayAuditFrom('')
+                    setGatewayAuditTo('')
+                    loadGatewayAudit({ offset: 0 })
+                  }}
+                  disabled={gatewayAuditLoading}
+                >
+                  Limpar filtros
+                </Button>
+              </div>
+
+              {gatewayAuditError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                  {gatewayAuditError}
+                </div>
+              )}
+
+              {gatewayAuditLoading ? (
+                <div className="flex items-center justify-center h-32">
+                  <LoadingSpinner />
+                </div>
+              ) : gatewayAuditItems.length === 0 ? (
+                <div className="text-sm text-gray-500">Nenhum registro encontrado.</div>
+              ) : (
+                <div className="space-y-3">
+                  {gatewayAuditItems.map((item) => (
+                    <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">
+                            Request ID: {item.request_id}
+                          </div>
+                          <div className="text-xs text-gray-500">Trace ID: {item.trace_id}</div>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          item.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                          {item.status}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
+                        <span>Modelo: {item.model_name || '-'}</span>
+                        <span>Latência: {item.latency_ms ?? '-'}</span>
+                        <span>RAG hits: {item.rag_hits ?? '-'}</span>
+                        <span>Handoff: {String(item.handoff)}</span>
+                        <span>Motivo: {item.handoff_reason || '-'}</span>
+                        <span>Data: {item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</span>
+                      </div>
+
+                      {item.conversation_id && (
+                        <div className="mt-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              navigate(`/chat?conversation_id=${item.conversation_id}`)
+                            }}
+                          >
+                            Abrir conversa
+                          </Button>
+                        </div>
+                      )}
+
+                      {(item.input_summary || item.output_summary) && (
+                        <div className="mt-2 text-xs text-gray-600 space-y-1">
+                          <div><span className="font-medium">Input:</span> {item.input_summary || '-'}</div>
+                          <div><span className="font-medium">Output:</span> {item.output_summary || '-'}</div>
+                        </div>
+                      )}
+
+                      {item.error_message && (
+                        <div className="mt-2 text-xs text-red-600">
+                          {item.error_code ? `[${item.error_code}] ` : ''}{item.error_message}
+                        </div>
+                      )}
+
+                      <details className="mt-2 text-xs text-gray-600">
+                        <summary className="cursor-pointer text-blue-600">Ver payloads</summary>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
+                            <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                              {item.request_payload_masked ? JSON.stringify(item.request_payload_masked, null, 2) : 'Sem request.'}
+                            </pre>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
+                            <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                              {item.response_payload_masked ? JSON.stringify(item.response_payload_masked, null, 2) : 'Sem response.'}
+                            </pre>
+                          </div>
+                        </div>
+                      </details>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {gatewayAuditCount > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-xs text-gray-600">
+                  <span>
+                    Mostrando {gatewayAuditOffset + 1}-
+                    {Math.min(gatewayAuditOffset + gatewayAuditItems.length, gatewayAuditCount)} de {gatewayAuditCount}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadGatewayAudit({ offset: Math.max(0, gatewayAuditOffset - gatewayAuditLimit) })}
+                      disabled={gatewayAuditLoading || gatewayAuditOffset === 0}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => loadGatewayAudit({ offset: gatewayAuditOffset + gatewayAuditLimit })}
+                      disabled={gatewayAuditLoading || gatewayAuditOffset + gatewayAuditLimit >= gatewayAuditCount}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </Card>
           ) : aiSettingsLoading || !aiSettings ? (
             <div className="flex items-center justify-center h-64">
               <LoadingSpinner />
@@ -2499,236 +2736,6 @@ export default function ConfigurationsPage() {
                       <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretaryProfileSaving}>
                         <Save className="h-4 w-4 mr-2" />
                         {secretaryProfileSaving ? 'Salvando...' : 'Salvar'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
-
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">Auditoria Gateway IA</h3>
-                    <p className="text-sm text-gray-600">Histórico das chamadas (testes e produção).</p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => loadGatewayAudit()}
-                    disabled={gatewayAuditLoading}
-                  >
-                    {gatewayAuditLoading ? 'Atualizando...' : 'Atualizar'}
-                  </Button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <Label htmlFor="gateway_audit_request_id">Request ID</Label>
-                    <Input
-                      id="gateway_audit_request_id"
-                      value={gatewayAuditRequestId}
-                      onChange={(e) => setGatewayAuditRequestId(e.target.value)}
-                      placeholder="uuid"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="gateway_audit_trace_id">Trace ID</Label>
-                    <Input
-                      id="gateway_audit_trace_id"
-                      value={gatewayAuditTraceId}
-                      onChange={(e) => setGatewayAuditTraceId(e.target.value)}
-                      placeholder="uuid"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <Label htmlFor="gateway_audit_status">Status</Label>
-                    <select
-                      id="gateway_audit_status"
-                      value={gatewayAuditStatus}
-                      onChange={(e) => setGatewayAuditStatus(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    >
-                      <option value="all">Todos</option>
-                      <option value="success">Success</option>
-                      <option value="failed">Failed</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label htmlFor="gateway_audit_model">Modelo</Label>
-                    <Input
-                      id="gateway_audit_model"
-                      value={gatewayAuditModelName}
-                      onChange={(e) => setGatewayAuditModelName(e.target.value)}
-                      placeholder="Ex: gpt-4o, llama3"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <div>
-                    <Label htmlFor="gateway_audit_from">De (data/hora)</Label>
-                    <Input
-                      id="gateway_audit_from"
-                      type="datetime-local"
-                      value={gatewayAuditFrom}
-                      onChange={(e) => setGatewayAuditFrom(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="gateway_audit_to">Até (data/hora)</Label>
-                    <Input
-                      id="gateway_audit_to"
-                      type="datetime-local"
-                      value={gatewayAuditTo}
-                      onChange={(e) => setGatewayAuditTo(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => loadGatewayAudit({ offset: 0 })}
-                    disabled={gatewayAuditLoading}
-                  >
-                    Filtrar
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setGatewayAuditRequestId('')
-                      setGatewayAuditTraceId('')
-                      setGatewayAuditStatus('all')
-                      setGatewayAuditModelName('')
-                      setGatewayAuditFrom('')
-                      setGatewayAuditTo('')
-                      loadGatewayAudit({ offset: 0 })
-                    }}
-                    disabled={gatewayAuditLoading}
-                  >
-                    Limpar filtros
-                  </Button>
-                </div>
-
-                {gatewayAuditError && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                    {gatewayAuditError}
-                  </div>
-                )}
-
-                {gatewayAuditLoading ? (
-                  <div className="flex items-center justify-center h-32">
-                    <LoadingSpinner />
-                  </div>
-                ) : gatewayAuditItems.length === 0 ? (
-                  <div className="text-sm text-gray-500">Nenhum registro encontrado.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {gatewayAuditItems.map((item) => (
-                      <div key={item.id} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">
-                              Request ID: {item.request_id}
-                            </div>
-                            <div className="text-xs text-gray-500">Trace ID: {item.trace_id}</div>
-                          </div>
-                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                            item.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {item.status}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
-                          <span>Modelo: {item.model_name || '-'}</span>
-                          <span>Latência: {item.latency_ms ?? '-'}</span>
-                          <span>RAG hits: {item.rag_hits ?? '-'}</span>
-                          <span>Handoff: {String(item.handoff)}</span>
-                          <span>Motivo: {item.handoff_reason || '-'}</span>
-                          <span>Data: {item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</span>
-                        </div>
-
-                        {item.conversation_id && (
-                          <div className="mt-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                navigate(`/chat?conversation_id=${item.conversation_id}`)
-                              }}
-                            >
-                              Abrir conversa
-                            </Button>
-                          </div>
-                        )}
-
-                        {(item.input_summary || item.output_summary) && (
-                          <div className="mt-2 text-xs text-gray-600 space-y-1">
-                            <div><span className="font-medium">Input:</span> {item.input_summary || '-'}</div>
-                            <div><span className="font-medium">Output:</span> {item.output_summary || '-'}</div>
-                          </div>
-                        )}
-
-                        {item.error_message && (
-                          <div className="mt-2 text-xs text-red-600">
-                            {item.error_code ? `[${item.error_code}] ` : ''}{item.error_message}
-                          </div>
-                        )}
-
-                        <details className="mt-2 text-xs text-gray-600">
-                          <summary className="cursor-pointer text-blue-600">Ver payloads</summary>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
-                              <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
-                                {item.request_payload_masked ? JSON.stringify(item.request_payload_masked, null, 2) : 'Sem request.'}
-                              </pre>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
-                              <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
-                                {item.response_payload_masked ? JSON.stringify(item.response_payload_masked, null, 2) : 'Sem response.'}
-                              </pre>
-                            </div>
-                          </div>
-                        </details>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {gatewayAuditCount > 0 && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-xs text-gray-600">
-                    <span>
-                      Mostrando {gatewayAuditOffset + 1}-
-                      {Math.min(gatewayAuditOffset + gatewayAuditItems.length, gatewayAuditCount)} de {gatewayAuditCount}
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => loadGatewayAudit({ offset: Math.max(0, gatewayAuditOffset - gatewayAuditLimit) })}
-                        disabled={gatewayAuditLoading || gatewayAuditOffset === 0}
-                      >
-                        Anterior
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => loadGatewayAudit({ offset: gatewayAuditOffset + gatewayAuditLimit })}
-                        disabled={gatewayAuditLoading || gatewayAuditOffset + gatewayAuditLimit >= gatewayAuditCount}
-                      >
-                        Próxima
                       </Button>
                     </div>
                   </div>
