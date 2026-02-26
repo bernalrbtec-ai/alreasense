@@ -1174,7 +1174,8 @@ class ContactVcfImportService(ContactImportService):
             self._remove_import_file(import_record.file_path)
             return
 
-        import_record.total_rows = 0
+        # Total de vCards para a barra de progresso (conta BEGIN:VCARD no conteúdo normalizado)
+        import_record.total_rows = decoded.count('BEGIN:VCARD')
         import_record.status = ContactImport.Status.PROCESSING
         import_record.save(update_fields=['total_rows', 'status'])
 

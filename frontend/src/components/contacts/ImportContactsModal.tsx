@@ -220,13 +220,13 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
         } else {
           // Tratar erro
           let errorMessage = 'Erro desconhecido'
-          
-          if (result.message) {
+          if (typeof result.message === 'string' && result.message) {
             errorMessage = result.message
-          } else if (result.error) {
+          } else if (typeof result.error === 'string' && result.error) {
             errorMessage = result.error
           } else if (result.errors_list && result.errors_list.length > 0) {
-            errorMessage = result.errors_list[0].error || 'Erro na importação'
+            const first = result.errors_list[0]?.error
+            errorMessage = typeof first === 'string' ? first : (first != null ? JSON.stringify(first) : 'Erro na importação')
           }
           
           console.error('❌ Erro na importação:', { result, errorMessage })
@@ -691,7 +691,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     importResult.status === 'completed' || 
                     importResult.status === 'success'
                   ) && (
-                    (importResult.error_count || importResult.errors || 0) === 0 ? (
+                    (importResult.error_count ?? 0) === 0 ? (
                       <>
                         <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
                         <h3 className="text-lg font-semibold text-green-600 mb-2">
@@ -718,7 +718,11 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                         Importação Falhou
                       </h3>
                       <p className="text-sm text-red-600">
-                        {importResult.message || importResult.error || 'Erro desconhecido'}
+                        {typeof importResult.message === 'string' ? importResult.message
+                          : typeof importResult.error === 'string' ? importResult.error
+                          : importResult.message != null || importResult.error != null
+                            ? JSON.stringify(importResult.message ?? importResult.error)
+                            : 'Erro desconhecido'}
                       </p>
                     </>
                   )}
@@ -728,31 +732,37 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div className="grid grid-cols-2 gap-3">
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Criados</p>
-                    <p className="text-2xl font-bold text-green-600">{importResult.created_count || importResult.created || 0}</p>
+                    <p className="text-2xl font-bold text-green-600">{Number(importResult.created_count ?? importResult.created) || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Atualizados</p>
-                    <p className="text-2xl font-bold text-blue-600">{importResult.updated_count || importResult.updated || 0}</p>
+                    <p className="text-2xl font-bold text-blue-600">{Number(importResult.updated_count ?? importResult.updated) || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Ignorados</p>
-                    <p className="text-2xl font-bold text-gray-600">{importResult.skipped_count || importResult.skipped || 0}</p>
+                    <p className="text-2xl font-bold text-gray-600">{Number(importResult.skipped_count ?? importResult.skipped) || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Erros</p>
-                    <p className="text-2xl font-bold text-red-600">{importResult.error_count || importResult.errors || 0}</p>
+                    <p className="text-2xl font-bold text-red-600">{Number(importResult.error_count) || 0}</p>
                 </Card>
               </div>
               
                 {/* Erros detalhados */}
               {importResult.errors && importResult.errors.length > 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded p-3 max-h-32 overflow-y-auto">
-                    <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados ({importResult.errors.length}):</p>
+                  <div className="bg-red-50 border border-red-200 rounded p-3 max-h-48 overflow-y-auto">
+                    <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados ({importResult.error_count ?? importResult.errors.length}):</p>
                     <ul className="list-disc list-inside space-y-1 text-xs text-red-700">
-                      {importResult.errors.slice(0, 10).map((error: string, idx: number) => (
-                        <li key={idx}>{error}</li>
+                      {importResult.errors.slice(0, 20).map((err: { row?: number; error?: string; data?: unknown }, idx: number) => (
+                        <li key={idx}>
+                          {err.row != null ? `Linha ${err.row}: ` : ''}
+                          {typeof err.error === 'string' ? err.error : JSON.stringify(err.error ?? err)}
+                        </li>
                       ))}
                     </ul>
+                    {(importResult.error_count ?? 0) > (importResult.errors?.length ?? 0) && (
+                      <p className="text-xs text-red-600 mt-2">Mostrando até 20 de {importResult.error_count} erros.</p>
+                    )}
                 </div>
               )}
               
