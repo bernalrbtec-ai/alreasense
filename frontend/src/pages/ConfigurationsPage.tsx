@@ -51,6 +51,7 @@ import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
 import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
 import { RagMemoriesManager } from '../modules/ai/components/RagMemoriesManager'
+import BiaAdminPage from './BiaAdminPage'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const INTEGRATION_EVOLUTION = 'evolution'
@@ -2204,7 +2205,7 @@ export default function ConfigurationsPage() {
               className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'ia-assistente' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
             >
               <MessageSquare className="h-4 w-4" />
-              IA/Assistente
+              Secretaria
             </button>
             <button
               type="button"
@@ -2219,14 +2220,7 @@ export default function ConfigurationsPage() {
           {aiSubTab === 'rag-memories' ? (
             <RagMemoriesManager />
           ) : aiSubTab === 'ia-assistente' ? (
-            <Card className="p-6">
-              <div className="space-y-4">
-                <p className="text-gray-600 dark:text-gray-400">
-                  Configuração e homologação da BIA (secretária virtual). Configure o prompt, o modelo e teste conversas.
-                </p>
-                <Button onClick={() => navigate('/admin/bia')}>Abrir BIA</Button>
-              </div>
-            </Card>
+            <BiaAdminPage />
           ) : aiSettingsLoading || !aiSettings ? (
             <div className="flex items-center justify-center h-64">
               <LoadingSpinner />
