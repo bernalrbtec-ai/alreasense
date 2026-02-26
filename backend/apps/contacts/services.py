@@ -946,38 +946,67 @@ class ContactVcfImportService(ContactImportService):
 
         return row
 
+    def _decode_quoted_printable_segment(self, segment):
+        """Decodifica um segmento quoted-printable; retorna None se falhar."""
+        if not segment or '=' not in segment:
+            return None
+        # Alguns exportadores usam - no lugar de = (ex.: =74-69 em vez de =74=69)
+        segment = re.sub(r'=([0-9A-Fa-f]{2})-', r'=\1=', segment)
+        try:
+            raw_bytes = segment.encode('latin-1', errors='replace')
+            decoded_bytes = quopri.decodestring(raw_bytes)
+            return decoded_bytes.decode('utf-8', errors='replace')
+        except (ValueError, TypeError, UnicodeDecodeError, UnicodeEncodeError):
+            return None
+
     def _normalize_vcf_content(self, content):
         """
         Pré-processa conteúdo VCF para vobject conseguir parsear.
         - Desdobra linhas continuadas (CRLF + espaço/tab; e em Q-P linha terminada em =).
-        - Decodifica propriedades ENCODING=QUOTED-PRINTABLE (evita "Failed to parse line: =XX=XX").
+        - Decodifica ENCODING=QUOTED-PRINTABLE no valor (após :) e dentro de parâmetros (ex.: X-CUSTOM(...,Q-P,=XX=XX)).
         """
-        if not content or not content.strip():
+        if content is None:
+            return ''
+        if not content.strip():
             return content
         # Desdobrar linhas continuadas (RFC 2426: linha que começa com espaço/tab continua a anterior)
         content = re.sub(r'\r\n[ \t]', '', content)
         content = re.sub(r'\n[ \t]', '', content)
-        # Em quoted-printable, linha que termina em = é soft break; só remove se a próxima for continuação (espaço, tab ou =)
-        # para não juntar acidentalmente com a próxima propriedade (ex.: TEL:)
+        # Em quoted-printable, linha que termina em = é soft break; só remove se a próxima for continuação
         content = re.sub(r'=\r\n(?=[ \t=])', '', content)
         content = re.sub(r'=\n(?=[ \t=])', '', content)
         lines = content.splitlines()
         result = []
         for line in lines:
-            if 'ENCODING=QUOTED-PRINTABLE' in line.upper() and ':' in line:
+            if 'ENCODING=QUOTED-PRINTABLE' not in line.upper():
+                result.append(line)
+                continue
+            # 1) Decodificar Q-P dentro de parâmetros: (...ENCODING=QUOTED-PRINTABLE,=6E=C3=BA=...)
+            def decode_param_qp(match):
+                prefix, qp_part, suffix = match.group(1), match.group(2), match.group(3)
+                decoded = self._decode_quoted_printable_segment(qp_part.strip())
+                if decoded is None:
+                    return prefix + qp_part + suffix
+                # Se o valor decodificado tem vírgula ou parêntese, manter original para não quebrar estrutura
+                if ',' in decoded or ')' in decoded:
+                    return prefix + qp_part + suffix
+                return prefix + decoded + suffix
+            line = re.sub(
+                r'(ENCODING=QUOTED-PRINTABLE,)\s*([^)]*)\s*(\))',
+                decode_param_qp,
+                line,
+                flags=re.IGNORECASE
+            )
+            # 2) Decodificar Q-P no valor (após o último :)
+            if ':' in line:
                 parts = line.rsplit(':', 1)
                 if len(parts) == 2:
                     left, value = parts
                     value = value.replace('\r', '').replace('\n', '').strip()
                     if value and '=' in value:
-                        try:
-                            # quopri espera bytes; Q-P usa caracteres ASCII para =XX
-                            raw_bytes = value.encode('latin-1', errors='replace')
-                            decoded_bytes = quopri.decodestring(raw_bytes)
-                            decoded_str = decoded_bytes.decode('utf-8', errors='replace')
-                            line = left + ':' + decoded_str
-                        except (ValueError, TypeError, UnicodeDecodeError, UnicodeEncodeError):
-                            pass
+                        decoded = self._decode_quoted_printable_segment(value)
+                        if decoded is not None:
+                            line = left + ':' + decoded
             result.append(line)
         return '\r\n'.join(result)
 
