@@ -18,7 +18,8 @@ interface PreviewData {
   total_rows_detected: number
   validation_warnings: any[]
   delimiter: string
-  has_ddd_separated: boolean
+  has_ddd_separated?: boolean
+  source?: 'csv' | 'vcf'
 }
 
 export default function ImportContactsModal({ onClose, onSuccess }: ImportContactsModalProps) {
@@ -89,23 +90,25 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
     }
   }
   
+  const isVcf = (f: File | null) => f?.name?.toLowerCase().endsWith('.vcf') ?? false
+
   // Step 1: Upload
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
-      if (!selectedFile.name.endsWith('.csv')) {
-        showErrorToast('selecionar', 'Arquivo', new Error('Arquivo deve ser .csv'))
+      const ok = selectedFile.name.toLowerCase().endsWith('.csv') || selectedFile.name.toLowerCase().endsWith('.vcf')
+      if (!ok) {
+        showErrorToast('selecionar', 'Arquivo', new Error('Arquivo deve ser .csv ou .vcf'))
         return
       }
-      
       setFile(selectedFile)
     }
   }
-  
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile && droppedFile.name.endsWith('.csv')) {
+    if (droppedFile && (droppedFile.name.toLowerCase().endsWith('.csv') || droppedFile.name.toLowerCase().endsWith('.vcf'))) {
       setFile(droppedFile)
     }
   }
@@ -117,24 +120,19 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
   // Step 2 -> Step 3: Preview
   const handlePreview = async () => {
     if (!file) return
-    
-    // Validar tag selecionada
     if (!config.auto_tag_id) {
       showErrorToast('validar', 'Configuração', new Error('Selecione uma tag para identificar os contatos'))
       return
     }
-    
     setIsLoading(true)
     const toastId = showLoadingToast('processar', 'Preview')
-    
     try {
       const formData = new FormData()
       formData.append('file', file)
-      
-      const response = await api.post('/contacts/contacts/preview_csv/', formData, {
+      const endpoint = isVcf(file) ? '/contacts/contacts/preview_vcf/' : '/contacts/contacts/preview_csv/'
+      const response = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-      
       setPreviewData(response.data)
       setStep(3)
       updateToastSuccess(toastId, 'processar', 'Preview')
@@ -148,41 +146,26 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
   // Step 3 -> Step 4/5: Import
   const handleImport = async () => {
     if (!file || !previewData) return
-    
     setIsLoading(true)
     setStep(4)
     const toastId = showLoadingToast('importar', 'Contatos')
-    
     try {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('update_existing', config.update_existing.toString())
       formData.append('all_have_consent', config.all_have_consent.toString())
-      
       if (config.all_have_consent) {
         formData.append('consent_source', config.consent_source)
-        if (config.consent_date) {
-          formData.append('consent_date', config.consent_date)
-        }
+        if (config.consent_date) formData.append('consent_date', config.consent_date)
       }
-      
-      if (config.auto_tag_id) {
-        formData.append('auto_tag_id', config.auto_tag_id)
+      if (config.auto_tag_id) formData.append('auto_tag_id', config.auto_tag_id)
+      const isVcfFile = isVcf(file)
+      if (!isVcfFile) {
+        formData.append('column_mapping', JSON.stringify(previewData.column_mapping))
+        formData.append('delimiter', previewData.delimiter || ',')
       }
-      
-      // Enviar column_mapping e delimiter do preview
-      formData.append('column_mapping', JSON.stringify(previewData.column_mapping))
-      formData.append('delimiter', previewData.delimiter)
-      
-      console.log('📤 Enviando para backend:', {
-        column_mapping: previewData.column_mapping,
-        delimiter: previewData.delimiter,
-        update_existing: config.update_existing,
-        all_have_consent: config.all_have_consent,
-        auto_tag_id: config.auto_tag_id
-      })
-      
-      const response = await api.post('/contacts/contacts/import_csv/', formData, {
+      const endpoint = isVcfFile ? '/contacts/contacts/import_vcf/' : '/contacts/contacts/import_csv/'
+      const response = await api.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
       
@@ -385,7 +368,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".csv"
+                  accept=".csv,.vcf"
                   onChange={handleFileSelect}
                   className="hidden"
                 />
@@ -393,7 +376,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   Clique para selecionar ou arraste o arquivo aqui
                 </p>
                   <p className="text-xs text-gray-500">
-                  CSV, máximo 10 MB (até 50.000 contatos)
+                  CSV ou VCF (vCard), máximo 10 MB
                 </p>
               </div>
               
@@ -590,15 +573,15 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Preview dos Dados</h3>
                   <span className="text-sm text-gray-500">
-                    ~{previewData.total_rows_detected} linhas detectadas
+                    ~{previewData.total_rows_detected} {previewData.source === 'vcf' ? 'contatos' : 'linhas'} detectados
                   </span>
               </div>
               
-                {/* Mapeamento de colunas */}
+                {previewData.source !== 'vcf' && (
                 <div className="bg-gray-50 p-3 rounded text-sm">
                   <p className="font-medium mb-2">Mapeamento de Colunas</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    {Object.entries(previewData.column_mapping).map(([csvCol, dbField]) => (
+                    {Object.entries(previewData.column_mapping || {}).map(([csvCol, dbField]) => (
                     <div key={csvCol} className="flex items-center gap-2">
                         <span className="text-gray-600">{csvCol}</span>
                       <span>→</span>
@@ -609,13 +592,13 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   ))}
                 </div>
               </div>
+                )}
               
-                {/* Preview da tabela */}
                 <div className="overflow-x-auto max-h-64 overflow-y-auto border rounded">
                   <table className="min-w-full divide-y divide-gray-200 text-xs">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                        {Object.keys(previewData.column_mapping).map((header) => (
+                        {(previewData.source === 'vcf' ? (previewData.headers || ['name', 'phone', 'email', 'city', 'state', 'notes']) : Object.keys(previewData.column_mapping || {})).map((header: string) => (
                           <th key={header} className="px-3 py-2 text-left font-medium text-gray-700">
                           {header}
                         </th>
@@ -625,9 +608,9 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     <tbody className="bg-white divide-y divide-gray-200">
                       {previewData.sample_rows.slice(0, 10).map((row, idx) => (
                         <tr key={idx} className="hover:bg-gray-50">
-                          {Object.keys(previewData.column_mapping).map((header, colIdx) => (
+                          {(previewData.source === 'vcf' ? (previewData.headers || ['name', 'phone', 'email', 'city', 'state', 'notes']) : Object.keys(previewData.column_mapping || {})).map((header: string, colIdx: number) => (
                             <td key={colIdx} className="px-3 py-2 text-gray-900">
-                              {row[header] || '-'}
+                              {row[header] ?? '-'}
                           </td>
                         ))}
                       </tr>

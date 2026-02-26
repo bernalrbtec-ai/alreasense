@@ -644,25 +644,40 @@ class ContactList(models.Model):
 
 class ContactImport(models.Model):
     """
-    Registro de importações de contatos via CSV
+    Registro de importações de contatos via CSV ou VCF (processamento assíncrono).
     """
-    
+
+    class ImportType(models.TextChoices):
+        CSV = 'csv', 'CSV'
+        VCF = 'vcf', 'VCF'
+
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pendente'
         PROCESSING = 'processing', 'Processando'
         COMPLETED = 'completed', 'Concluído'
         FAILED = 'failed', 'Falhou'
-    
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
     tenant = models.ForeignKey(
         'tenancy.Tenant',
         on_delete=models.CASCADE,
         related_name='contact_imports'
     )
-    
+
     file_name = models.CharField(max_length=255)
-    file_path = models.CharField(max_length=500)  # S3 ou local
+    file_path = models.CharField(max_length=500)  # Caminho local (temp_imports) ou S3
+    import_type = models.CharField(
+        max_length=10,
+        choices=ImportType.choices,
+        default=ImportType.CSV,
+        help_text='Tipo do arquivo importado (csv ou vcf)'
+    )
+    import_options = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Opções da importação: para CSV: column_mapping, delimiter; para VCF: {}'
+    )
     
     status = models.CharField(
         max_length=20,

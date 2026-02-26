@@ -25,8 +25,12 @@ from .serializers import (
     TaskSerializer,
     TaskCreateSerializer
 )
-from .services import ContactImportService, ContactExportService
+from .services import ContactImportService, ContactExportService, ContactVcfImportService, run_import_from_record
 from apps.common.rate_limiting import rate_limit_by_user
+import threading
+import os
+import json
+import uuid as uuid_module
 
 
 class ContactViewSet(viewsets.ModelViewSet):
@@ -226,14 +230,8 @@ class ContactViewSet(viewsets.ModelViewSet):
     @rate_limit_by_user(rate='10/h', method='POST')  # ✅ CRITICAL: Rate limit - 10 importações por hora
     def import_csv(self, request):
         """
-        Importação em massa via CSV
-        
-        POST /api/contacts/contacts/import_csv/
-        Body: multipart/form-data
-        - file: CSV file
-        - update_existing: bool
-        - auto_tag_id: UUID (optional)
-        - async_processing: bool (default: True para >100 linhas)
+        Importação em massa via CSV (sempre assíncrona).
+        Retorna import_id para polling em GET /api/contacts/imports/{id}/
         """
         file = request.FILES.get('file')
         if not file:
@@ -241,121 +239,170 @@ class ContactViewSet(viewsets.ModelViewSet):
                 {'error': 'Arquivo CSV não fornecido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Validar extensão
         if not file.name.endswith('.csv'):
             return Response(
                 {'error': 'Arquivo deve ser CSV'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Validar tamanho (max 10 MB)
         if file.size > 10 * 1024 * 1024:
             return Response(
                 {'error': 'Arquivo muito grande. Máximo: 10 MB'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Determinar se processa assíncrono ou síncrono
-        # DESABILITAR async temporariamente até corrigir passagem de column_mapping
-        async_processing = False  # request.data.get('async_processing', 'true').lower() == 'true'
-        
-        # Se for assíncrono, disparar Celery task
-        if async_processing:
-            # from .tasks import process_contact_import_async  # Removido - Celery deletado
-            
-            # Salvar arquivo temporariamente
-            import os
-            from django.conf import settings
-            
-            temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp_imports')
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            temp_file_path = os.path.join(temp_dir, f'{request.user.tenant.id}_{file.name}')
-            
-            with open(temp_file_path, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
-            
-            # Criar registro de importação
-            import_record = ContactImport.objects.create(
-                tenant=request.user.tenant,
-                file_name=file.name,
-                file_path=temp_file_path,
-                created_by=request.user,
-                update_existing=request.data.get('update_existing', 'false').lower() == 'true',
-                status=ContactImport.Status.PENDING
-            )
-            
-            if request.data.get('auto_tag_id'):
-                try:
-                    import_record.auto_tag_id = request.data.get('auto_tag_id')
-                    import_record.save()
-                except:
-                    pass
-            
-            # Disparar task assíncrona
-            # process_contact_import_async.delay(  # Removido - Celery deletado
-            #     import_id=str(import_record.id),
-            #     tenant_id=str(request.user.tenant.id),
-            #     user_id=str(request.user.id)
-            # )
-            # TODO: Implementar com RabbitMQ
-            
-            return Response({
-                'status': 'processing',
-                'import_id': str(import_record.id),
-                'message': 'Importação iniciada. Você será notificado quando concluir.'
-            })
-        
-        # Processar síncrono (para arquivos pequenos)
-        service = ContactImportService(
-            tenant=request.user.tenant,
-            user=request.user
-        )
-        
-        # Extrair column_mapping se fornecido
-        import logging
-        logger = logging.getLogger(__name__)
-        
+
+        from django.conf import settings
+        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp_imports')
+        os.makedirs(temp_dir, exist_ok=True)
+        unique_name = f"{request.user.tenant.id}_{uuid_module.uuid4().hex}_{file.name}"
+        temp_file_path = os.path.join(temp_dir, unique_name)
+        with open(temp_file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+
         column_mapping = None
         if request.data.get('column_mapping'):
-            import json
             try:
                 column_mapping = json.loads(request.data.get('column_mapping'))
-                logger.debug("Column mapping recebido", extra={'column_mapping': column_mapping})
-            except Exception as e:
-                logger.warning("Erro ao parsear column_mapping", exc_info=True, extra={'error': str(e)})
-                pass
-        else:
-            logger.debug("Nenhum column_mapping recebido do frontend")
-        
-        delimiter = request.data.get('delimiter')
-        logger.debug("Parâmetros de importação", extra={
-            'delimiter': delimiter,
-            'auto_tag_id': request.data.get('auto_tag_id'),
-            'update_existing': request.data.get('update_existing')
-        })
-        
-        result = service.process_csv(
-            file=file,
+            except Exception:
+                column_mapping = {}
+        delimiter = request.data.get('delimiter') or ','
+        import_options = {'column_mapping': column_mapping or {}, 'delimiter': delimiter}
+
+        import_record = ContactImport.objects.create(
+            tenant=request.user.tenant,
+            file_name=file.name,
+            file_path=temp_file_path,
+            created_by=request.user,
             update_existing=request.data.get('update_existing', 'false').lower() == 'true',
-            auto_tag_id=request.data.get('auto_tag_id'),
-            delimiter=delimiter,
-            column_mapping=column_mapping
+            status=ContactImport.Status.PENDING,
+            import_type=ContactImport.ImportType.CSV,
+            import_options=import_options,
         )
-        
-        # Log detalhado da resposta para debug
-        # ✅ CORREÇÃO: Não usar 'created' no extra (campo reservado do LogRecord)
-        logger.info("Importação CSV processada", extra={
-            'status': result.get('status'),
-            'total_rows': result.get('total_rows', 0),
-            'created_count': result.get('created', 0),  # ✅ Mudado de 'created' para 'created_count'
-            'errors_count': result.get('errors', 0)  # ✅ Mudado de 'errors' para 'errors_count'
+        if request.data.get('auto_tag_id'):
+            try:
+                import_record.auto_tag_id = request.data.get('auto_tag_id')
+                import_record.save(update_fields=['auto_tag_id'])
+            except Exception:
+                pass
+
+        def run():
+            run_import_from_record(str(import_record.id))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+        return Response({
+            'status': 'processing',
+            'import_id': str(import_record.id),
+            'total_rows': 0,
+            'processed_rows': 0,
+            'created': 0,
+            'created_count': 0,
+            'updated': 0,
+            'updated_count': 0,
+            'skipped': 0,
+            'skipped_count': 0,
+            'errors': 0,
+            'error_count': 0,
         })
-        
+
+    @action(detail=False, methods=['post'])
+    def preview_vcf(self, request):
+        """
+        Preview do VCF antes de importar.
+        POST /api/contacts/contacts/preview_vcf/
+        """
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': 'Arquivo VCF não fornecido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not file.name.lower().endswith('.vcf'):
+            return Response(
+                {'error': 'Arquivo deve ser VCF (.vcf)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if file.size > 10 * 1024 * 1024:
+            return Response(
+                {'error': 'Arquivo muito grande. Máximo: 10 MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        service = ContactVcfImportService(tenant=request.user.tenant, user=request.user)
+        result = service.preview_vcf(file)
+        if result.get('status') == 'error':
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
         return Response(result)
-    
+
+    @action(detail=False, methods=['post'])
+    @rate_limit_by_user(rate='10/h', method='POST')
+    def import_vcf(self, request):
+        """
+        Importação em massa via VCF (sempre assíncrona).
+        Retorna import_id para polling em GET /api/contacts/imports/{id}/
+        """
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': 'Arquivo VCF não fornecido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not file.name.lower().endswith('.vcf'):
+            return Response(
+                {'error': 'Arquivo deve ser VCF (.vcf)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if file.size > 10 * 1024 * 1024:
+            return Response(
+                {'error': 'Arquivo muito grande. Máximo: 10 MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        from django.conf import settings
+        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp_imports')
+        os.makedirs(temp_dir, exist_ok=True)
+        unique_name = f"{request.user.tenant.id}_{uuid_module.uuid4().hex}_{file.name}"
+        temp_file_path = os.path.join(temp_dir, unique_name)
+        with open(temp_file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        import_record = ContactImport.objects.create(
+            tenant=request.user.tenant,
+            file_name=file.name,
+            file_path=temp_file_path,
+            created_by=request.user,
+            update_existing=request.data.get('update_existing', 'false').lower() == 'true',
+            status=ContactImport.Status.PENDING,
+            import_type=ContactImport.ImportType.VCF,
+            import_options={},
+        )
+        if request.data.get('auto_tag_id'):
+            try:
+                import_record.auto_tag_id = request.data.get('auto_tag_id')
+                import_record.save(update_fields=['auto_tag_id'])
+            except Exception:
+                pass
+
+        def run():
+            run_import_from_record(str(import_record.id))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+
+        return Response({
+            'status': 'processing',
+            'import_id': str(import_record.id),
+            'total_rows': 0,
+            'processed_rows': 0,
+            'created': 0,
+            'created_count': 0,
+            'updated': 0,
+            'updated_count': 0,
+            'skipped': 0,
+            'skipped_count': 0,
+            'errors': 0,
+            'error_count': 0,
+        })
+
     @action(detail=False, methods=['get'])
     def export_csv(self, request):
         """

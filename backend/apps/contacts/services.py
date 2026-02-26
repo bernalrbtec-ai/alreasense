@@ -4,6 +4,7 @@ Services para importação e exportação de contatos
 
 import csv
 import io
+import logging
 import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
@@ -13,6 +14,8 @@ from django.core.validators import validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import Contact, ContactImport, Tag
 from .utils import normalize_phone, get_state_from_ddd, extract_ddd_from_phone, get_state_from_phone
+
+logger = logging.getLogger(__name__)
 
 
 # Mapeamento de aliases de colunas
@@ -295,19 +298,65 @@ class ContactImportService:
         
         return warnings
     
+    def process_csv_from_record(self, import_record):
+        """
+        Processa importação CSV a partir de um ContactImport já criado (arquivo em file_path).
+        Usado pelo worker em background. Atualiza import_record em lugar.
+        """
+        import os
+
+        opts = import_record.import_options or {}
+        delimiter = opts.get('delimiter') or ','
+        column_mapping = opts.get('column_mapping')
+
+        try:
+            with open(import_record.file_path, 'rb') as f:
+                raw_content = f.read()
+        except Exception as e:
+            logger.exception("Erro ao abrir arquivo de importação: %s", import_record.file_path)
+            import_record.status = ContactImport.Status.FAILED
+            import_record.errors.append({'error': f'Não foi possível abrir o arquivo: {e}'})
+            import_record.save()
+            return
+
+        decoded_file = self._decode_file_content(raw_content)
+        if not delimiter:
+            delimiter = self._detect_delimiter(decoded_file)
+        csv_reader = csv.DictReader(io.StringIO(decoded_file), delimiter=delimiter)
+        if not column_mapping:
+            column_mapping = self._auto_map_columns(csv_reader.fieldnames)
+        rows = list(csv_reader)
+
+        import_record.total_rows = len(rows)
+        import_record.status = ContactImport.Status.PROCESSING
+        import_record.save(update_fields=['total_rows', 'status'])
+
+        for i, row in enumerate(rows):
+            try:
+                mapped_row = self._apply_column_mapping(row, column_mapping)
+                self._process_row(mapped_row, import_record)
+            except Exception as e:
+                error_message = str(e)
+                if 'unique constraint' in error_message.lower() and 'tag' in error_message.lower():
+                    error_message = 'Tag já existe. Tente usar um nome diferente para a tag.'
+                import_record.error_count += 1
+                import_record.errors.append({
+                    'row': i + 2,
+                    'data': row,
+                    'error': error_message
+                })
+            import_record.processed_rows = i + 1
+            import_record.save(update_fields=['processed_rows', 'created_count', 'updated_count', 'skipped_count', 'error_count', 'errors'])
+
+        import_record.status = ContactImport.Status.COMPLETED
+        import_record.completed_at = timezone.now()
+        import_record.save(update_fields=['status', 'completed_at'])
+
     def process_csv(self, file, update_existing=False, auto_tag_id=None, delimiter=None, column_mapping=None):
         """
-        Processa arquivo CSV e importa contatos
+        Processa arquivo CSV e importa contatos (síncrono; preferir usar view assíncrona + process_csv_from_record).
         
-        Args:
-            file: Arquivo CSV (UploadedFile)
-            update_existing: Se True, atualiza contatos duplicados
-            auto_tag_id: ID da tag para adicionar automaticamente
-            delimiter: Delimitador do CSV (auto-detecta se None)
-            column_mapping: Mapeamento de colunas (do preview)
-        
-        Returns:
-            dict: Resultado da importação
+        Mantido para compatibilidade. Em produção a view deve criar ContactImport e disparar thread.
         """
         # Criar registro de importação
         import_record = ContactImport.objects.create(
@@ -315,14 +364,16 @@ class ContactImportService:
             file_name=file.name,
             file_path=f'imports/{self.tenant.id}/{file.name}',
             created_by=self.user,
-            update_existing=update_existing
+            update_existing=update_existing,
+            import_type=ContactImport.ImportType.CSV,
+            import_options={'delimiter': delimiter or ',', 'column_mapping': column_mapping or {}}
         )
         
         if auto_tag_id:
             try:
                 import_record.auto_tag_id = auto_tag_id
                 import_record.save()
-            except:
+            except Exception:
                 pass
         
         try:
@@ -330,13 +381,11 @@ class ContactImportService:
             raw_content = file.read()
             decoded_file = self._decode_file_content(raw_content)
             
-            # Auto-detectar delimitador se não fornecido
             if not delimiter:
                 delimiter = self._detect_delimiter(decoded_file)
             
             csv_reader = csv.DictReader(io.StringIO(decoded_file), delimiter=delimiter)
             
-            # Se não tem mapeamento, criar automaticamente
             if not column_mapping:
                 column_mapping = self._auto_map_columns(csv_reader.fieldnames)
             
@@ -345,19 +394,15 @@ class ContactImportService:
             import_record.status = ContactImport.Status.PROCESSING
             import_record.save()
             
-            # Processar cada linha
             for i, row in enumerate(rows):
                 try:
-                    # Debug primeira linha
                     if i == 0:
                         print(f"\n🔍 DEBUG - Primeira linha do CSV:")
                         print(f"   Row original: {row}")
                         print(f"   Column mapping: {column_mapping}")
                     
-                    # Aplicar mapeamento de colunas
                     mapped_row = self._apply_column_mapping(row, column_mapping)
                     
-                    # Debug primeira linha mapeada
                     if i == 0:
                         print(f"   Row mapeado: {mapped_row}")
                     
@@ -365,25 +410,22 @@ class ContactImportService:
                     import_record.processed_rows = i + 1
                     import_record.save()
                 except Exception as e:
-                    # Debug erro
-                    if i < 3:  # Mostrar primeiros 3 erros
+                    if i < 3:
                         print(f"❌ Erro linha {i+2}: {str(e)}")
                         print(f"   Row: {row}")
                     
-                    # Tratamento específico para erros de tag duplicada
                     error_message = str(e)
                     if 'unique constraint' in error_message.lower() and 'tag' in error_message.lower():
                         error_message = 'Tag já existe. Tente usar um nome diferente para a tag.'
                     
                     import_record.error_count += 1
                     import_record.errors.append({
-                        'row': i + 2,  # +2 porque linha 1 é header
+                        'row': i + 2,
                         'data': row,
                         'error': error_message
                     })
                     import_record.save()
             
-            # Finalizar
             import_record.status = ContactImport.Status.COMPLETED
             import_record.completed_at = timezone.now()
             import_record.save()
@@ -393,13 +435,13 @@ class ContactImportService:
                 'import_id': str(import_record.id),
                 'total_rows': import_record.total_rows,
                 'created': import_record.created_count,
-                'created_count': import_record.created_count,  # ✅ Compatibilidade com frontend
+                'created_count': import_record.created_count,
                 'updated': import_record.updated_count,
-                'updated_count': import_record.updated_count,  # ✅ Compatibilidade com frontend
+                'updated_count': import_record.updated_count,
                 'skipped': import_record.skipped_count,
-                'skipped_count': import_record.skipped_count,  # ✅ Compatibilidade com frontend
+                'skipped_count': import_record.skipped_count,
                 'errors': import_record.error_count,
-                'error_count': import_record.error_count,  # ✅ Compatibilidade com frontend
+                'error_count': import_record.error_count,
                 'errors_list': import_record.errors if import_record.error_count > 0 else []
             }
         
@@ -408,7 +450,6 @@ class ContactImportService:
             import_record.errors.append({'error': str(e)})
             import_record.save()
             
-            # Log detalhado do erro para debug
             print(f"❌ ERRO FATAL na importação CSV:")
             print(f"   Arquivo: {file.name}")
             print(f"   Tenant: {self.tenant.id}")
@@ -417,17 +458,18 @@ class ContactImportService:
             traceback.print_exc()
             
             return {
-                'status': 'error',  # Mudança: usar 'error' em vez de 'failed'
-                'message': str(e),  # Mudança: usar 'message' em vez de 'error'
+                'status': 'error',
+                'message': str(e),
                 'import_id': str(import_record.id),
                 'total_rows': 0,
                 'created': 0,
                 'updated': 0,
                 'skipped': 0,
                 'errors': 1,
+                'error_count': 1,
                 'errors_list': [{'row': 0, 'error': str(e)}]
             }
-    
+
     def _apply_column_mapping(self, row, mapping):
         """
         Aplica o mapeamento de colunas ao row
@@ -752,6 +794,200 @@ class ContactImportService:
             return int(value)
         except (ValueError, TypeError):
             return default
+
+
+def run_import_from_record(import_id):
+    """
+    Processa uma importação em background (chamado pela thread).
+    Carrega o ContactImport, abre o arquivo em file_path e delega para CSV ou VCF.
+    """
+    try:
+        import_record = ContactImport.objects.get(id=import_id)
+    except ContactImport.DoesNotExist:
+        logger.error("ContactImport não encontrado: %s", import_id)
+        return
+    tenant = import_record.tenant
+    user = import_record.created_by
+    try:
+        if import_record.import_type == ContactImport.ImportType.VCF.value:
+            svc = ContactVcfImportService(tenant=tenant, user=user)
+            svc.process_vcf_from_record(import_record)
+        else:
+            svc = ContactImportService(tenant=tenant, user=user)
+            svc.process_csv_from_record(import_record)
+    except Exception as e:
+        logger.exception("Erro fatal na importação %s: %s", import_id, e)
+        import_record.refresh_from_db()
+        import_record.status = ContactImport.Status.FAILED
+        import_record.errors.append({'error': str(e)})
+        import_record.save(update_fields=['status', 'errors'])
+
+
+class ContactVcfImportService(ContactImportService):
+    """Importação de contatos a partir de arquivos VCF (vCard)."""
+
+    def _parse_vcard_date(self, value):
+        """Parse BDAY do vCard (YYYY-MM-DD ou --MM-DD)."""
+        if not value or not value.strip():
+            return None
+        value = value.strip()
+        for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '--%m-%d']:
+            try:
+                return datetime.strptime(value.replace('--', '1900-'), fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _vcard_to_row(self, card):
+        """Converte um vCard (vobject) em dict no formato do Contact (name, phone, email, ...)."""
+        row = {}
+        # FN (Formatted Name) ou N (structured name)
+        fn = getattr(card, 'fn', None)
+        if fn and fn.value:
+            row['name'] = fn.value.strip()
+        else:
+            n = getattr(card, 'n', None)
+            if n and n.value:
+                parts = getattr(n.value, 'given', '') or '', getattr(n.value, 'family', '') or ''
+                row['name'] = ' '.join(p for p in parts if p).strip() or ''
+        if not row.get('name'):
+            row['name'] = 'Sem nome'
+
+        # TEL - preferir CELL, depois WORK, depois o primeiro
+        tels = card.contents.get('tel', [])
+        phone_val = None
+        for t in tels:
+            val = getattr(t, 'value', None) or (t.value if hasattr(t, 'value') else None)
+            if val:
+                phone_val = val.strip().replace(' ', '').replace('-', '')
+                break
+        row['phone'] = phone_val or ''
+
+        # EMAIL
+        emails = card.contents.get('email', [])
+        if emails:
+            em = emails[0]
+            val = getattr(em, 'value', None)
+            if val:
+                row['email'] = val.strip()
+
+        # BDAY
+        bday = card.contents.get('bday', [])
+        if bday:
+            row['birth_date'] = self._parse_vcard_date(str(bday[0].value)) if bday[0].value else None
+
+        # ADR (pode ser objeto com .locality ou lista [pobox, street, locality, region, code, country])
+        adrs = card.contents.get('adr', [])
+        if adrs:
+            adr = adrs[0].value
+            if isinstance(adr, (list, tuple)) and len(adr) >= 7:
+                row['city'] = (adr[3] or '').strip() or None
+                row['state'] = (adr[4] or '').strip() or None
+                row['zipcode'] = (adr[5] or '').strip() or None
+                row['country'] = (adr[6] or '').strip() or None
+            elif hasattr(adr, 'locality'):
+                row['city'] = (getattr(adr, 'locality', '') or '').strip() or None
+                row['state'] = (getattr(adr, 'region', '') or '').strip() or None
+                row['zipcode'] = (getattr(adr, 'code', '') or '').strip() or None
+                row['country'] = (getattr(adr, 'country', '') or '').strip() or None
+
+        # NOTE + campos extras em notes
+        notes_parts = []
+        note = card.contents.get('note', [])
+        if note and getattr(note[0], 'value', None):
+            notes_parts.append(note[0].value.strip())
+        extras = []
+        if getattr(card, 'org', None) and card.org.value:
+            extras.append(f"Org: {card.org.value.strip()}")
+        if getattr(card, 'title', None) and card.title.value:
+            extras.append(f"Cargo: {card.title.value.strip()}")
+        if getattr(card, 'url', None) and card.url.value:
+            extras.append(f"URL: {card.url.value.strip()}")
+        if getattr(card, 'nickname', None) and card.nickname.value:
+            extras.append(f"Apelido: {card.nickname.value.strip()}")
+        if extras:
+            notes_parts.append('\n'.join(extras))
+        row['notes'] = '\n'.join(notes_parts) if notes_parts else ''
+
+        return row
+
+    def preview_vcf(self, file, max_entries=10):
+        """Gera preview do VCF para exibir antes de importar."""
+        try:
+            import vobject
+        except ImportError:
+            return {'status': 'error', 'error': 'Biblioteca vobject não instalada. pip install vobject'}
+        raw = file.read()
+        file.seek(0)
+        decoded = self._decode_file_content(raw)
+        samples = []
+        total = 0
+        try:
+            for card in vobject.readComponents(io.StringIO(decoded)):
+                total += 1
+                if len(samples) >= max_entries:
+                    continue
+                row = self._vcard_to_row(card)
+                if row.get('phone'):
+                    samples.append(row)
+        except Exception as e:
+            return {'status': 'error', 'error': str(e)}
+        return {
+            'status': 'success',
+            'headers': ['name', 'phone', 'email', 'city', 'state', 'notes'],
+            'column_mapping': {},
+            'sample_rows': samples,
+            'total_rows_detected': total,
+            'validation_warnings': [],
+            'source': 'vcf',
+        }
+
+    def process_vcf_from_record(self, import_record):
+        """Processa importação VCF a partir de um ContactImport já criado (arquivo em file_path)."""
+        try:
+            import vobject
+        except ImportError:
+            import_record.status = ContactImport.Status.FAILED
+            import_record.errors.append({'error': 'Biblioteca vobject não instalada'})
+            import_record.save()
+            return
+        try:
+            with open(import_record.file_path, 'rb') as f:
+                raw = f.read()
+        except Exception as e:
+            logger.exception("Erro ao abrir arquivo VCF: %s", import_record.file_path)
+            import_record.status = ContactImport.Status.FAILED
+            import_record.errors.append({'error': f'Não foi possível abrir o arquivo: {e}'})
+            import_record.save()
+            return
+        decoded = self._decode_file_content(raw)
+        cards = list(vobject.readComponents(io.StringIO(decoded)))
+        import_record.total_rows = len(cards)
+        import_record.status = ContactImport.Status.PROCESSING
+        import_record.save(update_fields=['total_rows', 'status'])
+
+        for i, card in enumerate(cards):
+            try:
+                row = self._vcard_to_row(card)
+                phone_raw = (row.get('phone') or '').strip()
+                if not phone_raw:
+                    import_record.error_count += 1
+                    import_record.errors.append({'row': i + 1, 'error': 'Telefone obrigatório', 'data': row})
+                    import_record.processed_rows = i + 1
+                    import_record.save(update_fields=['processed_rows', 'error_count', 'errors'])
+                    continue
+                phone = normalize_phone(phone_raw)
+                row['phone'] = phone
+                self._process_row(row, import_record)
+            except Exception as e:
+                import_record.error_count += 1
+                import_record.errors.append({'row': i + 1, 'error': str(e)})
+            import_record.processed_rows = i + 1
+            import_record.save(update_fields=['processed_rows', 'created_count', 'updated_count', 'skipped_count', 'error_count', 'errors'])
+
+        import_record.status = ContactImport.Status.COMPLETED
+        import_record.completed_at = timezone.now()
+        import_record.save(update_fields=['status', 'completed_at'])
 
 
 class ContactExportService:
