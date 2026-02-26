@@ -277,7 +277,7 @@ export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'meta' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'rag-memories'>('config')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories'>('config')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -2200,6 +2200,14 @@ export default function ConfigurationsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setAiSubTab('ia-assistente')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'ia-assistente' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              IA/Assistente
+            </button>
+            <button
+              type="button"
               onClick={() => setAiSubTab('rag-memories')}
               className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
             >
@@ -2210,6 +2218,15 @@ export default function ConfigurationsPage() {
 
           {aiSubTab === 'rag-memories' ? (
             <RagMemoriesManager />
+          ) : aiSubTab === 'ia-assistente' ? (
+            <Card className="p-6">
+              <div className="space-y-4">
+                <p className="text-gray-600 dark:text-gray-400">
+                  Configuração e homologação da BIA (secretária virtual). Configure o prompt, o modelo e teste conversas.
+                </p>
+                <Button onClick={() => navigate('/admin/bia')}>Abrir BIA</Button>
+              </div>
+            </Card>
           ) : aiSettingsLoading || !aiSettings ? (
             <div className="flex items-center justify-center h-64">
               <LoadingSpinner />
