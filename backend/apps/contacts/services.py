@@ -5,6 +5,7 @@ Services para importação e exportação de contatos
 import csv
 import io
 import logging
+import quopri
 import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
@@ -945,6 +946,41 @@ class ContactVcfImportService(ContactImportService):
 
         return row
 
+    def _normalize_vcf_content(self, content):
+        """
+        Pré-processa conteúdo VCF para vobject conseguir parsear.
+        - Desdobra linhas continuadas (CRLF + espaço/tab; e em Q-P linha terminada em =).
+        - Decodifica propriedades ENCODING=QUOTED-PRINTABLE (evita "Failed to parse line: =XX=XX").
+        """
+        if not content or not content.strip():
+            return content
+        # Desdobrar linhas continuadas (RFC 2426: linha que começa com espaço/tab continua a anterior)
+        content = re.sub(r'\r\n[ \t]', '', content)
+        content = re.sub(r'\n[ \t]', '', content)
+        # Em quoted-printable, linha que termina em = é soft break; só remove se a próxima for continuação (espaço, tab ou =)
+        # para não juntar acidentalmente com a próxima propriedade (ex.: TEL:)
+        content = re.sub(r'=\r\n(?=[ \t=])', '', content)
+        content = re.sub(r'=\n(?=[ \t=])', '', content)
+        lines = content.splitlines()
+        result = []
+        for line in lines:
+            if 'ENCODING=QUOTED-PRINTABLE' in line.upper() and ':' in line:
+                parts = line.rsplit(':', 1)
+                if len(parts) == 2:
+                    left, value = parts
+                    value = value.replace('\r', '').replace('\n', '').strip()
+                    if value and '=' in value:
+                        try:
+                            # quopri espera bytes; Q-P usa caracteres ASCII para =XX
+                            raw_bytes = value.encode('latin-1', errors='replace')
+                            decoded_bytes = quopri.decodestring(raw_bytes)
+                            decoded_str = decoded_bytes.decode('utf-8', errors='replace')
+                            line = left + ':' + decoded_str
+                        except (ValueError, TypeError, UnicodeDecodeError, UnicodeEncodeError):
+                            pass
+            result.append(line)
+        return '\r\n'.join(result)
+
     def preview_vcf(self, file, max_entries=10):
         """Gera preview do VCF para exibir antes de importar."""
         try:
@@ -954,6 +990,7 @@ class ContactVcfImportService(ContactImportService):
         raw = file.read()
         file.seek(0)
         decoded = self._decode_file_content(raw)
+        decoded = self._normalize_vcf_content(decoded)
         samples = []
         total = 0
         total_with_phone = 0
@@ -998,6 +1035,7 @@ class ContactVcfImportService(ContactImportService):
             self._remove_import_file(import_record.file_path)
             return
         decoded = self._decode_file_content(raw)
+        decoded = self._normalize_vcf_content(decoded)
         cards = list(vobject.readComponents(io.StringIO(decoded)))
         import_record.total_rows = len(cards)
         import_record.status = ContactImport.Status.PROCESSING
