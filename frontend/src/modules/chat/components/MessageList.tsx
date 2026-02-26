@@ -319,6 +319,8 @@ export function MessageList() {
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [editMessage, setEditMessage] = useState<Message | null>(null);
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
+  /** Qual ação de retry está em andamento: 'simple' = Tentar novamente, 'fallback' = Sim (outra instância). Usado para mostrar "Enviando..." só no botão clicado. */
+  const [retryActionKind, setRetryActionKind] = useState<'simple' | 'fallback' | null>(null);
   
   console.log('✅ [MessageList] Estados inicializados');
   
@@ -1243,6 +1245,31 @@ export function MessageList() {
                     </span>
                   )}
                 </div>
+                {messageItem.direction === 'outgoing' && messageItem.status === 'failed' && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <button
+                      type="button"
+                      disabled={retryingMessageId === messageItem.id}
+                      onClick={async () => {
+                        setRetryingMessageId(messageItem.id);
+                        setRetryActionKind('simple');
+                        try {
+                          await api.post(`/chat/messages/${messageItem.id}/retry-send/`, { use_fallback: false });
+                          toast.success('Mensagem reenviada');
+                        } catch (e: any) {
+                          toast.error(e.response?.data?.error || 'Erro ao reenviar');
+                        } finally {
+                          setRetryingMessageId(null);
+                          setRetryActionKind(null);
+                        }
+                      }}
+                      className="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                      aria-label="Tentar enviar novamente"
+                    >
+                      {retryingMessageId === messageItem.id && retryActionKind === 'simple' ? 'Enviando...' : 'Tentar novamente'}
+                    </button>
+                  </div>
+                )}
                 {messageItem.direction === 'outgoing' && messageItem.status === 'failed' && messageItem.metadata?.can_use_fallback && (
                   <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200/50">
                     <span className="text-xs text-amber-700 flex-1">
@@ -1259,6 +1286,7 @@ export function MessageList() {
                         disabled={retryingMessageId === messageItem.id}
                         onClick={async () => {
                           setRetryingMessageId(messageItem.id);
+                          setRetryActionKind('fallback');
                           try {
                             await api.post(`/chat/messages/${messageItem.id}/retry-send/`, { use_fallback: true });
                             toast.success('Mensagem reenviada por outra instância');
@@ -1266,17 +1294,20 @@ export function MessageList() {
                             toast.error(e.response?.data?.error || 'Erro ao reenviar');
                           } finally {
                             setRetryingMessageId(null);
+                            setRetryActionKind(null);
                           }
                         }}
                         className="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                        aria-label="Enviar por outra instância"
                       >
-                        {retryingMessageId === messageItem.id ? 'Enviando...' : 'Sim'}
+                        {retryingMessageId === messageItem.id && retryActionKind === 'fallback' ? 'Enviando...' : 'Sim'}
                       </button>
                       <button
                         type="button"
                         disabled={retryingMessageId === messageItem.id}
                         onClick={() => {}}
                         className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                        aria-label="Não enviar por outra instância"
                       >
                         Não
                       </button>

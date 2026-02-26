@@ -4157,9 +4157,10 @@ class MessageViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='retry-send')
     def retry_send(self, request, pk=None):
         """
-        Reenviar mensagem que falhou por instância indisponível, usando outra instância (fallback).
-        Body: { "use_fallback": true }
-        Só permitido quando a mensagem está failed e metadata.can_use_fallback é true.
+        Reenviar mensagem que falhou no envio.
+        - Body { "use_fallback": true }: reenviar por outra instância (fallback).
+          Exige metadata.can_use_fallback na mensagem.
+        - Body {} ou { "use_fallback": false }: tentar reenviar na mesma instância (retry simples).
         """
         message = self.get_object()
         user = request.user
@@ -4169,17 +4170,34 @@ class MessageViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Só é possível reenviar mensagens enviadas por você'}, status=status.HTTP_400_BAD_REQUEST)
         if message.status != 'failed':
             return Response({'error': 'Mensagem não está em estado de falha'}, status=status.HTTP_400_BAD_REQUEST)
-        meta = message.metadata or {}
-        if not meta.get('can_use_fallback'):
-            return Response(
-                {'error': 'Esta mensagem não pode ser reenviada por outra instância'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        use_fallback_val = request.data.get('use_fallback')
-        if use_fallback_val not in (True, 'true', '1'):
-            return Response({'error': 'Envie use_fallback: true para confirmar'}, status=status.HTTP_400_BAD_REQUEST)
+
         from apps.chat.redis_streams import enqueue_send_message
         from apps.chat.utils.websocket import broadcast_message_status_update
+
+        use_fallback_val = request.data.get('use_fallback')
+        if use_fallback_val in (True, 'true', '1'):
+            # Ramo fallback: comportamento igual ao anterior
+            meta = message.metadata or {}
+            if not meta.get('can_use_fallback'):
+                return Response(
+                    {'error': 'Esta mensagem não pode ser reenviada por outra instância'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            meta = (message.metadata or {}).copy()
+            meta.pop('send_error', None)
+            meta.pop('can_use_fallback', None)
+            meta.pop('fallback_instance_friendly_name', None)
+            meta.pop('unavailable_instance_friendly_name', None)
+            message.status = 'pending'
+            message.error_message = ''
+            message.metadata = meta
+            message.save(update_fields=['status', 'error_message', 'metadata'])
+            broadcast_message_status_update(message)
+            enqueue_send_message(str(message.id), retry=0, extra={'use_fallback': True})
+            logger.info("✅ [RETRY SEND] Mensagem %s reenfileirada com use_fallback", message.id)
+            return Response({'success': True, 'message': 'Mensagem reenfileirada para envio por outra instância'}, status=status.HTTP_200_OK)
+
+        # Retry simples: mesma instância
         meta = (message.metadata or {}).copy()
         meta.pop('send_error', None)
         meta.pop('can_use_fallback', None)
@@ -4190,9 +4208,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         message.metadata = meta
         message.save(update_fields=['status', 'error_message', 'metadata'])
         broadcast_message_status_update(message)
-        enqueue_send_message(str(message.id), retry=0, extra={'use_fallback': True})
-        logger.info("✅ [RETRY SEND] Mensagem %s reenfileirada com use_fallback", message.id)
-        return Response({'success': True, 'message': 'Mensagem reenfileirada para envio por outra instância'}, status=status.HTTP_200_OK)
+        enqueue_send_message(str(message.id), retry=0)
+        logger.info("✅ [RETRY SEND] Mensagem %s reenfileirada para envio", message.id)
+        return Response({'success': True, 'message': 'Mensagem reenfileirada para envio'}, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'], url_path='edit')
     def edit_message(self, request, pk=None):
