@@ -1025,15 +1025,27 @@ class ContactVcfImportService(ContactImportService):
         content = re.sub(r'=\r\n(?=[ \t=])', '', content)
         content = re.sub(r'=\n(?=[ \t=])', '', content)
         lines = content.splitlines()
+
+        # Pré-passagem: forçar "Label descritivo: user@domain" → "EMAIL:user@domain" (evita parse error em qualquer caminho)
+        def _force_email_line(line):
+            s = line.strip()
+            if not s or ':' not in s:
+                return line
+            left, val = s.split(':', 1)
+            prop = left.split(';')[0].strip()
+            val = val.strip()
+            if not re.match(r'^[A-Z0-9][A-Z0-9-]*$', prop, re.IGNORECASE) and val and '@' in val and re.search(r'[^@\s]+@[^@\s]+', val):
+                return 'EMAIL:' + val
+            return line
+
+        lines = [_force_email_line(ln) for ln in lines]
+
         result = []
 
         def _sanitize_line_for_vobject(l):
-            """Remove espaços após ; e \\n/\\r no valor para o vobject não falhar."""
+            """Remove espaços após ; e \\n/\\r em toda a linha para o vobject não falhar (NOTE com texto 'Label: email' não pode ter \\n no meio)."""
             l = re.sub(r';\s+', ';', l)
-            if ':' in l:
-                left, val = l.rsplit(':', 1)
-                val = val.replace('\r', '').replace('\n', ' ')
-                l = left + ':' + val
+            l = l.replace('\r', '').replace('\n', ' ')
             return l
 
         for line in lines:
