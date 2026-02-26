@@ -65,6 +65,17 @@ interface ChatState {
   setReplyToMessage: (message: Message | null) => void;
   clearReply: () => void;
 
+  // Alerta de status da instância Evolution (connecting, close, error)
+  instanceStatusAlert: {
+    instance_id: string;
+    instance_name: string;
+    friendly_name: string;
+    connection_state: string;
+    status: string;
+    last_error?: string;
+  } | null;
+  setInstanceStatusAlert: (alert: ChatState['instanceStatusAlert']) => void;
+
   // Reset
   reset: () => void;
 }
@@ -172,6 +183,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typing: false,
   typingUser: null,
   connectionStatus: 'disconnected',
+  instanceStatusAlert: null,
 
   // Departamentos
   setDepartments: (departments) => set({ departments }),
@@ -642,6 +654,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setReplyToMessage: (message) => set({ replyToMessage: message }),
   clearReply: () => set({ replyToMessage: null }),
 
+  setInstanceStatusAlert: (alert) => set({ instanceStatusAlert: alert }),
+
   // Reset
   reset: () => set({
     departments: [],
@@ -652,6 +666,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     typing: false,
     typingUser: null,
     connectionStatus: 'disconnected',
-    replyToMessage: null
+    replyToMessage: null,
+    instanceStatusAlert: null
   })
 }));

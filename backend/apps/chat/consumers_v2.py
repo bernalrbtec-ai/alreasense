@@ -522,7 +522,24 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'total_participants': event.get('total_participants', 0)
         }))
         logger.info(f"✅ [CHAT WS V2] group_participants_updated enviado para frontend")
-    
+
+    async def instance_status_changed(self, event):
+        """Broadcast quando a instância Evolution muda de status (connecting, close, error)."""
+        instance = event.get('instance')
+        if not instance or not isinstance(instance, dict):
+            return
+        try:
+            payload = json.dumps({'type': 'instance_status_changed', 'instance': instance})
+            await self.send(text_data=payload)
+            logger.debug(
+                "[CHAT WS V2] instance_status_changed enviado: connection_state=%s",
+                instance.get('connection_state'),
+            )
+        except (TypeError, ValueError) as e:
+            logger.warning("[CHAT WS V2] instance_status_changed serialization failed: %s", e)
+        except Exception as e:
+            logger.warning("[CHAT WS V2] instance_status_changed send failed: %s", e)
+
     # Database queries (sync_to_async)
     
     def _decode_jwt_payload_unsafe(self, token):

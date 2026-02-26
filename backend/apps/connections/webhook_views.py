@@ -1501,6 +1501,8 @@ class EvolutionWebhookView(APIView):
                 from apps.notifications.models import WhatsAppInstance
 
                 qs = WhatsAppInstance.objects.filter(instance_name=instance_name)
+                tenant_ids = list(qs.values_list('tenant_id', flat=True).distinct())
+
                 updates = {
                     'last_check': timezone.now(),
                 }
@@ -1517,6 +1519,34 @@ class EvolutionWebhookView(APIView):
 
                 if updates:
                     qs.update(**updates)
+
+                if tenant_ids:
+                    instance = WhatsAppInstance.objects.filter(instance_name=instance_name).first()
+                    if instance:
+                        payload_instance = {
+                            'instance_id': str(instance.id),
+                            'instance_name': instance.instance_name or '',
+                            'friendly_name': getattr(instance, 'friendly_name', '') or '',
+                            'connection_state': getattr(instance, 'connection_state', '') or '',
+                            'status': getattr(instance, 'status', '') or '',
+                            'last_error': (instance.last_error or '')[:500],
+                        }
+                        try:
+                            from channels.layers import get_channel_layer
+                            from asgiref.sync import async_to_sync
+                            channel_layer = get_channel_layer()
+                            if channel_layer:
+                                for tid in tenant_ids:
+                                    async_to_sync(channel_layer.group_send)(
+                                        f"chat_tenant_{tid}",
+                                        {'type': 'instance_status_changed', 'instance': payload_instance},
+                                    )
+                        except Exception as broadcast_err:
+                            logger.warning(
+                                "[EVOLUTION] Broadcast instance_status_changed failed (webhook still 200): %s",
+                                broadcast_err,
+                                exc_info=True,
+                            )
 
             return Response({'status': 'success'})
         except Exception as e:

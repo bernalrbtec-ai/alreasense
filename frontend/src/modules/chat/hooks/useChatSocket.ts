@@ -20,7 +20,7 @@ import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
 export function useChatSocket(conversationId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
-  const { addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions } = useChatStore();
+  const { addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, setInstanceStatusAlert } = useChatStore();
   // ✅ REMOVIDO: updateAttachment não é mais usado aqui (movido para useTenantSocket)
   const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
@@ -50,6 +50,40 @@ export function useChatSocket(conversationId?: string) {
       clearInterval(checkConnection);
     };
   }, [token, user]);
+
+  // Hydration: ao montar o Chat, buscar status das instâncias e exibir alerta se alguma já estiver desconectada
+  useEffect(() => {
+    if (!user?.tenant_id) return;
+    let cancelled = false;
+    api.get<{ results?: Array<{ connection_state?: string; integration_type?: string; id?: string; instance_name?: string; friendly_name?: string; status?: string; last_error?: string }> }>('/notifications/whatsapp-instances/', { params: { page_size: 100 } })
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data?.results ?? Array.isArray(res.data) ? res.data : [];
+        const withProblem = list.find(
+          (inst) =>
+            (inst.connection_state ?? '') !== 'open' &&
+            (inst.integration_type === 'evolution' || !inst.integration_type)
+        );
+        if (withProblem) {
+          setInstanceStatusAlert({
+            instance_id: String(withProblem.id ?? ''),
+            instance_name: String(withProblem.instance_name ?? ''),
+            friendly_name: String(withProblem.friendly_name ?? ''),
+            connection_state: String(withProblem.connection_state ?? ''),
+            status: String(withProblem.status ?? ''),
+            last_error: withProblem.last_error != null ? String(withProblem.last_error) : undefined,
+          });
+        } else {
+          setInstanceStatusAlert(null);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          // Não quebrar a página; apenas não setar alerta
+        }
+      });
+    return () => { cancelled = true; };
+  }, [user?.tenant_id, setInstanceStatusAlert]);
 
   // Subscribe/Unsubscribe quando conversationId muda
   useEffect(() => {
@@ -278,6 +312,24 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    const handleInstanceStatusChanged = (data: WebSocketMessage) => {
+      const instance = data.instance as Record<string, unknown> | undefined;
+      if (!instance || typeof instance !== 'object') return;
+      const connection_state = (instance.connection_state as string) || '';
+      if (connection_state === 'open') {
+        setInstanceStatusAlert(null);
+        return;
+      }
+      setInstanceStatusAlert({
+        instance_id: String(instance.instance_id ?? ''),
+        instance_name: String(instance.instance_name ?? ''),
+        friendly_name: String(instance.friendly_name ?? ''),
+        connection_state,
+        status: String(instance.status ?? ''),
+        last_error: instance.last_error != null ? String(instance.last_error) : undefined,
+      });
+    };
+
     // Registrar listeners
     chatWebSocketManager.on('message_received', handleMessageReceived);
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
@@ -288,6 +340,7 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('message_edited', handleMessageEdited);
     // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
     chatWebSocketManager.on('new_conversation', handleNewConversation);
+    chatWebSocketManager.on('instance_status_changed', handleInstanceStatusChanged);
 
     // Cleanup
     return () => {
@@ -298,10 +351,10 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_reaction_update', handleReactionUpdate);
       chatWebSocketManager.off('message_deleted', handleMessageDeleted);
       chatWebSocketManager.off('message_edited', handleMessageEdited);
-      // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
       chatWebSocketManager.off('new_conversation', handleNewConversation);
+      chatWebSocketManager.off('instance_status_changed', handleInstanceStatusChanged);
     };
-  }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, notificationsEnabled, showNotification]);
+  }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, setInstanceStatusAlert, notificationsEnabled, showNotification]);
 
   // API pública
   // ✅ CORREÇÃO CRÍTICA: Buscar conversationId do store diretamente ao invés de usar do closure
