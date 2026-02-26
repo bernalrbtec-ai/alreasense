@@ -1,6 +1,10 @@
 -- Adiciona campos para importação assíncrona CSV + VCF (ContactImport)
 -- Tabela: contacts_import
--- Execute manualmente se não usar Django migrate.
+--
+-- IMPORTANTE: Execute este script na base ANTES do deploy da versão que usa
+-- import_type e import_options. Caso contrário, ContactImport.objects.create()
+-- falhará com coluna inexistente.
+-- Execute manualmente se não usar Django migrate (ex.: psql ou cliente PostgreSQL).
 
 -- import_type: 'csv' ou 'vcf'
 ALTER TABLE contacts_import

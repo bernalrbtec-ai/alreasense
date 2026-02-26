@@ -298,6 +298,17 @@ class ContactImportService:
         
         return warnings
     
+    def _remove_import_file(self, file_path):
+        """Remove arquivo temporário de importação se existir (evita acúmulo em disco)."""
+        import os
+        if not file_path:
+            return
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except OSError as e:
+            logger.warning("Não foi possível remover arquivo temporário %s: %s", file_path, e)
+
     def process_csv_from_record(self, import_record):
         """
         Processa importação CSV a partir de um ContactImport já criado (arquivo em file_path).
@@ -317,6 +328,7 @@ class ContactImportService:
             import_record.status = ContactImport.Status.FAILED
             import_record.errors.append({'error': f'Não foi possível abrir o arquivo: {e}'})
             import_record.save()
+            self._remove_import_file(import_record.file_path)
             return
 
         decoded_file = self._decode_file_content(raw_content)
@@ -351,6 +363,7 @@ class ContactImportService:
         import_record.status = ContactImport.Status.COMPLETED
         import_record.completed_at = timezone.now()
         import_record.save(update_fields=['status', 'completed_at'])
+        self._remove_import_file(import_record.file_path)
 
     def process_csv(self, file, update_existing=False, auto_tag_id=None, delimiter=None, column_mapping=None):
         """
@@ -821,6 +834,15 @@ def run_import_from_record(import_id):
         import_record.status = ContactImport.Status.FAILED
         import_record.errors.append({'error': str(e)})
         import_record.save(update_fields=['status', 'errors'])
+        # Remover arquivo temporário também em caso de falha (evita acúmulo)
+        _path = getattr(import_record, 'file_path', None)
+        if _path:
+            try:
+                import os
+                if os.path.isfile(_path):
+                    os.remove(_path)
+            except OSError as err:
+                logger.warning("Não foi possível remover arquivo temporário após falha: %s", err)
 
 
 class ContactVcfImportService(ContactImportService):
@@ -891,20 +913,32 @@ class ContactVcfImportService(ContactImportService):
                 row['zipcode'] = (getattr(adr, 'code', '') or '').strip() or None
                 row['country'] = (getattr(adr, 'country', '') or '').strip() or None
 
-        # NOTE + campos extras em notes
+        # NOTE + campos extras em notes (leitura defensiva via contents para evitar vCards malformados)
         notes_parts = []
         note = card.contents.get('note', [])
         if note and getattr(note[0], 'value', None):
             notes_parts.append(note[0].value.strip())
         extras = []
-        if getattr(card, 'org', None) and card.org.value:
-            extras.append(f"Org: {card.org.value.strip()}")
-        if getattr(card, 'title', None) and card.title.value:
-            extras.append(f"Cargo: {card.title.value.strip()}")
-        if getattr(card, 'url', None) and card.url.value:
-            extras.append(f"URL: {card.url.value.strip()}")
-        if getattr(card, 'nickname', None) and card.nickname.value:
-            extras.append(f"Apelido: {card.nickname.value.strip()}")
+        for prop, label in (
+            ('org', 'Org'),
+            ('title', 'Cargo'),
+            ('url', 'URL'),
+            ('nickname', 'Apelido'),
+        ):
+            items = card.contents.get(prop, [])
+            if not items:
+                continue
+            raw_val = getattr(items[0], 'value', None)
+            if raw_val is None:
+                continue
+            # vobject pode retornar lista (ex.: ORG) ou string
+            if isinstance(raw_val, (list, tuple)):
+                val = (raw_val[0] if raw_val else '')
+            else:
+                val = raw_val
+            val = str(val).strip()
+            if val:
+                extras.append(f"{label}: {val}")
         if extras:
             notes_parts.append('\n'.join(extras))
         row['notes'] = '\n'.join(notes_parts) if notes_parts else ''
@@ -922,14 +956,15 @@ class ContactVcfImportService(ContactImportService):
         decoded = self._decode_file_content(raw)
         samples = []
         total = 0
+        total_with_phone = 0
         try:
             for card in vobject.readComponents(io.StringIO(decoded)):
                 total += 1
-                if len(samples) >= max_entries:
-                    continue
                 row = self._vcard_to_row(card)
                 if row.get('phone'):
-                    samples.append(row)
+                    total_with_phone += 1
+                    if len(samples) < max_entries:
+                        samples.append(row)
         except Exception as e:
             return {'status': 'error', 'error': str(e)}
         return {
@@ -938,6 +973,7 @@ class ContactVcfImportService(ContactImportService):
             'column_mapping': {},
             'sample_rows': samples,
             'total_rows_detected': total,
+            'total_with_phone': total_with_phone,
             'validation_warnings': [],
             'source': 'vcf',
         }
@@ -959,12 +995,21 @@ class ContactVcfImportService(ContactImportService):
             import_record.status = ContactImport.Status.FAILED
             import_record.errors.append({'error': f'Não foi possível abrir o arquivo: {e}'})
             import_record.save()
+            self._remove_import_file(import_record.file_path)
             return
         decoded = self._decode_file_content(raw)
         cards = list(vobject.readComponents(io.StringIO(decoded)))
         import_record.total_rows = len(cards)
         import_record.status = ContactImport.Status.PROCESSING
         import_record.save(update_fields=['total_rows', 'status'])
+
+        if len(cards) == 0:
+            import_record.status = ContactImport.Status.COMPLETED
+            import_record.completed_at = timezone.now()
+            import_record.errors.append({'error': 'Nenhum contato encontrado no arquivo VCF'})
+            import_record.save(update_fields=['status', 'completed_at', 'errors'])
+            self._remove_import_file(import_record.file_path)
+            return
 
         for i, card in enumerate(cards):
             try:
@@ -988,6 +1033,7 @@ class ContactVcfImportService(ContactImportService):
         import_record.status = ContactImport.Status.COMPLETED
         import_record.completed_at = timezone.now()
         import_record.save(update_fields=['status', 'completed_at'])
+        self._remove_import_file(import_record.file_path)
 
 
 class ContactExportService:

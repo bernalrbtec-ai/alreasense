@@ -16,6 +16,7 @@ interface PreviewData {
   column_mapping: Record<string, string | null>
   sample_rows: any[]
   total_rows_detected: number
+  total_with_phone?: number
   validation_warnings: any[]
   delimiter: string
   has_ddd_separated?: boolean
@@ -573,7 +574,11 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Preview dos Dados</h3>
                   <span className="text-sm text-gray-500">
-                    ~{previewData.total_rows_detected} {previewData.source === 'vcf' ? 'contatos' : 'linhas'} detectados
+                    {previewData.source === 'vcf'
+                      ? (previewData.total_with_phone != null && previewData.total_with_phone !== previewData.total_rows_detected
+                          ? `${previewData.total_rows_detected} contatos no arquivo; ${previewData.total_with_phone} com telefone (necessário para importar)`
+                          : `~${previewData.total_rows_detected} contatos detectados`)
+                      : `~${previewData.total_rows_detected} linhas detectadas`}
                   </span>
               </div>
               

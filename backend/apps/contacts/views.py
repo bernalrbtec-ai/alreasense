@@ -239,7 +239,7 @@ class ContactViewSet(viewsets.ModelViewSet):
                 {'error': 'Arquivo CSV não fornecido'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if not file.name.endswith('.csv'):
+        if not file.name.lower().endswith('.csv'):
             return Response(
                 {'error': 'Arquivo deve ser CSV'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -249,9 +249,14 @@ class ContactViewSet(viewsets.ModelViewSet):
                 {'error': 'Arquivo muito grande. Máximo: 10 MB'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         from django.conf import settings
-        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp_imports')
+        media_root = getattr(settings, 'MEDIA_ROOT', None)
+        if not media_root:
+            return Response(
+                {'error': 'Armazenamento temporário não configurado (MEDIA_ROOT).'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        temp_dir = os.path.join(media_root, 'temp_imports')
         os.makedirs(temp_dir, exist_ok=True)
         unique_name = f"{request.user.tenant.id}_{uuid_module.uuid4().hex}_{file.name}"
         temp_file_path = os.path.join(temp_dir, unique_name)
@@ -358,7 +363,13 @@ class ContactViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         from django.conf import settings
-        temp_dir = os.path.join(settings.MEDIA_ROOT, 'temp_imports')
+        media_root = getattr(settings, 'MEDIA_ROOT', None)
+        if not media_root:
+            return Response(
+                {'error': 'Armazenamento temporário não configurado (MEDIA_ROOT).'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        temp_dir = os.path.join(media_root, 'temp_imports')
         os.makedirs(temp_dir, exist_ok=True)
         unique_name = f"{request.user.tenant.id}_{uuid_module.uuid4().hex}_{file.name}"
         temp_file_path = os.path.join(temp_dir, unique_name)
