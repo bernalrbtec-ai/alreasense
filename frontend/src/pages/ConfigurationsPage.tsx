@@ -366,27 +366,6 @@ export default function ConfigurationsPage() {
   const audioStreamRef = useRef<MediaStream | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const [isModelTestModalOpen, setIsModelTestModalOpen] = useState(false)
-  const [modelTestInput, setModelTestInput] = useState('')
-  const [modelTestMessages, setModelTestMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
-  const [modelTestLoading, setModelTestLoading] = useState(false)
-  const [modelTestSelectedModel, setModelTestSelectedModel] = useState<string>('')
-  const [modelTestRequest, setModelTestRequest] = useState<any | null>(null)
-  const [modelTestResponse, setModelTestResponse] = useState<any | null>(null)
-  const [modelTestRequestId, setModelTestRequestId] = useState<string>('')
-  const [modelTestTraceId, setModelTestTraceId] = useState<string>('')
-  const [modelTestError, setModelTestError] = useState<string | null>(null)
-  const [modelTestConversationId, setModelTestConversationId] = useState<string>('')
-  const [modelTestConversations, setModelTestConversations] = useState<Array<{ id: string; contact_name: string; contact_phone: string }>>([])
-  const [modelTestSendToChat, setModelTestSendToChat] = useState(false)
-  const [modelTestPrompt, setModelTestPrompt] = useState('')
-  const [modelTestRagItems, setModelTestRagItems] = useState<Array<{ title: string; content: string }>>([])
-  const [modelTestRagLoading, setModelTestRagLoading] = useState(false)
-  const modelTestRagInputRef = useRef<HTMLInputElement>(null)
-  const modelTestPollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const modelTestPollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const MAX_PROMPT_LENGTH = 1_000_000  // ~1 MB em texto típico
-  const MAX_RAG_FILE_SIZE = 2 * 1024 * 1024 // 2MB
   const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
   const [gatewayAuditLoading, setGatewayAuditLoading] = useState(false)
   const [gatewayAuditError, setGatewayAuditError] = useState<string | null>(null)
@@ -1048,296 +1027,6 @@ export default function ConfigurationsPage() {
     resetAudioRecorder()
   }
 
-  const handleOpenModelTestModal = async () => {
-    setIsModelTestModalOpen(true)
-    setModelTestInput('')
-    setModelTestMessages([])
-    setModelTestRequest(null)
-    setModelTestResponse(null)
-    setModelTestRequestId('')
-    setModelTestTraceId('')
-    setModelTestError(null)
-    setModelTestConversationId('')
-    setModelTestSendToChat(false)
-    setModelTestPrompt('')
-    setModelTestRagItems([])
-    setModelTestRagLoading(false)
-    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
-    if (aiSettings?.agent_model && aiModelOptions.includes(aiSettings.agent_model)) {
-      setModelTestSelectedModel(aiSettings.agent_model)
-    } else if (aiModelOptions.length > 0) {
-      setModelTestSelectedModel(aiModelOptions[0])
-    } else {
-      setModelTestSelectedModel('')
-    }
-    
-    // Carregar lista de conversas
-    try {
-      const response = await api.get('/chat/conversations/', {
-        params: { limit: 50, ordering: '-last_message_at' }
-      })
-      const conversations = response.data.results || response.data || []
-      setModelTestConversations(conversations.map((conv: any) => ({
-        id: conv.id,
-        contact_name: conv.contact_name || conv.contact_phone || 'Sem nome',
-        contact_phone: conv.contact_phone || ''
-      })))
-    } catch (error) {
-      console.error('Erro ao carregar conversas:', error)
-      setModelTestConversations([])
-    }
-  }
-
-  const handleCloseModelTestModal = () => {
-    setIsModelTestModalOpen(false)
-    setModelTestInput('')
-    setModelTestMessages([])
-    setModelTestLoading(false)
-    setModelTestSelectedModel('')
-    setModelTestRequest(null)
-    setModelTestResponse(null)
-    setModelTestRequestId('')
-    setModelTestTraceId('')
-    setModelTestError(null)
-    setModelTestConversationId('')
-    setModelTestSendToChat(false)
-    setModelTestPrompt('')
-    setModelTestRagItems([])
-    setModelTestRagLoading(false)
-    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
-  }
-
-  const handleModelTestRagFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const name = file.name.toLowerCase()
-    if (!name.endsWith('.txt') && !name.endsWith('.md')) {
-      showErrorToast('Use um arquivo .txt ou .md')
-      e.target.value = ''
-      return
-    }
-    if (file.size > MAX_RAG_FILE_SIZE) {
-      showErrorToast('Arquivo muito grande. Máximo 2MB.')
-      e.target.value = ''
-      return
-    }
-    setModelTestRagLoading(true)
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const content = typeof reader.result === 'string' ? reader.result : ''
-        setModelTestRagItems([{ title: file.name, content }])
-      } catch {
-        showErrorToast('Erro ao ler o arquivo.')
-        setModelTestRagItems([])
-      }
-      setModelTestRagLoading(false)
-      e.target.value = ''
-    }
-    reader.onerror = () => {
-      showErrorToast('Erro ao ler o arquivo.')
-      setModelTestRagLoading(false)
-      e.target.value = ''
-    }
-    reader.readAsText(file, 'UTF-8')
-  }
-
-  const handleRemoveModelTestRag = () => {
-    setModelTestRagItems([])
-    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
-  }
-
-  useEffect(() => {
-    return () => {
-      if (modelTestPollingIntervalRef.current) {
-        clearInterval(modelTestPollingIntervalRef.current)
-        modelTestPollingIntervalRef.current = null
-      }
-      if (modelTestPollingTimeoutRef.current) {
-        clearTimeout(modelTestPollingTimeoutRef.current)
-        modelTestPollingTimeoutRef.current = null
-      }
-    }
-  }, [])
-
-  const MODEL_TEST_POLL_INTERVAL_MS = 2500
-  const MODEL_TEST_POLL_MAX_MS = 5 * 60 * 1000
-
-  const handleSendModelTest = async () => {
-    if (!modelTestInput.trim() || !aiSettings) return
-    if (!aiSettings.n8n_ai_webhook_url) {
-      setModelTestMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'Configure o webhook do Gateway IA antes de testar.',
-        },
-      ])
-      return
-    }
-    if (modelTestSendToChat && !modelTestConversationId) {
-      setModelTestError('Selecione uma conversa para enviar a resposta ao chat.')
-      return
-    }
-    const message = modelTestInput.trim()
-    setModelTestInput('')
-    setModelTestMessages((prev) => [...prev, { role: 'user', content: message }])
-    setModelTestLoading(true)
-    setModelTestError(null)
-
-    try {
-      const requestData: any = {
-        message,
-        context: {
-          action: 'model_test',
-          model: modelTestSelectedModel || aiSettings.agent_model,
-        },
-        model: modelTestSelectedModel || aiSettings.agent_model,
-      }
-
-      if (modelTestConversationId) {
-        requestData.conversation_id = modelTestConversationId
-      }
-      if (modelTestSendToChat && modelTestConversationId) {
-        requestData.send_to_chat = true
-      }
-      if (modelTestPrompt.trim()) {
-        requestData.prompt = modelTestPrompt.trim()
-      }
-      if (modelTestRagItems.length > 0) {
-        requestData.knowledge_items = modelTestRagItems.map((item) => ({
-          title: item.title,
-          content: item.content,
-          source: 'test_upload',
-        }))
-      }
-      const historyWithCurrent = [...modelTestMessages, { role: 'user' as const, content: message }]
-      if (historyWithCurrent.length > 0) {
-        requestData.messages = historyWithCurrent
-      }
-
-      const response = await api.post('/ai/gateway/test/', requestData)
-      const payload = response.data || {}
-      const data = payload.data || {}
-      const requestPayload = data.request || payload.request || null
-      const responseData = data.response || payload.response || null
-      const requestId = payload.request_id || ''
-      const traceId = payload.trace_id || ''
-
-      if (payload.deferred && payload.job_id) {
-        setModelTestMessages((prev) => [...prev, { role: 'assistant', content: 'Deixe-me pensar...' }])
-        const jobId = payload.job_id as string
-        const startedAt = Date.now()
-        const clearPolling = () => {
-          if (modelTestPollingIntervalRef.current) {
-            clearInterval(modelTestPollingIntervalRef.current)
-            modelTestPollingIntervalRef.current = null
-          }
-          if (modelTestPollingTimeoutRef.current) {
-            clearTimeout(modelTestPollingTimeoutRef.current)
-            modelTestPollingTimeoutRef.current = null
-          }
-          setModelTestLoading(false)
-        }
-        const poll = async () => {
-          if (Date.now() - startedAt > MODEL_TEST_POLL_MAX_MS) {
-            setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Tempo esgotado. Resultado não disponível.' }])
-            clearPolling()
-            return
-          }
-          try {
-            const r = await api.get(`/ai/gateway/test/result/${jobId}/`)
-            const st = r.data?.status
-            if (st === 'completed') {
-              const resp = r.data?.response || {}
-              setModelTestResponse(resp)
-              let content = ''
-              if (resp?.reply_text) content = String(resp.reply_text)
-              else if (resp?.text) content = String(resp.text)
-              else if (resp) content = typeof resp === 'string' ? resp : JSON.stringify(resp, null, 2)
-              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content }])
-              clearPolling()
-              return
-            }
-            if (st === 'failed') {
-              const errMsg = r.data?.error || 'Falha no processamento.'
-              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: `Erro: ${errMsg}` }])
-              setModelTestError(errMsg)
-              clearPolling()
-              return
-            }
-          } catch (_e: any) {
-            if (_e.response?.status === 404) {
-              setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Resultado expirado ou não encontrado.' }])
-              clearPolling()
-              return
-            }
-          }
-        }
-        modelTestPollingIntervalRef.current = setInterval(poll, MODEL_TEST_POLL_INTERVAL_MS)
-        setTimeout(() => poll(), 400)
-        modelTestPollingTimeoutRef.current = setTimeout(() => {
-          if (modelTestPollingIntervalRef.current) {
-            setModelTestMessages((prev) => [...prev.slice(0, -1), { role: 'assistant', content: 'Tempo esgotado. Resultado não disponível.' }])
-            clearPolling()
-          }
-        }, MODEL_TEST_POLL_MAX_MS)
-        return
-      }
-
-      setModelTestRequest(requestPayload)
-      setModelTestResponse(responseData)
-      setModelTestRequestId(requestId)
-      setModelTestTraceId(traceId)
-
-      const sendToChatResult = payload.send_to_chat_result
-      if (sendToChatResult) {
-        if (sendToChatResult.success) {
-          showSuccessToast('Resposta enviada ao chat com sucesso.')
-        } else {
-          const msg =
-            sendToChatResult.error === 'CONVERSATION_NOT_FOUND'
-              ? 'Conversa não encontrada.'
-              : sendToChatResult.error === 'SEM_PERMISSÃO_CONVERSA'
-                ? 'Sem permissão para enviar nesta conversa.'
-                : sendToChatResult.error === 'REPLY_VAZIO_OU_CONVERSA_NAO_SELECIONADA'
-                  ? 'Selecione uma conversa e tente novamente.'
-                  : sendToChatResult.detail || 'Não foi possível enviar ao chat.'
-          showErrorToast(msg)
-        }
-      }
-
-      let content = ''
-      if (responseData?.reply_text) {
-        content = String(responseData.reply_text)
-      } else if (responseData?.text) {
-        content = String(responseData.text)
-      } else if (responseData) {
-        content = typeof responseData === 'string' ? responseData : JSON.stringify(responseData, null, 2)
-      } else {
-        content = JSON.stringify(payload, null, 2)
-      }
-      setModelTestMessages((prev) => [...prev, { role: 'assistant', content }])
-    } catch (error) {
-      const status = (error as { response?: { status?: number } })?.response?.status
-      const errorMessage =
-        status === 429
-          ? 'Muitas requisições. Aguarde um minuto e tente novamente.'
-          : (error as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message ||
-            (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-            (error instanceof Error ? error.message : 'Erro ao testar a IA.')
-      const errorPayload = (error as { response?: { data?: any } })?.response?.data || null
-      setModelTestRequest(errorPayload?.request || null)
-      setModelTestResponse(errorPayload?.response || null)
-      setModelTestRequestId(errorPayload?.request_id || '')
-      setModelTestTraceId(errorPayload?.trace_id || '')
-      setModelTestError(errorMessage)
-      setModelTestMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }])
-    } finally {
-      setModelTestLoading(false)
-    }
-  }
-
   const handleStartAudioRecording = async () => {
     if (isAudioRecording || audioTestLoading) return
 
@@ -1746,7 +1435,11 @@ export default function ConfigurationsPage() {
       if (aiSettings) {
         try {
           const secretaryModel = (aiSettings.secretary_model ?? '').trim()
-          const settingsRes = await api.put('/ai/settings/', { ...aiSettings, secretary_model: secretaryModel })
+          const settingsRes = await api.put('/ai/settings/', {
+            ...aiSettings,
+            secretary_model: secretaryModel,
+            secretary_enabled: profileToSave.is_active,
+          })
           if (settingsRes?.data) setAiSettings(settingsRes.data)
         } catch (settingsErr: any) {
           console.error('Erro ao salvar modelo da BIA:', settingsErr)
@@ -2594,25 +2287,6 @@ export default function ConfigurationsPage() {
                     </label>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-base font-semibold">Ativar Secretária IA (Inbox)</Label>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Atende conversas no Inbox com a secretária virtual (Bia) quando habilitada.
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        disabled={!aiSettings.ai_enabled}
-                        checked={!!aiSettings.secretary_enabled}
-                        onChange={(e) => setAiSettings({ ...aiSettings, secretary_enabled: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
@@ -2647,30 +2321,19 @@ export default function ConfigurationsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <div className="flex items-center justify-between gap-3">
-                        <Label htmlFor="agent_model">Modelo padrão</Label>
-                        <div className="flex items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={handleOpenModelTestModal}
-                          disabled={!aiSettings.ai_enabled}
+                          onClick={() => {
+                            setModelsGatewayTested(false)
+                            setModelsGatewayTestError(null)
+                            setIsModelsGatewayModalOpen(true)
+                          }}
                         >
-                          Testar IA
+                          Gateways e Webhooks
                         </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setModelsGatewayTested(false)
-                              setModelsGatewayTestError(null)
-                              setIsModelsGatewayModalOpen(true)
-                            }}
-                          >
-                            Gateways e Webhooks
-                          </Button>
-                        </div>
+                        <Label htmlFor="agent_model">Modelo padrão</Label>
                       </div>
                       <select
                         id="agent_model"
@@ -3610,190 +3273,6 @@ export default function ConfigurationsPage() {
                 >
                   Cancelar
                 </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isModelTestModalOpen && aiSettings && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-3">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModelTestModal} />
-
-            <div className="relative flex flex-col rounded-lg bg-white text-left shadow-xl w-full max-w-6xl max-h-[94vh] overflow-hidden">
-              <div className="flex items-center justify-between shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
-                    <MessageSquare className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900">Testar IA</h3>
-                    <p className="text-xs text-gray-500">Modelo atual: {aiSettings.agent_model}</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleCloseModelTestModal}>
-                  Fechar
-                </Button>
-              </div>
-
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 min-h-0 overflow-auto">
-                {/* Coluna esquerda: configuração + chat + input */}
-                <div className="flex flex-col gap-3 min-h-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <Label htmlFor="model_test_select" className="text-xs">Modelo</Label>
-                      <select
-                        id="model_test_select"
-                        value={modelTestSelectedModel}
-                        onChange={(e) => setModelTestSelectedModel(e.target.value)}
-                        className="mt-0.5 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-                        disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
-                      >
-                        {aiModelOptions.length === 0 ? (
-                          <option value="">Nenhum modelo</option>
-                        ) : (
-                          aiModelOptions.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))
-                        )}
-                      </select>
-                    </div>
-                    <div>
-                      <Label htmlFor="model_test_conversation" className="text-xs">Conversa (opcional)</Label>
-                      <select
-                        id="model_test_conversation"
-                        value={modelTestConversationId}
-                        onChange={(e) => setModelTestConversationId(e.target.value)}
-                        className="mt-0.5 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-                      >
-                        <option value="">Selecione...</option>
-                        {modelTestConversations.map((conv) => (
-                          <option key={conv.id} value={conv.id}>{conv.contact_name} ({conv.contact_phone})</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  {modelTestConversationId && (
-                    <label className="flex items-center gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={modelTestSendToChat}
-                        onChange={(e) => setModelTestSendToChat(e.target.checked)}
-                        className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded"
-                      />
-                      Enviar resposta ao chat
-                    </label>
-                  )}
-
-                  <details className="rounded border border-gray-200 bg-gray-50/50 shrink-0">
-                    <summary className="cursor-pointer px-2 py-1.5 text-sm font-medium text-gray-700">Prompt do sistema (opcional)</summary>
-                    <div className="px-2 pb-2">
-                      <textarea
-                        id="model_test_prompt"
-                        value={modelTestPrompt}
-                        onChange={(e) => setModelTestPrompt(e.target.value)}
-                        placeholder="Ex.: Você é um assistente..."
-                        maxLength={MAX_PROMPT_LENGTH}
-                        rows={2}
-                        className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-xs"
-                      />
-                      <p className="text-xs text-gray-500">{modelTestPrompt.length} / {MAX_PROMPT_LENGTH}</p>
-                    </div>
-                  </details>
-
-                  <div className="shrink-0">
-                    <Label className="text-xs text-gray-700">RAG (opcional)</Label>
-                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                      <input
-                        ref={modelTestRagInputRef}
-                        type="file"
-                        accept=".txt,.md"
-                        onChange={handleModelTestRagFileChange}
-                        disabled={modelTestRagLoading}
-                        className="text-xs file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-xs"
-                      />
-                      {modelTestRagItems.length > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs">
-                          {modelTestRagItems[0].title}
-                          <button type="button" onClick={handleRemoveModelTestRag} className="rounded hover:bg-gray-200 p-0.5" title="Remover"><X className="h-3 w-3" /></button>
-                        </span>
-                      )}
-                      {modelTestRagLoading && <span className="text-xs text-gray-500">Lendo...</span>}
-                    </div>
-                  </div>
-
-                  <div className="flex-1 min-h-[140px] border border-gray-200 rounded-lg p-3 overflow-y-auto bg-gray-50 flex flex-col gap-2">
-                    {modelTestMessages.length === 0 ? (
-                      <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
-                    ) : (
-                      modelTestMessages.map((item, index) => (
-                        <div key={`${item.role}-${index}`} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[85%] rounded-lg px-2 py-1.5 text-sm ${item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
-                            <pre className="whitespace-pre-wrap font-sans text-xs">{item.content}</pre>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                    {modelTestLoading && <span className="text-xs text-gray-500">Consultando IA...</span>}
-                  </div>
-
-                  <div className="flex gap-2 shrink-0">
-                    <textarea
-                      value={modelTestInput}
-                      onChange={(e) => setModelTestInput(e.target.value)}
-                      className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm min-h-[60px] focus:border-blue-500 focus:ring-blue-500"
-                      rows={2}
-                      placeholder="Digite uma mensagem..."
-                    />
-                    <Button type="button" onClick={handleSendModelTest} disabled={!modelTestInput.trim() || modelTestLoading} className="self-end shrink-0">
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Coluna direita: auditoria + request/response */}
-                <div className="flex flex-col gap-3 min-h-0">
-                  {(modelTestRequest || modelTestResponse || modelTestRequestId || modelTestTraceId) ? (
-                    <>
-                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700 shrink-0">
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                          <span><strong>Status:</strong> {modelTestResponse?.status || (modelTestError ? 'error' : 'success')}</span>
-                          <span><strong>Modelo:</strong> {modelTestResponse?.meta?.model || modelTestResponse?.model || '-'}</span>
-                          <span><strong>Request ID:</strong> <span className="truncate block" title={modelTestRequestId}>{modelTestRequestId || '-'}</span></span>
-                          <span><strong>Trace ID:</strong> <span className="truncate block" title={modelTestTraceId}>{modelTestTraceId || '-'}</span></span>
-                          <span><strong>Latência:</strong> {typeof modelTestResponse?.meta?.latency_ms === 'number' && modelTestResponse.meta.latency_ms > 1e9
-                            ? `${(modelTestResponse.meta.latency_ms / 1e6).toFixed(0)} ms`
-                            : (modelTestResponse?.meta?.latency_ms ?? '-')}</span>
-                          <span><strong>RAG hits:</strong> {modelTestResponse?.meta?.rag_hits ?? '-'}</span>
-                          <span><strong>Handoff:</strong> {String(modelTestResponse?.handoff ?? false)}</span>
-                          <span><strong>Motivo:</strong> {modelTestResponse?.handoff_reason || '-'}</span>
-                        </div>
-                      </div>
-                      {modelTestError && (
-                        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 shrink-0">{modelTestError}</div>
-                      )}
-                      <div className="flex-1 grid grid-cols-2 gap-2 min-h-0">
-                        <div className="flex flex-col min-h-0">
-                          <p className="text-xs text-gray-500 mb-0.5 shrink-0">Request (mascarado)</p>
-                          <pre className="flex-1 rounded border border-gray-200 bg-white p-2 text-xs overflow-auto min-h-0 whitespace-pre-wrap">
-                            {modelTestRequest ? JSON.stringify(modelTestRequest, null, 2) : 'Sem request.'}
-                          </pre>
-                        </div>
-                        <div className="flex flex-col min-h-0">
-                          <p className="text-xs text-gray-500 mb-0.5 shrink-0">Response (mascarado)</p>
-                          <pre className="flex-1 rounded border border-gray-200 bg-white p-2 text-xs overflow-auto min-h-0 whitespace-pre-wrap">
-                            {modelTestResponse ? JSON.stringify(modelTestResponse, null, 2) : 'Sem response.'}
-                          </pre>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50/50 text-sm text-gray-500">
-                      Envie uma mensagem para ver auditoria e payloads aqui.
-                    </div>
-                  )}
-                </div>
               </div>
             </div>
           </div>
