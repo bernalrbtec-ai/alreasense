@@ -1084,6 +1084,17 @@ class ContactVcfImportService(ContactImportService):
                         if decoded is not None:
                             line = left + ':' + decoded
             result.append(_sanitize_line_for_vobject(line))
+
+        # Segunda passagem: qualquer linha que ainda tenha label inválido e valor em formato de email → EMAIL:
+        for idx, line in enumerate(result):
+            if ':' in line:
+                left, val = line.split(':', 1)
+                prop = left.split(';')[0].strip()
+                if not re.match(r'^[A-Z0-9][A-Z0-9-]*$', prop, re.IGNORECASE):
+                    v = val.strip()
+                    if v and '@' in v and re.search(r'[^@\s]+@[^@\s]+', v):
+                        result[idx] = 'EMAIL:' + v
+
         return '\r\n'.join(result)
 
     def preview_vcf(self, file, max_entries=10):
