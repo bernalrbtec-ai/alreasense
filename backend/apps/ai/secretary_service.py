@@ -352,6 +352,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     except Exception:
         pass
     settings_obj = TenantAiSettings.objects.filter(tenant=conversation.tenant).first()
+    # BIA: secretary_model se preenchido; senão agent_model; senão fallback fixo (evitar que payload vá sem model).
     secretary_model = (
         (getattr(settings_obj, "secretary_model", None) or "").strip()
         or (getattr(settings_obj, "agent_model", None) or "llama3.2")
