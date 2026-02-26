@@ -1054,7 +1054,12 @@ class ContactVcfImportService(ContactImportService):
                     elif re.search(r'\bnome\b|\bname\b|nome\s*completo|full\s*name', left, re.IGNORECASE):
                         line = 'FN:' + value.strip()
                     else:
-                        continue  # pular linha não reconhecida
+                        # Fallback: valor com formato de email (ex.: "Email primário: x@y") → EMAIL:
+                        val_stripped = value.strip()
+                        if val_stripped and '@' in val_stripped and re.search(r'[^@\s]+@[^@\s]+', val_stripped):
+                            line = 'EMAIL:' + val_stripped
+                        else:
+                            continue  # pular linha não reconhecida
             if 'ENCODING=QUOTED-PRINTABLE' not in line.upper():
                 if line.split(':', 1)[0].strip() == '':
                     continue
