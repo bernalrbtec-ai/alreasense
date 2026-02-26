@@ -1860,6 +1860,9 @@ export default function ConfigurationsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
+                          {instance.integration_type === INTEGRATION_META_CLOUD && (
+                            <FileText className="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400 flex-shrink-0" aria-hidden />
+                          )}
                           <h4 className="font-medium text-gray-900">{instance.friendly_name}</h4>
                           {instance.integration_type === INTEGRATION_META_CLOUD && (
                             <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">API Meta</span>
