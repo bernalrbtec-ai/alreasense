@@ -566,7 +566,7 @@ export default function ContactsPage() {
           
           <Button variant="outline" onClick={() => setShowImportModal(true)}>
             <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
+            Importar
           </Button>
           
           <Button variant="outline" onClick={() => setShowTagsManagerModal(true)}>

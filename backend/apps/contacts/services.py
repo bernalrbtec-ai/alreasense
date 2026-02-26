@@ -40,6 +40,41 @@ VALID_STATES = [
     'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
 ]
 
+# Limite de erros guardados no JSON do ContactImport (evita payload gigante)
+MAX_STORED_ERRORS = 200
+
+
+def _remove_quoted_printable_params(line):
+    """
+    Remove da linha parâmetros ;NAME(...) que contêm ENCODING=QUOTED-PRINTABLE,
+    respeitando parênteses aninhados.
+    """
+    i = 0
+    while i < len(line):
+        if line[i] == ';' and i + 1 < len(line):
+            j = i + 1
+            while j < len(line) and line[j] not in ';(:':
+                j += 1
+            if j < len(line) and line[j] == '(':
+                depth = 1
+                k = j + 1
+                while k < len(line) and depth > 0:
+                    if line[k] == '(':
+                        depth += 1
+                    elif line[k] == ')':
+                        depth -= 1
+                    k += 1
+                if depth == 0:
+                    param_content = line[j + 1:k - 1]
+                    if 'ENCODING=QUOTED-PRINTABLE' in param_content.upper():
+                        line = line[:i] + line[k:]
+                        i = 0
+                        continue
+                i = k
+                continue
+        i += 1
+    return line
+
 
 class ContactImportService:
     """Service para importação de contatos via CSV"""
@@ -353,17 +388,22 @@ class ContactImportService:
                 if 'unique constraint' in error_message.lower() and 'tag' in error_message.lower():
                     error_message = 'Tag já existe. Tente usar um nome diferente para a tag.'
                 import_record.error_count += 1
-                import_record.errors.append({
-                    'row': i + 2,
-                    'data': row,
-                    'error': error_message
-                })
+                if len(import_record.errors) < MAX_STORED_ERRORS:
+                    import_record.errors.append({
+                        'row': i + 2,
+                        'data': row,
+                        'error': error_message
+                    })
             import_record.processed_rows = i + 1
             import_record.save(update_fields=['processed_rows', 'created_count', 'updated_count', 'skipped_count', 'error_count', 'errors'])
 
+        if import_record.error_count > len(import_record.errors):
+            import_record.errors.append({
+                'error': f'Mais {import_record.error_count - len(import_record.errors)} erros não listados (total: {import_record.error_count}).'
+            })
         import_record.status = ContactImport.Status.COMPLETED
         import_record.completed_at = timezone.now()
-        import_record.save(update_fields=['status', 'completed_at'])
+        import_record.save(update_fields=['status', 'completed_at', 'errors'])
         self._remove_import_file(import_record.file_path)
 
     def process_csv(self, file, update_existing=False, auto_tag_id=None, delimiter=None, column_mapping=None):
@@ -433,13 +473,18 @@ class ContactImportService:
                         error_message = 'Tag já existe. Tente usar um nome diferente para a tag.'
                     
                     import_record.error_count += 1
-                    import_record.errors.append({
-                        'row': i + 2,
-                        'data': row,
-                        'error': error_message
-                    })
+                    if len(import_record.errors) < MAX_STORED_ERRORS:
+                        import_record.errors.append({
+                            'row': i + 2,
+                            'data': row,
+                            'error': error_message
+                        })
                     import_record.save()
             
+            if import_record.error_count > len(import_record.errors):
+                import_record.errors.append({
+                    'error': f'Mais {import_record.error_count - len(import_record.errors)} erros não listados (total: {import_record.error_count}).'
+                })
             import_record.status = ContactImport.Status.COMPLETED
             import_record.completed_at = timezone.now()
             import_record.save()
@@ -963,8 +1008,11 @@ class ContactVcfImportService(ContactImportService):
         """
         Pré-processa conteúdo VCF para vobject conseguir parsear.
         - Desdobra linhas continuadas (CRLF + espaço/tab; e em Q-P linha terminada em =).
+        - Converte linhas malformadas "Label: valor" (ex.: "Email primário: x@y") em EMAIL/FN/TEL quando reconhecível; senão remove.
         - Remove parâmetros que contêm ENCODING=QUOTED-PRINTABLE (ex.: X-CUSTOM(...,Q-P,...)); o vobject não os aceita.
         - Decodifica ENCODING=QUOTED-PRINTABLE no valor (após o último :).
+        - Remove espaços após ; em parâmetros e \\n/\\r no valor para evitar "Failed to parse line".
+        - Ignora linhas sem nome de propriedade (ex.: ":valor" após remoção de params).
         """
         if content is None:
             return ''
@@ -978,20 +1026,48 @@ class ContactVcfImportService(ContactImportService):
         content = re.sub(r'=\n(?=[ \t=])', '', content)
         lines = content.splitlines()
         result = []
+
+        def _sanitize_line_for_vobject(l):
+            """Remove espaços após ; e \\n/\\r no valor para o vobject não falhar."""
+            l = re.sub(r';\s+', ';', l)
+            if ':' in l:
+                left, val = l.rsplit(':', 1)
+                val = val.replace('\r', '').replace('\n', ' ')
+                l = left + ':' + val
+            return l
+
         for line in lines:
-            if 'ENCODING=QUOTED-PRINTABLE' not in line.upper():
-                result.append(line)
+            line = line.strip()
+            if not line:
                 continue
-            # 1) Remover parâmetros que contêm ENCODING=QUOTED-PRINTABLE (ex.: X-CUSTOM(...,Q-P,...))
-            #    vobject falha ao parsear mesmo com valor decodificado; removendo o param preservamos o valor principal (ex.: TEL:+55...)
-            line = re.sub(
-                r';[^;(]+\([^)]*ENCODING=QUOTED-PRINTABLE[^)]*\)',
-                '',
-                line,
-                flags=re.IGNORECASE
-            )
+            if ':' not in line:
+                continue
+            # 0) Linhas malformadas "Label: valor" (ex.: "Email primário: x@y") quebram o vobject; converter para propriedade válida
+            if ':' in line:
+                left, value = line.split(':', 1)
+                prop_name = left.split(';')[0].strip()
+                if not re.match(r'^[A-Z0-9][A-Z0-9-]*$', prop_name, re.IGNORECASE):
+                    if re.search(r'email|e-mail|e mail', left, re.IGNORECASE) and '@' in value:
+                        line = 'EMAIL:' + value.strip()
+                    elif re.search(r'tel|telefone|celular|fone', left, re.IGNORECASE):
+                        line = 'TEL:' + value.strip()
+                    elif re.search(r'\bnome\b|\bname\b|nome\s*completo|full\s*name', left, re.IGNORECASE):
+                        line = 'FN:' + value.strip()
+                    else:
+                        continue  # pular linha não reconhecida
+            if 'ENCODING=QUOTED-PRINTABLE' not in line.upper():
+                if line.split(':', 1)[0].strip() == '':
+                    continue
+                result.append(_sanitize_line_for_vobject(line))
+                continue
+            # 1) Remover parâmetros que contêm ENCODING=QUOTED-PRINTABLE (ex.: X-CUSTOM(...,Q-P,...));
+            #    suporta parênteses aninhados dentro do param
+            line = _remove_quoted_printable_params(line)
             line = re.sub(r';;+', ';', line)  # limpar ;; deixado pela remoção
             line = line.replace(';:', ':')     # se sobrou ; antes do : (ex. TEL;:valor)
+            # Se após remover params sobrou só ":valor" (sem nome de propriedade), pular
+            if line.lstrip().startswith(':') or (line.split(':', 1)[0].strip() == ''):
+                continue
             # 2) Decodificar Q-P no valor (após o último :)
             if ':' in line:
                 parts = line.rsplit(':', 1)
@@ -1002,7 +1078,7 @@ class ContactVcfImportService(ContactImportService):
                         decoded = self._decode_quoted_printable_segment(value)
                         if decoded is not None:
                             line = left + ':' + decoded
-            result.append(line)
+            result.append(_sanitize_line_for_vobject(line))
         return '\r\n'.join(result)
 
     def preview_vcf(self, file, max_entries=10):
@@ -1060,41 +1136,63 @@ class ContactVcfImportService(ContactImportService):
             return
         decoded = self._decode_file_content(raw)
         decoded = self._normalize_vcf_content(decoded)
-        cards = list(vobject.readComponents(io.StringIO(decoded)))
-        import_record.total_rows = len(cards)
-        import_record.status = ContactImport.Status.PROCESSING
-        import_record.save(update_fields=['total_rows', 'status'])
-
-        if len(cards) == 0:
-            import_record.status = ContactImport.Status.COMPLETED
-            import_record.completed_at = timezone.now()
-            import_record.errors.append({'error': 'Nenhum contato encontrado no arquivo VCF'})
-            import_record.save(update_fields=['status', 'completed_at', 'errors'])
+        try:
+            card_stream = vobject.readComponents(io.StringIO(decoded))
+        except Exception as e:
+            logger.exception("Erro ao parsear VCF: %s", import_record.file_path)
+            import_record.status = ContactImport.Status.FAILED
+            import_record.errors.append({'error': str(e)})
+            import_record.save(update_fields=['status', 'errors'])
             self._remove_import_file(import_record.file_path)
             return
 
-        for i, card in enumerate(cards):
-            try:
-                row = self._vcard_to_row(card)
-                phone_raw = (row.get('phone') or '').strip()
-                if not phone_raw:
-                    import_record.error_count += 1
-                    import_record.errors.append({'row': i + 1, 'error': 'Telefone obrigatório', 'data': row})
-                    import_record.processed_rows = i + 1
-                    import_record.save(update_fields=['processed_rows', 'error_count', 'errors'])
-                    continue
-                phone = normalize_phone(phone_raw)
-                row['phone'] = phone
-                self._process_row(row, import_record)
-            except Exception as e:
-                import_record.error_count += 1
-                import_record.errors.append({'row': i + 1, 'error': str(e)})
-            import_record.processed_rows = i + 1
-            import_record.save(update_fields=['processed_rows', 'created_count', 'updated_count', 'skipped_count', 'error_count', 'errors'])
+        import_record.total_rows = 0
+        import_record.status = ContactImport.Status.PROCESSING
+        import_record.save(update_fields=['total_rows', 'status'])
 
-        import_record.status = ContactImport.Status.COMPLETED
-        import_record.completed_at = timezone.now()
-        import_record.save(update_fields=['status', 'completed_at'])
+        try:
+            for i, card in enumerate(card_stream):
+                try:
+                    row = self._vcard_to_row(card)
+                    phone_raw = (row.get('phone') or '').strip()
+                    if not phone_raw:
+                        import_record.error_count += 1
+                        if len(import_record.errors) < MAX_STORED_ERRORS:
+                            import_record.errors.append({'row': i + 1, 'error': 'Telefone obrigatório', 'data': row})
+                        import_record.processed_rows = i + 1
+                        import_record.save(update_fields=['processed_rows', 'error_count', 'errors'])
+                        continue
+                    phone = normalize_phone(phone_raw)
+                    row['phone'] = phone
+                    self._process_row(row, import_record)
+                except Exception as e:
+                    import_record.error_count += 1
+                    if len(import_record.errors) < MAX_STORED_ERRORS:
+                        import_record.errors.append({'row': i + 1, 'error': str(e)})
+                import_record.processed_rows = i + 1
+                import_record.save(update_fields=['processed_rows', 'created_count', 'updated_count', 'skipped_count', 'error_count', 'errors'])
+        except Exception as e:
+            logger.exception("Erro ao processar VCF (parse ou iteração): %s", import_record.file_path)
+            import_record.status = ContactImport.Status.FAILED
+            import_record.errors.append({'error': str(e)})
+            import_record.save(update_fields=['status', 'errors'])
+            self._remove_import_file(import_record.file_path)
+            return
+
+        import_record.total_rows = import_record.processed_rows
+        if import_record.total_rows == 0:
+            import_record.status = ContactImport.Status.COMPLETED
+            import_record.completed_at = timezone.now()
+            import_record.errors.append({'error': 'Nenhum contato encontrado no arquivo VCF'})
+            import_record.save(update_fields=['status', 'completed_at', 'total_rows', 'errors'])
+        else:
+            if import_record.error_count > len(import_record.errors):
+                import_record.errors.append({
+                    'error': f'Mais {import_record.error_count - len(import_record.errors)} erros não listados (total: {import_record.error_count}).'
+                })
+            import_record.status = ContactImport.Status.COMPLETED
+            import_record.completed_at = timezone.now()
+            import_record.save(update_fields=['status', 'completed_at', 'total_rows', 'errors'])
         self._remove_import_file(import_record.file_path)
 
 
