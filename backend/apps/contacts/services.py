@@ -963,7 +963,8 @@ class ContactVcfImportService(ContactImportService):
         """
         Pré-processa conteúdo VCF para vobject conseguir parsear.
         - Desdobra linhas continuadas (CRLF + espaço/tab; e em Q-P linha terminada em =).
-        - Decodifica ENCODING=QUOTED-PRINTABLE no valor (após :) e dentro de parâmetros (ex.: X-CUSTOM(...,Q-P,=XX=XX)).
+        - Remove parâmetros que contêm ENCODING=QUOTED-PRINTABLE (ex.: X-CUSTOM(...,Q-P,...)); o vobject não os aceita.
+        - Decodifica ENCODING=QUOTED-PRINTABLE no valor (após o último :).
         """
         if content is None:
             return ''
@@ -981,22 +982,16 @@ class ContactVcfImportService(ContactImportService):
             if 'ENCODING=QUOTED-PRINTABLE' not in line.upper():
                 result.append(line)
                 continue
-            # 1) Decodificar Q-P dentro de parâmetros: (...ENCODING=QUOTED-PRINTABLE,=6E=C3=BA=...)
-            def decode_param_qp(match):
-                prefix, qp_part, suffix = match.group(1), match.group(2), match.group(3)
-                decoded = self._decode_quoted_printable_segment(qp_part.strip())
-                if decoded is None:
-                    return prefix + qp_part + suffix
-                # Se o valor decodificado tem vírgula ou parêntese, manter original para não quebrar estrutura
-                if ',' in decoded or ')' in decoded:
-                    return prefix + qp_part + suffix
-                return prefix + decoded + suffix
+            # 1) Remover parâmetros que contêm ENCODING=QUOTED-PRINTABLE (ex.: X-CUSTOM(...,Q-P,...))
+            #    vobject falha ao parsear mesmo com valor decodificado; removendo o param preservamos o valor principal (ex.: TEL:+55...)
             line = re.sub(
-                r'(ENCODING=QUOTED-PRINTABLE,)\s*([^)]*)\s*(\))',
-                decode_param_qp,
+                r';[^;(]+\([^)]*ENCODING=QUOTED-PRINTABLE[^)]*\)',
+                '',
                 line,
                 flags=re.IGNORECASE
             )
+            line = re.sub(r';;+', ';', line)  # limpar ;; deixado pela remoção
+            line = line.replace(';:', ':')     # se sobrou ; antes do : (ex. TEL;:valor)
             # 2) Decodificar Q-P no valor (após o último :)
             if ':' in line:
                 parts = line.rsplit(':', 1)
