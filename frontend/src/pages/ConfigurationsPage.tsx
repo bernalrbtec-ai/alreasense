@@ -277,7 +277,7 @@ const DEFAULT_AI_MODELS: string[] = []
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'meta' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
   const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories' | 'auditoria-ia'>('config')
   const [isLoading, setIsLoading] = useState(true)
   
@@ -586,7 +586,7 @@ export default function ConfigurationsPage() {
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
     }
-    if (activeTab === 'meta') {
+    if (activeTab === 'instances') {
       fetchMetaTemplates()
     }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
@@ -1734,17 +1734,6 @@ export default function ConfigurationsPage() {
             Notificações
           </button>
           <button
-            onClick={() => setActiveTab('meta')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'meta'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            <FileText className="h-4 w-4 inline mr-2" />
-            META
-          </button>
-          <button
             onClick={() => setActiveTab('business-hours')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'business-hours'
@@ -1979,6 +1968,93 @@ export default function ConfigurationsPage() {
               </div>
             )}
           </Card>
+
+          {/* Templates WhatsApp (Meta) - mesmo conteúdo que antes na aba META */}
+          <Card className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-1">Templates WhatsApp (Meta)</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Usados para primeira mensagem ou envio fora da janela de 24h. Crie e aprove o template no Meta Business Manager antes de cadastrar aqui.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Button
+                onClick={syncMetaStatus}
+                disabled={metaSyncLoading || !hasMetaInstanceWithWaba}
+                variant="outline"
+              >
+                {metaSyncLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+                Atualizar status da Meta
+              </Button>
+              {!hasMetaInstanceWithWaba && (
+                <span className="text-sm text-amber-600">
+                  Configure o ID da conta Business nas instâncias WhatsApp (tipo Meta) para sincronizar o status.
+                </span>
+              )}
+              <Button onClick={() => openMetaTemplateModal(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo template
+              </Button>
+            </div>
+            {metaTemplatesLoading ? (
+              <LoadingSpinner />
+            ) : metaTemplates.length === 0 ? (
+              <p className="text-gray-500">Nenhum template cadastrado. Clique em Novo template para adicionar.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID (Meta)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Idioma</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status (Meta)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Última verificação</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Instância</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ativo</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {metaTemplates.map((t) => (
+                      <tr key={t.id}>
+                        <td className="px-4 py-2 text-sm text-gray-900">{t.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{t.template_id}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{t.language_code}</td>
+                        <td className="px-4 py-2 text-sm">
+                          {t.meta_status === 'approved' && 'Aprovado'}
+                          {t.meta_status === 'pending' && 'Pendente'}
+                          {t.meta_status === 'rejected' && 'Rejeitado'}
+                          {t.meta_status === 'limited' && 'Limitado'}
+                          {t.meta_status === 'disabled' && 'Desativado'}
+                          {t.meta_status === 'sync_error' && 'Erro ao sincronizar'}
+                          {(!t.meta_status || t.meta_status === 'unknown') && 'Não verificado'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {t.meta_status_updated_at
+                            ? new Date(t.meta_status_updated_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{t.wa_instance_name || 'Qualquer'}</td>
+                        <td className="px-4 py-2 text-sm">{t.is_active ? 'Sim' : 'Não'}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Button variant="outline" size="sm" onClick={() => openMetaTemplateModal(t)} className="mr-1">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMetaTemplateToDelete(t)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
         </div>
       )}
 
@@ -2100,96 +2176,6 @@ export default function ConfigurationsPage() {
 
       {activeTab === 'notifications' && (
         <NotificationSettings />
-      )}
-
-      {activeTab === 'meta' && (
-        <div className="space-y-6">
-          <Card className="p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-1">Templates WhatsApp (Meta)</h3>
-            <p className="text-sm text-gray-500 mb-4">
-              Usados para primeira mensagem ou envio fora da janela de 24h. Crie e aprove o template no Meta Business Manager antes de cadastrar aqui.
-            </p>
-            <div className="flex flex-wrap gap-2 mb-4">
-              <Button
-                onClick={syncMetaStatus}
-                disabled={metaSyncLoading || !hasMetaInstanceWithWaba}
-                variant="outline"
-              >
-                {metaSyncLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
-                Atualizar status da Meta
-              </Button>
-              {!hasMetaInstanceWithWaba && (
-                <span className="text-sm text-amber-600">
-                  Configure o ID da conta Business nas instâncias WhatsApp (tipo Meta) para sincronizar o status.
-                </span>
-              )}
-              <Button onClick={() => openMetaTemplateModal(null)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo template
-              </Button>
-            </div>
-            {metaTemplatesLoading ? (
-              <LoadingSpinner />
-            ) : metaTemplates.length === 0 ? (
-              <p className="text-gray-500">Nenhum template cadastrado. Clique em Novo template para adicionar.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID (Meta)</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Idioma</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status (Meta)</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Última verificação</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Instância</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ativo</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {metaTemplates.map((t) => (
-                      <tr key={t.id}>
-                        <td className="px-4 py-2 text-sm text-gray-900">{t.name}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{t.template_id}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{t.language_code}</td>
-                        <td className="px-4 py-2 text-sm">
-                          {t.meta_status === 'approved' && 'Aprovado'}
-                          {t.meta_status === 'pending' && 'Pendente'}
-                          {t.meta_status === 'rejected' && 'Rejeitado'}
-                          {t.meta_status === 'limited' && 'Limitado'}
-                          {t.meta_status === 'disabled' && 'Desativado'}
-                          {t.meta_status === 'sync_error' && 'Erro ao sincronizar'}
-                          {(!t.meta_status || t.meta_status === 'unknown') && 'Não verificado'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">
-                          {t.meta_status_updated_at
-                            ? new Date(t.meta_status_updated_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
-                            : '-'}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-500">{t.wa_instance_name || 'Qualquer'}</td>
-                        <td className="px-4 py-2 text-sm">{t.is_active ? 'Sim' : 'Não'}</td>
-                        <td className="px-4 py-2 text-right">
-                          <Button variant="outline" size="sm" onClick={() => openMetaTemplateModal(t)} className="mr-1">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setMetaTemplateToDelete(t)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        </div>
       )}
 
       {activeTab === 'ai' && user?.is_admin && (
