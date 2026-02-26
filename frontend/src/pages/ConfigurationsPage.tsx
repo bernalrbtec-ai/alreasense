@@ -50,6 +50,7 @@ import { useTenantLimits } from '../hooks/useTenantLimits'
 import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
 import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
+import { RagMemoriesManager } from '../modules/ai/components/RagMemoriesManager'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const INTEGRATION_EVOLUTION = 'evolution'
@@ -276,6 +277,7 @@ export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'meta' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'rag-memories'>('config')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -2495,7 +2497,27 @@ export default function ConfigurationsPage() {
 
       {activeTab === 'ai' && user?.is_admin && (
         <div className="space-y-6">
-          {aiSettingsLoading || !aiSettings ? (
+          <div className="flex gap-2 border-b border-gray-200 pb-2">
+            <button
+              type="button"
+              onClick={() => setAiSubTab('config')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'config' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              Configurações
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiSubTab('rag-memories')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+            >
+              <FileText className="h-4 w-4" />
+              RAG e Lembranças
+            </button>
+          </div>
+
+          {aiSubTab === 'rag-memories' ? (
+            <RagMemoriesManager />
+          ) : aiSettingsLoading || !aiSettings ? (
             <div className="flex items-center justify-center h-64">
               <LoadingSpinner />
             </div>

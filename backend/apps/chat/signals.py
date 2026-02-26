@@ -27,7 +27,7 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
     BIA: resumos são gravados no pgvector para a BIA usar quando o contato voltar.
     Idempotência: se metadata.conversation_summary_at já existir, não dispara.
     Grupos (g.us) são ignorados. Só dispara se o tenant tiver TenantSecretaryProfile com use_memory=True.
-    Se N8N_SUMMARIZE_WEBHOOK_URL ou N8N_RAG_WEBHOOK_URL estiverem vazios, o pipeline sai sem exceção.
+    Se N8N_SUMMARIZE_WEBHOOK_URL estiver vazio, o pipeline sai sem exceção. Rag-upsert é feito só ao aprovar na gestão RAG.
     """
     if created:
         return

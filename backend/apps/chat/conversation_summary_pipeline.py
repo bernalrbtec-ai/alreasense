@@ -1,7 +1,8 @@
 """
-Pipeline de resumos ao encerrar conversa (BIA): summarize → rag-upsert.
+Pipeline de resumos ao encerrar conversa (BIA): summarize → persistir ConversationSummary (pending).
+Rag-upsert (n8n/pgvector) é chamado apenas ao aprovar na tela de gestão RAG.
 Executa em background; não bloqueia o fechamento da conversa.
-Se N8N_SUMMARIZE_WEBHOOK_URL ou N8N_RAG_WEBHOOK_URL estiverem vazios, sai sem erro.
+Se N8N_SUMMARIZE_WEBHOOK_URL estiver vazio, sai sem erro.
 """
 import logging
 import threading
@@ -14,17 +15,17 @@ from django.utils import timezone
 
 from apps.chat.models import Conversation, Message
 from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
+from apps.ai.models import ConversationSummary, TenantSecretaryProfile
 
 logger = logging.getLogger(__name__)
 
 SUMMARIZE_TIMEOUT = 30
-RAG_UPSERT_TIMEOUT = 30
 RETRY_DELAY = 2
 MAX_RETRIES = 1
 
 
 def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
-    """Implementação do pipeline: busca mensagens, POST summarize, POST rag-upsert, atualiza metadata."""
+    """Implementação do pipeline: busca mensagens, POST summarize, persiste ConversationSummary (pending), atualiza metadata da conversa."""
     close_old_connections()
     try:
         conversation = (
@@ -43,8 +44,6 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             logger.info("[CONVERSATION SUMMARY] Skip: conversa de grupo: %s", conversation_id)
             return
 
-        from apps.ai.models import TenantSecretaryProfile
-
         profile = TenantSecretaryProfile.objects.filter(tenant_id=conversation.tenant_id).first()
         if not profile or not getattr(profile, "use_memory", False):
             logger.info(
@@ -54,11 +53,8 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             return
 
         summarize_url = getattr(settings, "N8N_SUMMARIZE_WEBHOOK_URL", "") or ""
-        rag_url = getattr(settings, "N8N_RAG_WEBHOOK_URL", "") or ""
-        if not summarize_url or not rag_url:
-            logger.info(
-                "[CONVERSATION SUMMARY] URLs não configuradas (N8N_SUMMARIZE_WEBHOOK_URL / N8N_RAG_WEBHOOK_URL), skip."
-            )
+        if not summarize_url:
+            logger.info("[CONVERSATION SUMMARY] N8N_SUMMARIZE_WEBHOOK_URL não configurada, skip.")
             return
 
         messages_qs = Message.objects.filter(
@@ -140,38 +136,29 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             ) or getattr(conversation.assigned_to, "name", None) or ""
         department_name = (conversation.department.name if conversation.department else None) or ""
 
-        rag_payload = {
-            "tenant_id": str(conversation.tenant_id),
-            "source": "conversation_summary",
-            "content": summary,
-            "metadata": {
-                "contact_phone": contact_phone_normalized,
-                "conversation_id": str(conversation.id),
-                "created_at": closed_at.isoformat(),
-                "closed_at": closed_at.isoformat(),
-                "subject": subject,
-                "sentiment": sentiment,
-                "satisfaction": satisfaction,
-                "who_attended_id": who_attended_id,
-                "who_attended_name": who_attended_name,
-                "department_name": department_name,
-            },
+        summary_metadata = {
+            "contact_phone": contact_phone_normalized,
+            "conversation_id": str(conversation.id),
+            "created_at": closed_at.isoformat(),
+            "closed_at": closed_at.isoformat(),
+            "subject": subject,
+            "sentiment": sentiment,
+            "satisfaction": satisfaction,
+            "who_attended_id": who_attended_id,
+            "who_attended_name": who_attended_name,
+            "department_name": department_name,
         }
-        for attempt in range(MAX_RETRIES + 1):
-            try:
-                resp = requests.post(rag_url, json=rag_payload, timeout=RAG_UPSERT_TIMEOUT)
-                resp.raise_for_status()
-                break
-            except Exception as e:
-                logger.warning(
-                    "[CONVERSATION SUMMARY] Erro ao chamar rag-upsert (tentativa %s): %s",
-                    attempt + 1,
-                    e,
-                )
-                if attempt < MAX_RETRIES:
-                    time.sleep(RETRY_DELAY)
-                else:
-                    return
+        ConversationSummary.objects.update_or_create(
+            tenant_id=conversation.tenant_id,
+            conversation_id=conversation.id,
+            defaults={
+                "contact_phone": contact_phone_normalized,
+                "contact_name": (conversation.contact_name or "")[: 255],
+                "content": summary,
+                "metadata": summary_metadata,
+                "status": ConversationSummary.STATUS_PENDING,
+            },
+        )
 
         conversation.refresh_from_db()
         meta = conversation.metadata or {}

@@ -1,4 +1,5 @@
 import hashlib
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from datetime import timedelta
@@ -63,6 +64,54 @@ class AiMemoryItem(models.Model):
 
     def __str__(self):
         return f"{self.kind}: {self.content[:40]}..."
+
+
+class ConversationSummary(models.Model):
+    """
+    Resumo de conversa para gestão RAG (Sense). Status pending/approved/rejected.
+    Aprovados são enviados ao pgvector (n8n) via rag-upsert; Bia consulta o pgvector.
+    Tabela criada via script SQL (docs/SQL_conversation_summary.sql); managed=False.
+    """
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pendente"),
+        (STATUS_APPROVED, "Aprovado"),
+        (STATUS_REJECTED, "Reprovado"),
+    ]
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="conversation_summaries")
+    conversation_id = models.UUIDField(db_index=True)
+    contact_phone = models.CharField(max_length=64, default="")
+    contact_name = models.CharField(max_length=255, default="")
+    content = models.TextField(default="")
+    metadata = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="reviewed_conversation_summaries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_conversation_summary"
+        managed = False
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "conversation_id"],
+                name="uniq_ai_conversation_summary_tenant_conversation",
+            )
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Summary {self.conversation_id} ({self.status})"
 
 
 class AiTriageResult(models.Model):

@@ -12,6 +12,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.conf import settings
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 
@@ -19,7 +20,14 @@ from django.utils.dateparse import parse_datetime, parse_date
 from apps.chat.models import Conversation, Message as ChatMessage
 from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 from apps.common.permissions import IsTenantMember, IsAdminUser
-from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, TenantSecretaryProfile, AiTranscriptionDailyMetric
+from apps.ai.models import (
+    AiGatewayAudit,
+    AiTriageResult,
+    TenantAiSettings,
+    TenantSecretaryProfile,
+    AiTranscriptionDailyMetric,
+    ConversationSummary,
+)
 from apps.tenancy.models import Tenant
 from apps.connections.webhook_cache import get_redis_client
 from apps.ai.transcription_metrics import (
@@ -1929,3 +1937,263 @@ def rebuild_transcription_metrics_endpoint(request):
             },
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+# ----- Conversation summaries (Gestão RAG) -----
+
+RAG_WEBHOOK_TIMEOUT = 30
+
+
+def _rag_upsert_for_summary(summary):
+    """Envia resumo aprovado para o pgvector via n8n (rag-upsert)."""
+    url = getattr(settings, "N8N_RAG_WEBHOOK_URL", "") or ""
+    if not url:
+        logger.warning("[RAG] N8N_RAG_WEBHOOK_URL não configurado, skip upsert.")
+        return
+    meta = summary.metadata or {}
+    payload = {
+        "tenant_id": str(summary.tenant_id),
+        "source": "conversation_summary",
+        "content": summary.content,
+        "metadata": {
+            "contact_phone": summary.contact_phone,
+            "conversation_id": str(summary.conversation_id),
+            **{k: v for k, v in meta.items() if k not in ("contact_phone", "conversation_id")},
+        },
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
+        resp.raise_for_status()
+        logger.info("[RAG] Upsert ok para conversation_id=%s", summary.conversation_id)
+    except Exception as e:
+        logger.warning("[RAG] Erro ao chamar rag-upsert para conversation_id=%s: %s", summary.conversation_id, e)
+
+
+def _rag_remove_for_summary(summary):
+    """Sinaliza remoção do resumo no pgvector (n8n). Requer N8N_RAG_REMOVE_WEBHOOK_URL."""
+    url = getattr(settings, "N8N_RAG_REMOVE_WEBHOOK_URL", "") or ""
+    if not url:
+        logger.info("[RAG] N8N_RAG_REMOVE_WEBHOOK_URL não configurado, skip remove.")
+        return
+    payload = {
+        "tenant_id": str(summary.tenant_id),
+        "source": "conversation_summary",
+        "conversation_id": str(summary.conversation_id),
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
+        resp.raise_for_status()
+        logger.info("[RAG] Remove ok para conversation_id=%s", summary.conversation_id)
+    except Exception as e:
+        logger.warning("[RAG] Erro ao chamar rag-remove para conversation_id=%s: %s", summary.conversation_id, e)
+
+
+def _serialize_conversation_summary(item):
+    return {
+        "id": item.id,
+        "conversation_id": str(item.conversation_id),
+        "contact_phone": item.contact_phone or "",
+        "contact_name": item.contact_name or "",
+        "content": item.content or "",
+        "metadata": item.metadata or {},
+        "status": item.status,
+        "reviewed_at": timezone.localtime(item.reviewed_at).isoformat() if item.reviewed_at else None,
+        "reviewed_by_id": item.reviewed_by_id,
+        "created_at": timezone.localtime(item.created_at).isoformat(),
+        "updated_at": timezone.localtime(item.updated_at).isoformat(),
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_list(request):
+    """Lista resumos de conversa para gestão RAG (filtros: status, contact_phone, contact_name, from_date, to_date)."""
+    tenant = request.user.tenant
+    queryset = ConversationSummary.objects.filter(tenant=tenant).order_by("-created_at")
+
+    status_param = request.query_params.get("status")
+    if status_param and status_param in (ConversationSummary.STATUS_PENDING, ConversationSummary.STATUS_APPROVED, ConversationSummary.STATUS_REJECTED):
+        queryset = queryset.filter(status=status_param)
+
+    contact_phone = request.query_params.get("contact_phone", "").strip()
+    if contact_phone:
+        queryset = queryset.filter(contact_phone__icontains=contact_phone)
+
+    contact_name = request.query_params.get("contact_name", "").strip()
+    if contact_name:
+        queryset = queryset.filter(contact_name__icontains=contact_name)
+
+    from_date = request.query_params.get("from_date")
+    if from_date:
+        parsed = parse_datetime(from_date) or (parse_date(from_date) and datetime.combine(parse_date(from_date), dt_time.min))
+        if parsed:
+            aware = _ensure_aware(parsed)
+            if aware:
+                queryset = queryset.filter(created_at__gte=aware)
+
+    to_date = request.query_params.get("to_date")
+    if to_date:
+        parsed = parse_datetime(to_date) or (parse_date(to_date) and datetime.combine(parse_date(to_date), dt_time.max))
+        if parsed:
+            aware = _ensure_aware(parsed)
+            if aware:
+                queryset = queryset.filter(created_at__lte=aware)
+
+    pagination = LimitOffsetPagination()
+    pagination.default_limit = 20
+    results = pagination.paginate_queryset(queryset, request)
+    data = [_serialize_conversation_summary(item) for item in results]
+    return pagination.get_paginated_response(data)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_detail(request, pk):
+    """Aprovar, reprovar ou editar conteúdo de um resumo. Ao aprovar/editar aprovado envia rag-upsert; ao reprovar aprovado chama rag-remove."""
+    tenant = request.user.tenant
+    try:
+        summary = ConversationSummary.objects.get(pk=pk, tenant=tenant)
+    except ConversationSummary.DoesNotExist:
+        return Response({"error": "Resumo não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+    data = request.data or {}
+    action = (data.get("action") or "").strip().lower()
+    new_content = data.get("content")
+    was_approved = summary.status == ConversationSummary.STATUS_APPROVED
+
+    if action == "approve":
+        summary.status = ConversationSummary.STATUS_APPROVED
+        summary.reviewed_at = timezone.now()
+        summary.reviewed_by = request.user
+        summary.updated_at = timezone.now()
+        summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
+        _rag_upsert_for_summary(summary)
+        return Response(_serialize_conversation_summary(summary))
+
+    if action == "reject":
+        if was_approved:
+            _rag_remove_for_summary(summary)
+        summary.status = ConversationSummary.STATUS_REJECTED
+        summary.reviewed_at = timezone.now()
+        summary.reviewed_by = request.user
+        summary.updated_at = timezone.now()
+        summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
+        return Response(_serialize_conversation_summary(summary))
+
+    if action == "edit" and new_content is not None:
+        content_str = (new_content if isinstance(new_content, str) else str(new_content)).strip()
+        if not content_str:
+            return Response({"error": "Conteúdo não pode ser vazio."}, status=status.HTTP_400_BAD_REQUEST)
+        summary.content = content_str[:65535]
+        summary.updated_at = timezone.now()
+        summary.save(update_fields=["content", "updated_at"])
+        if summary.status == ConversationSummary.STATUS_APPROVED:
+            _rag_upsert_for_summary(summary)
+        return Response(_serialize_conversation_summary(summary))
+
+    return Response({"error": "Ação inválida. Use action: approve | reject | edit (com content para edit)."}, status=status.HTTP_400_BAD_REQUEST)
+
+
+REPROCESS_BATCH_LIMIT = 50
+
+
+def _reprocess_batch_worker(conv_ids, approved_map):
+    """Um único thread processa o lote em sequência (evita dezenas de threads)."""
+    from django.db import close_old_connections
+    from apps.chat.conversation_summary_pipeline import _run_conversation_summary_pipeline_impl
+    from apps.chat.models import Conversation
+
+    close_old_connections()
+    for conv_id in conv_ids:
+        try:
+            summary = approved_map.get(conv_id)
+            if summary:
+                _rag_remove_for_summary(summary)
+            conv = Conversation.objects.filter(id=conv_id).first()
+            if conv and conv.metadata:
+                meta = dict(conv.metadata)
+                meta.pop("conversation_summary_at", None)
+                conv.metadata = meta
+                conv.save(update_fields=["metadata"])
+            _run_conversation_summary_pipeline_impl(str(conv_id))
+        except Exception as e:
+            logger.warning("[RAG] Erro ao reprocessar conversa %s: %s", conv_id, e)
+        finally:
+            close_old_connections()
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_reprocess(request):
+    """Reprocessa resumos: scope=all ou scope=contact (contact_phone obrigatório). Remove do pgvector se já aprovado; um thread processa o lote em sequência."""
+    import re
+    import threading
+    from django.db import connection
+
+    tenant = request.user.tenant
+    data = request.data or {}
+    scope = (data.get("scope") or "all").strip().lower()
+    contact_phone = (data.get("contact_phone") or "").strip()
+
+    if scope == "contact" and not contact_phone:
+        return Response(
+            {"error": "Para scope=contact é obrigatório informar contact_phone."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    from apps.chat.models import Conversation
+
+    conversations_qs = Conversation.objects.filter(
+        tenant=tenant,
+        status="closed",
+    ).exclude(contact_phone__contains="g.us")
+    if scope == "contact":
+        contact_phone_normalized = normalize_contact_phone_for_rag(contact_phone)
+        if not contact_phone_normalized:
+            return Response(
+                {"error": "contact_phone inválido (informe apenas dígitos ou formato com DDI)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Match exato, com sufixo @s.whatsapp.net; em PostgreSQL também regex para prefixo de dígitos
+        contact_q = (
+            Q(contact_phone=contact_phone_normalized)
+            | Q(contact_phone__startswith=contact_phone_normalized + "@")
+        )
+        if connection.vendor == "postgresql":
+            safe_digits = re.escape(contact_phone_normalized)
+            contact_q |= Q(contact_phone__regex=r"^" + safe_digits + r"([^0-9]|$)")
+        conversations_qs = conversations_qs.filter(contact_q)
+
+    from apps.ai.models import TenantSecretaryProfile
+    profile = TenantSecretaryProfile.objects.filter(tenant_id=tenant.id).first()
+    if not profile or not getattr(profile, "use_memory", False):
+        return Response(
+            {"error": "Tenant sem use_memory ativo."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    total_eligible = conversations_qs.count()
+    to_process = list(conversations_qs.values_list("id", flat=True)[:REPROCESS_BATCH_LIMIT])
+
+    approved = {
+        s.conversation_id: s
+        for s in ConversationSummary.objects.filter(
+            tenant=tenant,
+            conversation_id__in=to_process,
+            status=ConversationSummary.STATUS_APPROVED,
+        )
+    }
+
+    if to_process:
+        thread = threading.Thread(
+            target=_reprocess_batch_worker,
+            args=(to_process, approved),
+            daemon=True,
+        )
+        thread.start()
+
+    return Response({
+        "status": "success",
+        "enqueued": len(to_process),
+        "total_eligible": total_eligible,
+    })
