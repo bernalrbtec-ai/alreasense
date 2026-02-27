@@ -358,7 +358,7 @@ export function RagMemoriesManager() {
               <Search className="h-4 w-4 mr-1" />
               Buscar
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Reprocessar
             </Button>
