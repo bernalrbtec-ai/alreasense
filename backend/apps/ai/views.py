@@ -2170,17 +2170,24 @@ def _reprocess_job_update(job_id, processed, approved, rejected, done=False):
 def _reprocess_send_report(tenant_id, notify_phone, notify_email, total, approved, rejected, started_at_iso):
     """Envia relatório de reprocessamento por WhatsApp e/ou email conforme solicitado. Erros são apenas logados."""
     from datetime import datetime
-    try:
-        started_str = datetime.fromisoformat(started_at_iso).strftime("%d/%m/%Y %H:%M") if started_at_iso else "?"
-    except Exception:
-        started_str = "?"
+    from zoneinfo import ZoneInfo
+    started_str = "?"
+    if started_at_iso:
+        try:
+            dt = datetime.fromisoformat(started_at_iso.replace("Z", "+00:00"))
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt)
+            dt_gmt3 = dt.astimezone(ZoneInfo("America/Sao_Paulo"))
+            started_str = dt_gmt3.strftime("%d/%m/%Y %H:%M (GMT-3)")
+        except Exception:
+            pass
     percent = round(approved / total * 100, 1) if total > 0 else 0
     message = (
-        f"*Reprocessamento RAG concluído*\n\n"
-        f"Total processado: {total}\n"
-        f"Aprovadas: {approved}  |  Reprovadas: {rejected}\n"
-        f"Taxa de sucesso: {percent}%\n\n"
-        f"Iniciado em: {started_str}"
+        f"✅ *Reprocessamento RAG concluído*\n\n"
+        f"📊 Total processado: {total}\n"
+        f"🟢 Aprovadas: {approved}  |  🔴 Reprovadas: {rejected}\n"
+        f"📈 Taxa de sucesso: {percent}%\n\n"
+        f"🕐 Iniciado em: {started_str}"
     )
     try:
         tid = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
