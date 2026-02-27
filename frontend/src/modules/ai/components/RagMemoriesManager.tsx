@@ -370,7 +370,7 @@ export function RagMemoriesManager() {
                         if (!c) return null
                         const isNumber = def?.type === 'number'
                         return (
-                          <div key={cid} className="flex items-center gap-2 flex-nowrap">
+                          <div key={cid} className="grid grid-cols-[auto_minmax(0,1fr)_5rem] gap-2 items-center">
                             <input
                               type="checkbox"
                               id={`crit-${cid}`}
@@ -381,8 +381,8 @@ export function RagMemoriesManager() {
                                 return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
                               })}
                             />
-                            <Label htmlFor={`crit-${cid}`} className="text-sm flex-1 min-w-0 truncate">{def?.label ?? cid}</Label>
-                            {isNumber && c.enabled && (
+                            <Label htmlFor={`crit-${cid}`} className="text-sm truncate min-w-0">{def?.label ?? cid}</Label>
+                            {isNumber ? (
                               <Input
                                 type="number"
                                 min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
@@ -397,8 +397,11 @@ export function RagMemoriesManager() {
                                     return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
                                   })
                                 }}
-                                className="w-20 text-sm shrink-0"
+                                className="w-full min-w-0 text-sm"
+                                disabled={!c.enabled}
                               />
+                            ) : (
+                              <span />
                             )}
                           </div>
                         )
@@ -425,7 +428,7 @@ export function RagMemoriesManager() {
                         const c = rej || { enabled: false, value: def?.default as number | undefined }
                         const isNumber = def?.type === 'number'
                         return (
-                          <div key={cid} className="flex items-center gap-2 flex-nowrap">
+                          <div key={cid} className="grid grid-cols-[auto_minmax(0,1fr)_5rem] gap-2 items-center">
                             <input
                               type="checkbox"
                               id={`rej-${cid}`}
@@ -436,8 +439,8 @@ export function RagMemoriesManager() {
                                 return { ...cfg, reject_criteria }
                               })}
                             />
-                            <Label htmlFor={`rej-${cid}`} className="text-sm flex-1 min-w-0 truncate">{def?.label ?? cid}</Label>
-                            {isNumber && c.enabled && (
+                            <Label htmlFor={`rej-${cid}`} className="text-sm truncate min-w-0">{def?.label ?? cid}</Label>
+                            {isNumber ? (
                               <Input
                                 type="number"
                                 min={cid === 'reject_confidence_below' ? 0 : undefined}
@@ -454,8 +457,11 @@ export function RagMemoriesManager() {
                                     return { ...cfg, reject_criteria }
                                   })
                                 }}
-                                className="w-20 text-sm shrink-0"
+                                className="w-full min-w-0 text-sm"
+                                disabled={!c.enabled}
                               />
+                            ) : (
+                              <span />
                             )}
                           </div>
                         )
