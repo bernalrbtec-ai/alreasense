@@ -68,8 +68,6 @@ export function RagMemoriesManager() {
   } | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollErrorCountRef = useRef(0)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const fetchListRef = useRef<(off?: number) => void>(() => {})
 
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editItem, setEditItem] = useState<ConversationSummaryItem | null>(null)
@@ -118,7 +116,6 @@ export function RagMemoriesManager() {
         setReprocessJobData(data)
         if (data.status === 'done' || data.status === 'stale') {
           stopPolling()
-          fetchListRef.current(0)
         }
         pollErrorCountRef.current = 0
       } catch {
@@ -172,8 +169,11 @@ export function RagMemoriesManager() {
   }, [limit, status, contactPhone, contactName, fromDate, toDate])
 
   useEffect(() => {
-    fetchListRef.current = fetchList
-  })
+    if (reprocessJobData?.status === 'done' || reprocessJobData?.status === 'stale') {
+      fetchList(0)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reprocessJobData?.status])
 
   useEffect(() => {
     fetchList(offset)
