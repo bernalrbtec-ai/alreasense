@@ -628,6 +628,9 @@ export default function ConfigurationsPage() {
     if (activeTab === 'instances') {
       fetchMetaTemplates()
     }
+    if (activeTab === 'smtp') {
+      fetchSmtpConfigs()
+    }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
 
   // Fechar modal de templates Meta com Escape (só se o modal de criar/editar não estiver aberto)
@@ -688,10 +691,11 @@ export default function ConfigurationsPage() {
   const fetchSmtpConfigs = async () => {
     try {
       const response = await api.get('/notifications/smtp-configs/')
-      // O backend já filtra por tenant automaticamente
-      setSmtpConfigs(response.data.results || response.data)
+      const list = response.data?.results ?? response.data
+      setSmtpConfigs(Array.isArray(list) ? list : [])
     } catch (error) {
       console.error('Error fetching SMTP configs:', error)
+      setSmtpConfigs([])
     }
   }
 
@@ -982,15 +986,15 @@ export default function ConfigurationsPage() {
       return
     }
     const payload: Record<string, unknown> = {
-      name: smtpFormData.name,
-      host: smtpFormData.host,
-      port: smtpFormData.port,
+      name: smtpFormData.name.trim(),
+      host: smtpFormData.host.trim(),
+      port: Number(smtpFormData.port) || 587,
       username: smtpFormData.username.trim(),
       use_tls: smtpFormData.use_tls,
       use_ssl: smtpFormData.use_ssl,
       verify_ssl: smtpFormData.verify_ssl,
-      from_email: smtpFormData.from_email,
-      from_name: smtpFormData.from_name,
+      from_email: smtpFormData.from_email.trim(),
+      from_name: smtpFormData.from_name.trim(),
       is_active: smtpFormData.is_active,
       is_default: smtpFormData.is_default
     }
@@ -1005,7 +1009,7 @@ export default function ConfigurationsPage() {
         await api.post('/notifications/smtp-configs/', payload)
         updateToastSuccess(toastId, 'criar', 'Configuração SMTP')
       }
-      fetchSmtpConfigs()
+      await fetchSmtpConfigs()
       handleCloseSmtpModal()
     } catch (error: any) {
       console.error('Error saving SMTP config:', error)
@@ -1021,7 +1025,7 @@ export default function ConfigurationsPage() {
     try {
       await api.delete(`/notifications/smtp-configs/${id}/`)
       updateToastSuccess(toastId, 'excluir', 'Configuração SMTP')
-      fetchSmtpConfigs()
+      await fetchSmtpConfigs()
     } catch (error: any) {
       console.error('Error deleting SMTP config:', error)
       updateToastError(toastId, 'excluir', 'Configuração SMTP', error)
@@ -2238,7 +2242,24 @@ export default function ConfigurationsPage() {
                 <h3 className="text-lg font-medium text-gray-900">Configurações SMTP</h3>
                 <p className="text-sm text-gray-600">Configure servidores SMTP para envio de emails</p>
               </div>
-              <Button onClick={() => setIsSmtpModalOpen(true)}>
+              <Button onClick={() => {
+                setEditingSmtp(null)
+                setSmtpFormData({
+                  name: '',
+                  host: '',
+                  port: 587,
+                  username: '',
+                  password: '',
+                  use_tls: true,
+                  use_ssl: false,
+                  verify_ssl: true,
+                  from_email: '',
+                  from_name: '',
+                  is_active: true,
+                  is_default: false
+                })
+                setIsSmtpModalOpen(true)
+              }}>
                 <Plus className="h-4 w-4 mr-2" />
                 Nova Configuração
               </Button>
@@ -3277,197 +3298,212 @@ export default function ConfigurationsPage() {
       {isSmtpModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseSmtpModal} />
-            
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 bg-gray-500/80 backdrop-blur-sm transition-opacity" onClick={handleCloseSmtpModal} />
+            <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl ring-1 ring-black/5 transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <form onSubmit={(e) => { e.preventDefault(); handleSaveSmtpConfig(); }}>
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-                    {editingSmtp ? 'Editar Configuração SMTP' : 'Nova Configuração SMTP'}
-                  </h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="smtp_name" className="block text-sm font-medium text-gray-700">
-                        Nome da Configuração *
-                      </label>
-                      <input
-                        type="text"
-                        id="smtp_name"
-                        required
-                        value={smtpFormData.name}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="Ex: Gmail SMTP"
-                      />
+                {/* Header */}
+                <div className="border-b border-gray-100 bg-gradient-to-b from-gray-50/80 to-white px-5 pt-5 pb-4 sm:px-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
+                      <Mail className="h-5 w-5" />
                     </div>
-
                     <div>
-                      <label htmlFor="smtp_host" className="block text-sm font-medium text-gray-700">
-                        Servidor SMTP *
-                      </label>
-                      <input
-                        type="text"
-                        id="smtp_host"
-                        required
-                        value={smtpFormData.host}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, host: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="smtp.gmail.com"
-                      />
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {editingSmtp ? 'Editar Configuração SMTP' : 'Nova Configuração SMTP'}
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        Configure servidor e autenticação para envio de emails
+                      </p>
                     </div>
-
-                    <div>
-                      <label htmlFor="smtp_port" className="block text-sm font-medium text-gray-700">
-                        Porta *
-                      </label>
-                      <input
-                        type="number"
-                        id="smtp_port"
-                        required
-                        value={smtpFormData.port}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, port: parseInt(e.target.value, 10) || 587 })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="587"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="smtp_username" className="block text-sm font-medium text-gray-700">
-                        Usuário / Email (autenticação) *
-                      </label>
-                      <input
-                        type="text"
-                        id="smtp_username"
-                        required
-                        value={smtpFormData.username}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, username: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="seu@email.com"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="smtp_password" className="block text-sm font-medium text-gray-700">
-                        Senha {editingSmtp ? '(deixe em branco para manter)' : '*'}
-                      </label>
-                      <div className="mt-1 flex rounded-md shadow-sm">
-                        <input
-                          type={showSmtpPassword ? 'text' : 'password'}
-                          id="smtp_password"
-                          required={!editingSmtp}
-                          value={smtpFormData.password}
-                          onChange={(e) => setSmtpFormData({ ...smtpFormData, password: e.target.value })}
-                          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500 sm:text-sm rounded-r-none"
-                          placeholder={editingSmtp ? '••••••••' : 'Senha da conta'}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSmtpPassword(!showSmtpPassword)}
-                          className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100"
-                          title={showSmtpPassword ? 'Ocultar senha' : 'Mostrar senha'}
-                        >
-                          {showSmtpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="from_email" className="block text-sm font-medium text-gray-700">
-                        Email de Origem *
-                      </label>
-                      <input
-                        type="email"
-                        id="from_email"
-                        required
-                        value={smtpFormData.from_email}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, from_email: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="noreply@suaempresa.com"
-                      />
-                    </div>
-
-                    <div>
-                      <label htmlFor="from_name" className="block text-sm font-medium text-gray-700">
-                        Nome de Origem *
-                      </label>
-                      <input
-                        type="text"
-                        id="from_name"
-                        required
-                        value={smtpFormData.from_name}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, from_name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="Sua Empresa"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    <p className="text-sm font-medium text-gray-700">Conexão</p>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={smtpFormData.use_tls}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_tls: e.target.checked })}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Usar TLS (porta 587)</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={smtpFormData.use_ssl}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_ssl: e.target.checked })}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Usar SSL (porta 465)</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={smtpFormData.verify_ssl}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, verify_ssl: e.target.checked })}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Verificar certificado SSL</span>
-                    </label>
-                  </div>
-                  <div className="mt-4 space-y-2">
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={smtpFormData.is_active}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, is_active: e.target.checked })}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Ativar configuração</span>
-                    </label>
-                    
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={smtpFormData.is_default}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, is_default: e.target.checked })}
-                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Usar como padrão</span>
-                    </label>
                   </div>
                 </div>
-                
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-                  <Button type="submit" className="w-full sm:w-auto sm:ml-3">
-                    <Save className="h-4 w-4 mr-2" />
-                    Salvar Configuração
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleCloseSmtpModal}
-                    className="mt-3 w-full sm:mt-0 sm:w-auto"
-                  >
+
+                <div className="px-5 py-5 sm:px-6 space-y-6">
+                  {/* Identificação */}
+                  <div>
+                    <label htmlFor="smtp_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Nome da configuração <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      id="smtp_name"
+                      required
+                      value={smtpFormData.name}
+                      onChange={(e) => setSmtpFormData({ ...smtpFormData, name: e.target.value })}
+                      className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                      placeholder="Ex: Gmail SMTP"
+                    />
+                  </div>
+
+                  {/* Servidor */}
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Servidor</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4">
+                      <div className="sm:col-span-2">
+                        <label htmlFor="smtp_host" className="block text-sm font-medium text-gray-700 mb-1.5">Servidor SMTP <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          id="smtp_host"
+                          required
+                          value={smtpFormData.host}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, host: e.target.value })}
+                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          placeholder="smtp.gmail.com"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="smtp_port" className="block text-sm font-medium text-gray-700 mb-1.5">Porta <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          id="smtp_port"
+                          required
+                          value={smtpFormData.port}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, port: parseInt(e.target.value, 10) || 587 })}
+                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          placeholder="587"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Autenticação */}
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Autenticação</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="smtp_username" className="block text-sm font-medium text-gray-700 mb-1.5">Usuário / e-mail <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          id="smtp_username"
+                          required
+                          value={smtpFormData.username}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, username: e.target.value })}
+                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          placeholder="seu@email.com"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="smtp_password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                          Senha {editingSmtp && <span className="font-normal text-gray-500">(em branco = manter)</span>}
+                          {!editingSmtp && <span className="text-red-500"> *</span>}
+                        </label>
+                        <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
+                          <input
+                            type={showSmtpPassword ? 'text' : 'password'}
+                            id="smtp_password"
+                            required={!editingSmtp}
+                            value={smtpFormData.password}
+                            onChange={(e) => setSmtpFormData({ ...smtpFormData, password: e.target.value })}
+                            className="flex-1 min-w-0 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none border-0 bg-transparent"
+                            placeholder={editingSmtp ? '••••••••' : 'Senha da conta'}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                            className="px-3 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition"
+                            title={showSmtpPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                          >
+                            {showSmtpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Remetente */}
+                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Remetente</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="from_email" className="block text-sm font-medium text-gray-700 mb-1.5">E-mail de origem <span className="text-red-500">*</span></label>
+                        <input
+                          type="email"
+                          id="from_email"
+                          required
+                          value={smtpFormData.from_email}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, from_email: e.target.value })}
+                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          placeholder="noreply@suaempresa.com"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="from_name" className="block text-sm font-medium text-gray-700 mb-1.5">Nome de origem <span className="text-red-500">*</span></label>
+                        <input
+                          type="text"
+                          id="from_name"
+                          required
+                          value={smtpFormData.from_name}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, from_name: e.target.value })}
+                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          placeholder="Sua Empresa"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Conexão e opções */}
+                  <div className="flex flex-wrap gap-x-6 gap-y-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="smtp_use_tls"
+                        checked={smtpFormData.use_tls}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_tls: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
+                      />
+                      <label htmlFor="smtp_use_tls" className="text-sm text-gray-700">TLS (587)</label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="smtp_use_ssl"
+                        checked={smtpFormData.use_ssl}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_ssl: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
+                      />
+                      <label htmlFor="smtp_use_ssl" className="text-sm text-gray-700">SSL (465)</label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="smtp_verify_ssl"
+                        checked={smtpFormData.verify_ssl}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, verify_ssl: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
+                      />
+                      <label htmlFor="smtp_verify_ssl" className="text-sm text-gray-700">Verificar SSL</label>
+                    </div>
+                    <div className="flex items-center gap-2 ml-auto sm:ml-0">
+                      <input
+                        type="checkbox"
+                        id="smtp_is_active"
+                        checked={smtpFormData.is_active}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, is_active: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
+                      />
+                      <label htmlFor="smtp_is_active" className="text-sm text-gray-700">Ativar</label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="smtp_is_default"
+                        checked={smtpFormData.is_default}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, is_default: e.target.checked })}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
+                      />
+                      <label htmlFor="smtp_is_default" className="text-sm text-gray-700">Usar como padrão</label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-4 sm:px-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                  <Button type="button" variant="outline" onClick={handleCloseSmtpModal} className="w-full sm:w-auto">
                     Cancelar
+                  </Button>
+                  <Button type="submit" className="w-full sm:w-auto">
+                    <Save className="h-4 w-4 mr-2" />
+                    Salvar configuração
                   </Button>
                 </div>
               </form>

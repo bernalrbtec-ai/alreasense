@@ -244,14 +244,13 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
         return obj.tenant.name if obj.tenant else 'Global'
     
     def create(self, validated_data):
-        # Set created_by from request user
+        if not validated_data.get('password'):
+            raise serializers.ValidationError({'password': 'Senha é obrigatória na criação da configuração.'})
         request = self.context.get('request')
         if request and request.user:
             validated_data['created_by'] = request.user
-            # Set tenant from user if not provided
             if not validated_data.get('tenant'):
                 validated_data['tenant'] = request.user.tenant
-        
         return super().create(validated_data)
 
     def update(self, instance, validated_data):
