@@ -154,7 +154,7 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
 
         status_to_use = ConversationSummary.STATUS_PENDING
         try:
-            from apps.ai.summary_auto_approve import should_auto_reject, evaluate_criteria
+            from apps.ai.summary_auto_approve import should_auto_reject, evaluate_criteria, evaluate_reject_criteria
             from apps.ai.summary_rag import rag_upsert_for_summary
 
             rejected, reject_reason = should_auto_reject(summary)
@@ -164,13 +164,21 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
                 summary_metadata["auto_rejected_reason"] = reject_reason or "resumo indica ausência de mensagens no diálogo"
             else:
                 config = getattr(profile, "summary_auto_approve_config", None) or {}
-                if isinstance(config, dict) and config.get("enabled"):
-                    context = {
-                        "content": summary,
-                        "metadata": summary_metadata,
-                        "message_count": len(messages_list),
-                        "confidence": summarize_response_data.get("confidence"),
-                    }
+                if not isinstance(config, dict):
+                    config = {}
+                context = {
+                    "content": summary,
+                    "metadata": summary_metadata,
+                    "message_count": len(messages_list),
+                    "confidence": summarize_response_data.get("confidence"),
+                }
+                if config.get("reject_enabled"):
+                    reject_result = evaluate_reject_criteria(config, context)
+                    if reject_result.get("rejected"):
+                        status_to_use = ConversationSummary.STATUS_REJECTED
+                        summary_metadata["auto_rejected"] = True
+                        summary_metadata["auto_rejected_reason"] = reject_result.get("reason") or "critério de reprovação automática"
+                if status_to_use == ConversationSummary.STATUS_PENDING and config.get("enabled"):
                     eval_result = evaluate_criteria(config, context)
                     if eval_result.get("approved"):
                         status_to_use = ConversationSummary.STATUS_APPROVED

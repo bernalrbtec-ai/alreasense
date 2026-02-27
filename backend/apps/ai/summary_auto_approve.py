@@ -29,6 +29,14 @@ CRITERION_DEFAULTS = {
     "confidence_min": {"type": "number", "default": 0.85, "label": "Confiança mín. (0–1)"},
 }
 
+# Critérios de reprovação automática (poucos): se QUALQUER ativo falhar → reprovar
+REJECT_CRITERION_DEFAULTS = {
+    "reject_confidence_below": {"type": "number", "default": 0.5, "label": "Reprovar se confiança abaixo de"},
+    "reject_no_subject": {"type": "boolean", "default": True, "label": "Reprovar se sem assunto"},
+    "reject_negative_sentiment": {"type": "boolean", "default": True, "label": "Reprovar se sentimento negativo"},
+    "reject_min_words_below": {"type": "number", "default": 10, "label": "Reprovar se palavras no resumo abaixo de"},
+}
+
 # Termos que indicam sentimento negativo (case-insensitive).
 NEGATIVE_SENTIMENT_TERMS = ("negativo", "negativa", "insatisfeito", "insatisfeita")
 
@@ -72,6 +80,81 @@ def _get_criterion_value(config, criterion_id):
     if "value" in c:
         return c["value"]
     return default_spec.get("default")
+
+
+def _get_reject_criterion_value(reject_config, criterion_id):
+    """Retorna o value do critério de reprovação (reject_criteria)."""
+    criteria = (reject_config or {}).get("reject_criteria") or {}
+    c = criteria.get(criterion_id) or {}
+    if not c.get("enabled"):
+        return None
+    default_spec = REJECT_CRITERION_DEFAULTS.get(criterion_id)
+    if not default_spec:
+        return None
+    if "value" in c:
+        return c["value"]
+    return default_spec.get("default")
+
+
+def evaluate_reject_criteria(reject_config, context):
+    """
+    Avalia critérios de reprovação automática. Se QUALQUER critério ativo falhar → rejected True.
+
+    reject_config: dict com "reject_enabled" (bool) e "reject_criteria" (dict id -> { enabled, value? }).
+    context: mesmo de evaluate_criteria (content, metadata, message_count, confidence).
+
+    Retorna: { "rejected": bool, "reason": str | None, "results": { criterion_id: { "failed": bool, "detail": str } } }
+    """
+    results = {}
+    if not reject_config or not reject_config.get("reject_enabled"):
+        return {"rejected": False, "reason": None, "results": results}
+
+    criteria_cfg = (reject_config.get("reject_criteria") or {})
+    content = (context.get("content") or "").strip()
+    metadata = context.get("metadata") or {}
+    confidence = context.get("confidence")
+    subject = (metadata.get("subject") or "").strip()
+    sentiment = (metadata.get("sentiment") or "").strip()
+    words = _word_count(content)
+
+    def check_fail(criterion_id, failed, detail):
+        results[criterion_id] = {"failed": bool(failed), "detail": str(detail)}
+        return failed
+
+    # reject_confidence_below: reprovar se confidence < threshold (ou não retornada)
+    v = _get_reject_criterion_value(reject_config, "reject_confidence_below")
+    if v is not None:
+        threshold = float(v) if isinstance(v, (int, float)) else 0.5
+        c = float(confidence) if confidence is not None and isinstance(confidence, (int, float)) else None
+        failed = c is None or c < threshold
+        check_fail("reject_confidence_below", failed, f"confidence={confidence}, limite={threshold}")
+
+    # reject_no_subject: reprovar se assunto vazio
+    v = _get_reject_criterion_value(reject_config, "reject_no_subject")
+    if v is not None:
+        check_fail("reject_no_subject", not bool(subject), f"subject={'vazio' if not subject else 'preenchido'}")
+
+    # reject_negative_sentiment: reprovar se sentimento negativo
+    v = _get_reject_criterion_value(reject_config, "reject_negative_sentiment")
+    if v is not None:
+        neg = _is_negative_sentiment(sentiment)
+        check_fail("reject_negative_sentiment", neg, f"sentiment={sentiment or 'vazio'}")
+
+    # reject_min_words_below: reprovar se palavras < threshold
+    v = _get_reject_criterion_value(reject_config, "reject_min_words_below")
+    if v is not None:
+        threshold = int(v) if isinstance(v, (int, float)) else 10
+        check_fail("reject_min_words_below", words < threshold, f"palavras={words}, mínimo={threshold}")
+
+    enabled_ids = [cid for cid, c in criteria_cfg.items() if c.get("enabled")]
+    any_failed = enabled_ids and any(results.get(cid, {}).get("failed", False) for cid in enabled_ids)
+    reason = None
+    if any_failed:
+        for cid in enabled_ids:
+            if results.get(cid, {}).get("failed"):
+                reason = results[cid].get("detail", cid)
+                break
+    return {"rejected": any_failed, "reason": reason, "results": results}
 
 
 def _word_count(text):

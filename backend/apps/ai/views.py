@@ -2355,6 +2355,20 @@ def conversation_summary_reprocess(request):
             contact_q |= Q(contact_phone__regex=r"^" + safe_digits + r"([^0-9]|$)")
         conversations_qs = conversations_qs.filter(contact_q)
 
+    summary_status = (data.get("summary_status") or "all").strip().lower()
+    if summary_status not in ("all", "approved", "pending", "rejected"):
+        summary_status = "all"
+    if summary_status in ("approved", "pending", "rejected"):
+        status_val = {
+            "approved": ConversationSummary.STATUS_APPROVED,
+            "pending": ConversationSummary.STATUS_PENDING,
+            "rejected": ConversationSummary.STATUS_REJECTED,
+        }[summary_status]
+        conv_ids_with_status = set(
+            ConversationSummary.objects.filter(tenant=tenant, status=status_val).values_list("conversation_id", flat=True)
+        )
+        conversations_qs = conversations_qs.filter(id__in=conv_ids_with_status)
+
     from apps.ai.models import TenantSecretaryProfile
     profile = TenantSecretaryProfile.objects.filter(tenant_id=tenant.id).first()
     if not profile or not getattr(profile, "use_memory", False):
@@ -2470,7 +2484,7 @@ def conversation_summary_reprocess_status(request, job_id):
 
 # ----- Aprovação automática (config por tenant) -----
 
-from apps.ai.summary_auto_approve import CRITERION_DEFAULTS
+from apps.ai.summary_auto_approve import CRITERION_DEFAULTS, REJECT_CRITERION_DEFAULTS
 
 
 def _get_default_auto_approve_config():
@@ -2482,6 +2496,17 @@ def _get_default_auto_approve_config():
             entry["value"] = spec.get("default")
         criteria[cid] = entry
     return {"enabled": False, "criteria": criteria}
+
+
+def _get_default_reject_config():
+    """Config padrão para reprovação automática."""
+    criteria = {}
+    for cid, spec in REJECT_CRITERION_DEFAULTS.items():
+        entry = {"enabled": False}
+        if spec.get("type") == "number":
+            entry["value"] = spec.get("default")
+        criteria[cid] = entry
+    return {"reject_enabled": False, "reject_criteria": criteria}
 
 
 def _validate_auto_approve_config(data):
@@ -2525,6 +2550,42 @@ def _validate_auto_approve_config(data):
     return {"enabled": bool(enabled), "criteria": criteria}
 
 
+def _validate_reject_config(data):
+    """Valida reject_enabled e reject_criteria. Retorna dict limpo ou levanta ValueError."""
+    if not isinstance(data, dict):
+        raise ValueError("reject config deve ser um objeto.")
+    reject_enabled = data.get("reject_enabled", False)
+    criteria_raw = data.get("reject_criteria")
+    if criteria_raw is not None and not isinstance(criteria_raw, dict):
+        raise ValueError("reject_criteria deve ser um objeto.")
+    criteria = {}
+    for cid, c in (criteria_raw or {}).items():
+        if cid not in REJECT_CRITERION_DEFAULTS:
+            continue
+        spec = REJECT_CRITERION_DEFAULTS[cid]
+        entry = {"enabled": bool(c.get("enabled"))}
+        if spec.get("type") == "number":
+            try:
+                v = c.get("value") if "value" in c else spec.get("default")
+                v = float(v) if v is not None else spec.get("default")
+            except (TypeError, ValueError):
+                v = spec.get("default")
+            if entry["enabled"] and v is not None:
+                if cid == "reject_confidence_below" and (v < 0 or v > 1):
+                    raise ValueError("reject_confidence_below deve estar entre 0 e 1.")
+                if cid == "reject_min_words_below" and (v < 1 or v > 500):
+                    raise ValueError("reject_min_words_below deve estar entre 1 e 500.")
+                entry["value"] = v
+        criteria[cid] = entry
+    for cid, spec in REJECT_CRITERION_DEFAULTS.items():
+        if cid not in criteria:
+            entry = {"enabled": False}
+            if spec.get("type") == "number":
+                entry["value"] = spec.get("default")
+            criteria[cid] = entry
+    return {"reject_enabled": bool(reject_enabled), "reject_criteria": criteria}
+
+
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def conversation_summary_auto_approve_config(request):
@@ -2546,18 +2607,40 @@ def conversation_summary_auto_approve_config(request):
         for cid, c in (raw.get("criteria") or {}).items():
             if cid in criteria:
                 criteria[cid] = {**criteria[cid], **c}
+        reject_default = _get_default_reject_config()
+        reject_criteria = reject_default.get("reject_criteria", {}).copy()
+        for cid, c in (raw.get("reject_criteria") or {}).items():
+            if cid in reject_criteria:
+                reject_criteria[cid] = {**reject_criteria[cid], **c}
         return Response({
             "enabled": raw.get("enabled", False),
             "criteria": criteria,
             "criterion_defaults": {k: {"label": v.get("label"), "type": v.get("type"), "default": v.get("default")} for k, v in CRITERION_DEFAULTS.items()},
+            "reject_enabled": raw.get("reject_enabled", False),
+            "reject_criteria": reject_criteria,
+            "reject_criterion_defaults": {k: {"label": v.get("label"), "type": v.get("type"), "default": v.get("default")} for k, v in REJECT_CRITERION_DEFAULTS.items()},
         })
 
-    # PATCH
+    # PATCH: merge with existing so missing keys (e.g. reject_*) are preserved
     data = request.data or {}
     try:
-        config = _validate_auto_approve_config(data)
+        existing = getattr(profile, "summary_auto_approve_config", None) or {}
+        if not isinstance(existing, dict):
+            existing = {}
+        merge = {**existing}
+        if "enabled" in data:
+            merge["enabled"] = data["enabled"]
+        if "criteria" in data:
+            merge["criteria"] = data["criteria"]
+        if "reject_enabled" in data:
+            merge["reject_enabled"] = data["reject_enabled"]
+        if "reject_criteria" in data:
+            merge["reject_criteria"] = data["reject_criteria"]
+        config = _validate_auto_approve_config({"enabled": merge.get("enabled"), "criteria": merge.get("criteria")})
+        reject_config = _validate_reject_config({"reject_enabled": merge.get("reject_enabled"), "reject_criteria": merge.get("reject_criteria")})
+        full_config = {**config, **reject_config}
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    profile.summary_auto_approve_config = config
+    profile.summary_auto_approve_config = full_config
     profile.save(update_fields=["summary_auto_approve_config", "updated_at"])
-    return Response(config)
+    return Response(full_config)

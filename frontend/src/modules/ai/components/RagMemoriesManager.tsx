@@ -59,6 +59,7 @@ export function RagMemoriesManager() {
 
   const [reprocessModalOpen, setReprocessModalOpen] = useState(false)
   const [reprocessScope, setReprocessScope] = useState<'all' | 'contact'>('all')
+  const [reprocessSummaryStatus, setReprocessSummaryStatus] = useState<'all' | 'approved' | 'pending' | 'rejected'>('all')
   const [reprocessContactPhone, setReprocessContactPhone] = useState('')
   const [reprocessSubmitting, setReprocessSubmitting] = useState(false)
   const [reprocessNotifyOptions, setReprocessNotifyOptions] = useState<{ has_smtp: boolean; has_whatsapp: boolean } | null>(null)
@@ -84,17 +85,31 @@ export function RagMemoriesManager() {
   const [editSubmitting, setEditSubmitting] = useState(false)
 
   const [autoApproveOpen, setAutoApproveOpen] = useState(false)
-  const [autoApproveConfig, setAutoApproveConfig] = useState<{ enabled: boolean; criteria: Record<string, { enabled: boolean; value?: number }>; criterion_defaults?: Record<string, { label: string; type: string; default: unknown }> } | null>(null)
+  const [autoApproveConfig, setAutoApproveConfig] = useState<{
+    enabled: boolean
+    criteria: Record<string, { enabled: boolean; value?: number }>
+    criterion_defaults?: Record<string, { label: string; type: string; default: unknown }>
+    reject_enabled?: boolean
+    reject_criteria?: Record<string, { enabled: boolean; value?: number }>
+    reject_criterion_defaults?: Record<string, { label: string; type: string; default: unknown }>
+  } | null>(null)
   const [autoApproveLoading, setAutoApproveLoading] = useState(false)
   const [autoApproveSaving, setAutoApproveSaving] = useState(false)
 
   const fetchAutoApproveConfig = useCallback(async () => {
     setAutoApproveLoading(true)
     try {
-      const { data } = await api.get<{ enabled: boolean; criteria: Record<string, { enabled: boolean; value?: number }>; criterion_defaults?: Record<string, { label: string; type: string; default: unknown }> }>('ai/summaries/auto-approve-config/')
+      const { data } = await api.get<{
+        enabled: boolean
+        criteria: Record<string, { enabled: boolean; value?: number }>
+        criterion_defaults?: Record<string, { label: string; type: string; default: unknown }>
+        reject_enabled?: boolean
+        reject_criteria?: Record<string, { enabled: boolean; value?: number }>
+        reject_criterion_defaults?: Record<string, { label: string; type: string; default: unknown }>
+      }>('ai/summaries/auto-approve-config/')
       setAutoApproveConfig(data)
     } catch (e) {
-      showErrorToast('carregar', 'Config. aprovação automática', e)
+      showErrorToast('carregar', 'Fluxo de Controle', e)
     } finally {
       setAutoApproveLoading(false)
     }
@@ -159,16 +174,23 @@ export function RagMemoriesManager() {
     if (!autoApproveConfig) return
     setAutoApproveSaving(true)
     try {
-      await api.patch('ai/summaries/auto-approve-config/', { enabled: autoApproveConfig.enabled, criteria: autoApproveConfig.criteria })
-      toast.success('Configuração de aprovação automática salva.')
+      const payload: { enabled: boolean; criteria: Record<string, { enabled: boolean; value?: number }>; reject_enabled?: boolean; reject_criteria?: Record<string, { enabled: boolean; value?: number }> } = {
+        enabled: autoApproveConfig.enabled,
+        criteria: autoApproveConfig.criteria,
+      }
+      if (autoApproveConfig.reject_enabled !== undefined) payload.reject_enabled = autoApproveConfig.reject_enabled
+      if (autoApproveConfig.reject_criteria !== undefined) payload.reject_criteria = autoApproveConfig.reject_criteria
+      await api.patch('ai/summaries/auto-approve-config/', payload)
+      toast.success('Fluxo de Controle salvo.')
     } catch (e: any) {
-      showErrorToast('salvar', 'Config. aprovação automática', e)
+      showErrorToast('salvar', 'Fluxo de Controle', e)
     } finally {
       setAutoApproveSaving(false)
     }
   }
 
-  const fetchList = useCallback(async (off = 0) => {
+  const fetchList = useCallback(async (off = 0, options?: { clearOnError?: boolean }) => {
+    const clearOnError = options?.clearOnError !== false
     setLoading(true)
     try {
       const params: Record<string, string | number> = { limit, offset: off }
@@ -184,8 +206,10 @@ export function RagMemoriesManager() {
       setPrevUrl(data.previous)
     } catch (e) {
       showErrorToast('carregar', 'Resumos', e)
-      setItems([])
-      setCount(0)
+      if (clearOnError) {
+        setItems([])
+        setCount(0)
+      }
     } finally {
       setLoading(false)
     }
@@ -210,9 +234,10 @@ export function RagMemoriesManager() {
   const handleApprove = async (item: ConversationSummaryItem) => {
     const toastId = showLoadingToast('atualizar', 'Resumo')
     try {
-      await api.patch(`ai/summaries/${item.id}/`, { action: 'approve' })
+      const { data } = await api.patch<ConversationSummaryItem>(`ai/summaries/${item.id}/`, { action: 'approve' })
       updateToastSuccess(toastId, 'atualizar', 'Resumo')
-      fetchList(offset)
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...data } : i)))
+      await fetchList(offset, { clearOnError: false })
     } catch (e) {
       updateToastError(toastId, 'atualizar', 'Resumo', e)
     }
@@ -221,9 +246,10 @@ export function RagMemoriesManager() {
   const handleReject = async (item: ConversationSummaryItem) => {
     const toastId = showLoadingToast('atualizar', 'Resumo')
     try {
-      await api.patch(`ai/summaries/${item.id}/`, { action: 'reject' })
+      const { data } = await api.patch<ConversationSummaryItem>(`ai/summaries/${item.id}/`, { action: 'reject' })
       updateToastSuccess(toastId, 'atualizar', 'Resumo')
-      fetchList(offset)
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...data } : i)))
+      await fetchList(offset, { clearOnError: false })
     } catch (e) {
       updateToastError(toastId, 'atualizar', 'Resumo', e)
     }
@@ -266,13 +292,15 @@ export function RagMemoriesManager() {
     }
     setReprocessSubmitting(true)
     try {
-      const payload: { scope: string; contact_phone?: string; notify_whatsapp_phone?: string; notify_email?: string } = { scope: reprocessScope }
+      const payload: { scope: string; summary_status?: string; contact_phone?: string; notify_whatsapp_phone?: string; notify_email?: string } = { scope: reprocessScope }
+      if (reprocessSummaryStatus !== 'all') payload.summary_status = reprocessSummaryStatus
       if (reprocessScope === 'contact') payload.contact_phone = reprocessContactPhone.trim()
       if (reprocessNotifyWhatsapp && reprocessNotifyWhatsappPhone.trim()) payload.notify_whatsapp_phone = reprocessNotifyWhatsappPhone.trim()
       if (reprocessNotifyEmail && reprocessNotifyEmailAddress.trim()) payload.notify_email = reprocessNotifyEmailAddress.trim()
       const { data } = await api.post<{ status: string; enqueued: number; total_eligible: number; job_id?: string }>('ai/summaries/reprocess/', payload)
       setReprocessModalOpen(false)
       setReprocessScope('all')
+      setReprocessSummaryStatus('all')
       setReprocessContactPhone('')
       setReprocessNotifyWhatsapp(false)
       setReprocessNotifyWhatsappPhone('')
@@ -303,6 +331,7 @@ export function RagMemoriesManager() {
   }
 
   const criterionOrder = ['min_words', 'max_words', 'min_messages', 'has_subject', 'no_placeholders', 'sentiment_not_negative', 'satisfaction_min', 'confidence_min']
+  const rejectCriterionOrder = ['reject_confidence_below', 'reject_no_subject', 'reject_negative_sentiment', 'reject_min_words_below']
 
   return (
     <div className="space-y-4">
@@ -313,64 +342,122 @@ export function RagMemoriesManager() {
           className="flex items-center gap-2 w-full text-left font-medium text-gray-900"
         >
           {autoApproveOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Aprovação automática de resumos
+          Fluxo de Controle
         </button>
         {autoApproveOpen && (
           <div className="mt-4 pt-4 border-t border-gray-200">
             {autoApproveLoading ? (
               <div className="flex justify-center py-4"><LoadingSpinner /></div>
             ) : autoApproveConfig ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="auto-approve-enabled"
-                    checked={autoApproveConfig.enabled}
-                    onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, enabled: e.target.checked } : c)}
-                  />
-                  <Label htmlFor="auto-approve-enabled" className="text-sm">Ativar aprovação automática</Label>
-                </div>
-                <p className="text-xs text-gray-500">Quando ativo, resumos que passarem em todos os critérios marcados abaixo serão aprovados e enviados ao RAG automaticamente.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {criterionOrder.map((cid) => {
-                    const c = autoApproveConfig.criteria[cid]
-                    const def = autoApproveConfig.criterion_defaults?.[cid]
-                    if (!c) return null
-                    const isNumber = def?.type === 'number'
-                    return (
-                      <div key={cid} className="flex items-center gap-2 flex-wrap">
-                        <input
-                          type="checkbox"
-                          id={`crit-${cid}`}
-                          checked={c.enabled}
-                          onChange={(e) => setAutoApproveConfig((cfg) => {
-                            if (!cfg) return cfg
-                            const next = { ...cfg.criteria[cid], enabled: e.target.checked }
-                            return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
-                          })}
-                        />
-                        <Label htmlFor={`crit-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
-                        {isNumber && c.enabled && (
-                          <Input
-                            type="number"
-                            min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
-                            max={cid === 'confidence_min' ? 1 : cid === 'satisfaction_min' ? 5 : undefined}
-                            value={c.value ?? def?.default ?? ''}
-                            onChange={(e) => {
-                              const raw = e.target.value
-                              const v = raw === '' ? undefined : Number(raw)
-                              const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
-                              setAutoApproveConfig((cfg) => {
-                                if (!cfg) return cfg
-                                return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
-                              })
-                            }}
-                            className="w-20 text-sm"
+              <div className="space-y-6">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="auto-approve-enabled"
+                      checked={autoApproveConfig.enabled}
+                      onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, enabled: e.target.checked } : c)}
+                    />
+                    <Label htmlFor="auto-approve-enabled" className="text-sm font-medium">Ativar aprovação automática</Label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">Quando ativo, resumos que passarem em todos os critérios marcados abaixo serão aprovados e enviados ao RAG automaticamente.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    {criterionOrder.map((cid) => {
+                      const c = autoApproveConfig.criteria[cid]
+                      const def = autoApproveConfig.criterion_defaults?.[cid]
+                      if (!c) return null
+                      const isNumber = def?.type === 'number'
+                      return (
+                        <div key={cid} className="flex items-center gap-2 flex-wrap">
+                          <input
+                            type="checkbox"
+                            id={`crit-${cid}`}
+                            checked={c.enabled}
+                            onChange={(e) => setAutoApproveConfig((cfg) => {
+                              if (!cfg) return cfg
+                              const next = { ...cfg.criteria[cid], enabled: e.target.checked }
+                              return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
+                            })}
                           />
-                        )}
-                      </div>
-                    )
-                  })}
+                          <Label htmlFor={`crit-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
+                          {isNumber && c.enabled && (
+                            <Input
+                              type="number"
+                              min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
+                              max={cid === 'confidence_min' ? 1 : cid === 'satisfaction_min' ? 5 : undefined}
+                              value={c.value ?? def?.default ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                const v = raw === '' ? undefined : Number(raw)
+                                const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
+                                setAutoApproveConfig((cfg) => {
+                                  if (!cfg) return cfg
+                                  return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
+                                })
+                              }}
+                              className="w-20 text-sm"
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="border-t border-gray-200 pt-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="reject-enabled"
+                      checked={autoApproveConfig.reject_enabled ?? false}
+                      onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, reject_enabled: e.target.checked } : c)}
+                    />
+                    <Label htmlFor="reject-enabled" className="text-sm font-medium">Ativar reprovação automática</Label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">Se ativo, resumos que falharem em <strong>qualquer</strong> critério marcado serão reprovados automaticamente.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    {rejectCriterionOrder.map((cid) => {
+                      const rej = (autoApproveConfig.reject_criteria || {})[cid]
+                      const def = autoApproveConfig.reject_criterion_defaults?.[cid]
+                      if (!rej && !def) return null
+                      const c = rej || { enabled: false, value: def?.default as number | undefined }
+                      const isNumber = def?.type === 'number'
+                      return (
+                        <div key={cid} className="flex items-center gap-2 flex-wrap">
+                          <input
+                            type="checkbox"
+                            id={`rej-${cid}`}
+                            checked={c.enabled}
+                            onChange={(e) => setAutoApproveConfig((cfg) => {
+                              if (!cfg) return cfg
+                              const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), enabled: e.target.checked } }
+                              return { ...cfg, reject_criteria }
+                            })}
+                          />
+                          <Label htmlFor={`rej-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
+                          {isNumber && c.enabled && (
+                            <Input
+                              type="number"
+                              min={cid === 'reject_confidence_below' ? 0 : undefined}
+                              max={cid === 'reject_confidence_below' ? 1 : undefined}
+                              step={cid === 'reject_confidence_below' ? 0.1 : undefined}
+                              value={c.value ?? def?.default ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                const v = raw === '' ? undefined : Number(raw)
+                                const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
+                                setAutoApproveConfig((cfg) => {
+                                  if (!cfg) return cfg
+                                  const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), value: safe } }
+                                  return { ...cfg, reject_criteria }
+                                })
+                              }}
+                              className="w-20 text-sm"
+                            />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
                 <Button size="sm" onClick={handleSaveAutoApproveConfig} disabled={autoApproveSaving}>
                   <Save className="h-4 w-4 mr-1" />
@@ -567,13 +654,27 @@ export function RagMemoriesManager() {
       {reprocessModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50" onClick={() => !reprocessSubmitting && setReprocessModalOpen(false)} aria-hidden />
+            <div className="fixed inset-0 bg-black/50" onClick={() => { if (!reprocessSubmitting) { setReprocessModalOpen(false); setReprocessSummaryStatus('all') } }} aria-hidden />
             <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-3">Reprocessar resumos</h3>
               <div className="space-y-3 mb-6">
                 <p className="text-sm text-gray-600">
                   Enfileira o pipeline de resumo para conversas fechadas. Se já existir resumo aprovado, ele será removido da memória antes de reprocessar.
                 </p>
+                <div>
+                  <Label className="text-sm">Reprocessar</Label>
+                  <select
+                    value={reprocessSummaryStatus}
+                    onChange={(e) => setReprocessSummaryStatus(e.target.value as 'all' | 'approved' | 'pending' | 'rejected')}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="all">Todas</option>
+                    <option value="approved">Aprovadas</option>
+                    <option value="pending">Pendentes</option>
+                    <option value="rejected">Reprovadas</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Filtra por status atual do resumo (ex.: apenas pendentes para revisar).</p>
+                </div>
                 <div>
                   <Label className="text-sm">Escopo</Label>
                   <select
@@ -648,7 +749,7 @@ export function RagMemoriesManager() {
                 </div>
               </div>
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => !reprocessSubmitting && setReprocessModalOpen(false)} disabled={reprocessSubmitting}>
+                <Button variant="outline" onClick={() => { if (!reprocessSubmitting) { setReprocessModalOpen(false); setReprocessSummaryStatus('all') } }} disabled={reprocessSubmitting}>
                   Cancelar
                 </Button>
                 <Button onClick={handleReprocessSubmit} disabled={reprocessSubmitting}>
