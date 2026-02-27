@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
@@ -61,6 +61,14 @@ export function RagMemoriesManager() {
   const [reprocessContactPhone, setReprocessContactPhone] = useState('')
   const [reprocessSubmitting, setReprocessSubmitting] = useState(false)
 
+  const [reprocessJobId, setReprocessJobId] = useState<string | null>(null)
+  const [reprocessJobData, setReprocessJobData] = useState<{
+    status: string; total: number; processed: number;
+    approved: number; rejected: number; percent: number
+  } | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollErrorCountRef = useRef(0)
+
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editItem, setEditItem] = useState<ConversationSummaryItem | null>(null)
   const [editContent, setEditContent] = useState('')
@@ -88,6 +96,42 @@ export function RagMemoriesManager() {
       fetchAutoApproveConfig()
     }
   }, [autoApproveOpen, autoApproveConfig, autoApproveLoading, fetchAutoApproveConfig])
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+    pollErrorCountRef.current = 0
+  }, [])
+
+  const startPolling = useCallback((jobId: string) => {
+    stopPolling()
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get<{
+          status: string; total: number; processed: number;
+          approved: number; rejected: number; percent: number
+        }>(`ai/summaries/reprocess/${jobId}/status/`)
+        setReprocessJobData(data)
+        if (data.status === 'done' || data.status === 'stale') {
+          stopPolling()
+          fetchList(0)
+        }
+        pollErrorCountRef.current = 0
+      } catch {
+        pollErrorCountRef.current += 1
+        if (pollErrorCountRef.current >= 3) {
+          stopPolling()
+          setReprocessJobData((prev) => prev ? { ...prev, status: 'error' } : prev)
+        }
+      }
+    }, 4000)
+  }, [stopPolling, fetchList])
+
+  useEffect(() => {
+    return () => { stopPolling() }
+  }, [stopPolling])
 
   const handleSaveAutoApproveConfig = async () => {
     if (!autoApproveConfig) return
@@ -187,17 +231,30 @@ export function RagMemoriesManager() {
     try {
       const payload: { scope: string; contact_phone?: string } = { scope: reprocessScope }
       if (reprocessScope === 'contact') payload.contact_phone = reprocessContactPhone.trim()
-      const { data } = await api.post<{ status: string; enqueued: number; total_eligible: number }>('ai/summaries/reprocess/', payload)
-      toast.success(`${data.enqueued} conversa(s) enfileirada(s). Total elegível: ${data.total_eligible}`)
+      const { data } = await api.post<{ status: string; enqueued: number; total_eligible: number; job_id?: string }>('ai/summaries/reprocess/', payload)
       setReprocessModalOpen(false)
       setReprocessScope('all')
       setReprocessContactPhone('')
-      fetchList(offset)
+      if (data.job_id && data.enqueued > 0) {
+        setReprocessJobId(data.job_id)
+        setReprocessJobData({ status: 'running', total: data.enqueued, processed: 0, approved: 0, rejected: 0, percent: 0 })
+        startPolling(data.job_id)
+      } else {
+        toast.success(`${data.enqueued} conversa(s) enfileirada(s). Total elegível: ${data.total_eligible}`)
+        fetchList(offset)
+      }
     } catch (e: any) {
       showErrorToast('iniciar', 'Reprocessamento', e)
     } finally {
       setReprocessSubmitting(false)
     }
+  }
+
+  const handleCloseJobModal = () => {
+    stopPolling()
+    setReprocessJobId(null)
+    setReprocessJobData(null)
+    fetchList(0)
   }
 
   const criterionOrder = ['min_words', 'max_words', 'min_messages', 'has_subject', 'no_placeholders', 'sentiment_not_negative', 'satisfaction_min', 'confidence_min']
@@ -526,6 +583,76 @@ export function RagMemoriesManager() {
                   {editSubmitting ? 'Salvando…' : 'Salvar'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de progresso/resultado do reprocessamento */}
+      {reprocessJobId && reprocessJobData && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50" aria-hidden />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              {reprocessJobData.status === 'running' ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-1">Reprocessando resumos…</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {reprocessJobData.processed} de {reprocessJobData.total} conversas processadas
+                  </p>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                    <div
+                      className="bg-blue-600 h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${reprocessJobData.total > 0 ? Math.round(reprocessJobData.processed / reprocessJobData.total * 100) : 0}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-center">
+                    <LoadingSpinner />
+                  </div>
+                </>
+              ) : reprocessJobData.status === 'done' ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Reprocessamento concluído</h3>
+                  <div className="grid grid-cols-2 gap-3 mb-6">
+                    <div className="bg-gray-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-gray-900">{reprocessJobData.total}</div>
+                      <div className="text-xs text-gray-500 mt-1">Total processado</div>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-green-700">{reprocessJobData.approved}</div>
+                      <div className="text-xs text-gray-500 mt-1">Aprovadas</div>
+                    </div>
+                    <div className="bg-red-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-red-700">{reprocessJobData.rejected}</div>
+                      <div className="text-xs text-gray-500 mt-1">Reprovadas</div>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3 text-center">
+                      <div className="text-2xl font-bold text-blue-700">{reprocessJobData.percent}%</div>
+                      <div className="text-xs text-gray-500 mt-1">Taxa de sucesso</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4 text-center">
+                    Um relatório foi enviado por WhatsApp e email.
+                  </p>
+                  <div className="flex justify-end">
+                    <Button onClick={handleCloseJobModal}>Fechar</Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    {reprocessJobData.status === 'stale' ? 'Reprocessamento demorou mais que o esperado' : 'Erro ao monitorar reprocessamento'}
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {reprocessJobData.status === 'stale'
+                      ? 'O processo ainda pode estar em execução. Verifique os resumos na lista após alguns minutos.'
+                      : 'Não foi possível obter o status. O reprocessamento pode ter ocorrido normalmente.'}
+                  </p>
+                  <div className="flex justify-end">
+                    <Button onClick={handleCloseJobModal}>Fechar</Button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>

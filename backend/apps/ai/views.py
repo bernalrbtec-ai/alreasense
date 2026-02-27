@@ -2099,14 +2099,141 @@ def conversation_summary_detail(request, pk):
 
 REPROCESS_BATCH_LIMIT = 10000
 
+# ----- Reprocess job tracking (Redis) -----
 
-def _reprocess_batch_worker(conv_ids, approved_map):
+REPROCESS_JOB_KEY_PREFIX = "reprocess_job:"
+REPROCESS_JOB_TTL = 3600  # 1 hora
+
+
+def _reprocess_job_set(job_id, tenant_id, user_id, total):
+    """Cria job de reprocessamento no Redis. Retorna True se ok, False se Redis indisponível."""
+    client = get_redis_client()
+    if not client:
+        return False
+    key = f"{REPROCESS_JOB_KEY_PREFIX}{job_id}"
+    value = {
+        "tenant_id": str(tenant_id),
+        "user_id": str(user_id),
+        "status": "running",
+        "total": total,
+        "processed": 0,
+        "approved": 0,
+        "rejected": 0,
+        "started_at": timezone.now().isoformat(),
+    }
+    try:
+        client.setex(key, REPROCESS_JOB_TTL, json.dumps(value))
+        return True
+    except Exception as e:
+        logger.warning("[RAG] reprocess_job Redis set failed: %s", e)
+        return False
+
+
+def _reprocess_job_get(job_id):
+    """Retorna dict do job ou None se não existir/Redis indisponível."""
+    client = get_redis_client()
+    if not client:
+        return None
+    key = f"{REPROCESS_JOB_KEY_PREFIX}{job_id}"
+    try:
+        raw = client.get(key)
+        return json.loads(raw) if raw else None
+    except Exception as e:
+        logger.warning("[RAG] reprocess_job Redis get failed: %s", e)
+        return None
+
+
+def _reprocess_job_update(job_id, processed, approved, rejected, done=False):
+    """Atualiza contadores do job no Redis."""
+    client = get_redis_client()
+    if not client:
+        return
+    key = f"{REPROCESS_JOB_KEY_PREFIX}{job_id}"
+    try:
+        raw = client.get(key)
+        if not raw:
+            return
+        data = json.loads(raw)
+        data["processed"] = processed
+        data["approved"] = approved
+        data["rejected"] = rejected
+        if done:
+            data["status"] = "done"
+            data["finished_at"] = timezone.now().isoformat()
+        client.setex(key, REPROCESS_JOB_TTL, json.dumps(data))
+    except Exception as e:
+        logger.warning("[RAG] reprocess_job Redis update failed: %s", e)
+
+
+def _reprocess_send_report(user, total, approved, rejected, started_at_iso):
+    """Envia relatório de reprocessamento por WhatsApp e email. Erros são apenas logados."""
+    from datetime import datetime
+    try:
+        started_str = datetime.fromisoformat(started_at_iso).strftime("%d/%m/%Y %H:%M") if started_at_iso else "?"
+    except Exception:
+        started_str = "?"
+    percent = round(approved / total * 100, 1) if total > 0 else 0
+    message = (
+        f"*Reprocessamento RAG concluído*\n\n"
+        f"Total processado: {total}\n"
+        f"Aprovadas: {approved}  |  Reprovadas: {rejected}\n"
+        f"Taxa de sucesso: {percent}%\n\n"
+        f"Iniciado em: {started_str}"
+    )
+    # WhatsApp
+    try:
+        from apps.notifications.services import send_whatsapp_notification
+        send_whatsapp_notification(user, message)
+        logger.info("[RAG] Relatório WhatsApp enviado para %s", user.email)
+    except Exception as e:
+        logger.warning("[RAG] Falha ao enviar relatório WhatsApp: %s", e)
+    # Email via SMTPConfig do tenant
+    try:
+        from apps.notifications.models import SMTPConfig
+        from django.core.mail import get_connection, EmailMessage as DjangoEmailMessage
+        smtp = SMTPConfig.objects.filter(tenant=user.tenant, is_active=True, is_default=True).first()
+        if not smtp:
+            smtp = SMTPConfig.objects.filter(tenant=user.tenant, is_active=True).first()
+        if smtp and user.email:
+            conn = get_connection(
+                backend="django.core.mail.backends.smtp.EmailBackend",
+                host=smtp.host,
+                port=smtp.port,
+                username=smtp.username,
+                password=smtp.password,
+                use_tls=smtp.use_tls,
+                use_ssl=smtp.use_ssl,
+                fail_silently=False,
+                timeout=30,
+            )
+            from_address = f"{smtp.from_name} <{smtp.from_email}>" if smtp.from_name else smtp.from_email
+            email = DjangoEmailMessage(
+                subject="Reprocessamento RAG concluído",
+                body=message.replace("*", "").replace("|", "-"),
+                from_email=from_address,
+                to=[user.email],
+                connection=conn,
+            )
+            email.send(fail_silently=False)
+            logger.info("[RAG] Relatório email enviado para %s", user.email)
+    except Exception as e:
+        logger.warning("[RAG] Falha ao enviar relatório email: %s", e)
+
+
+def _reprocess_batch_worker(conv_ids, approved_map, job_id=None, user_id=None):
     """Um único thread processa o lote em sequência (evita dezenas de threads)."""
     from django.db import close_old_connections
     from apps.chat.conversation_summary_pipeline import _run_conversation_summary_pipeline_impl
     from apps.chat.models import Conversation
 
     close_old_connections()
+    processed = 0
+    approved_count = 0
+    rejected_count = 0
+    job_data = _reprocess_job_get(str(job_id)) if job_id else None
+    started_at_iso = (job_data or {}).get("started_at")
+    tenant_id = (job_data or {}).get("tenant_id")
+
     for conv_id in conv_ids:
         try:
             summary = approved_map.get(conv_id)
@@ -2119,10 +2246,37 @@ def _reprocess_batch_worker(conv_ids, approved_map):
                 conv.metadata = meta
                 conv.save(update_fields=["metadata"])
             _run_conversation_summary_pipeline_impl(str(conv_id))
+            # Determinar resultado lendo o ConversationSummary criado/atualizado
+            if tenant_id:
+                result_status = ConversationSummary.objects.filter(
+                    tenant_id=tenant_id,
+                    conversation_id=conv_id,
+                ).values_list("status", flat=True).first()
+                if result_status == ConversationSummary.STATUS_APPROVED:
+                    approved_count += 1
+                elif result_status == ConversationSummary.STATUS_REJECTED:
+                    rejected_count += 1
         except Exception as e:
             logger.warning("[RAG] Erro ao reprocessar conversa %s: %s", conv_id, e)
         finally:
             close_old_connections()
+        processed += 1
+        if job_id:
+            _reprocess_job_update(str(job_id), processed, approved_count, rejected_count)
+
+    if job_id:
+        _reprocess_job_update(str(job_id), processed, approved_count, rejected_count, done=True)
+
+    # Enviar relatório se tiver user_id
+    if user_id:
+        try:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            user = User.objects.filter(id=user_id).select_related("tenant").first()
+            if user:
+                _reprocess_send_report(user, len(conv_ids), approved_count, rejected_count, started_at_iso)
+        except Exception as e:
+            logger.warning("[RAG] Falha ao buscar user para relatório: %s", e)
 
 
 @api_view(["POST"])
@@ -2187,18 +2341,67 @@ def conversation_summary_reprocess(request):
         )
     }
 
+    job_id = None
     if to_process:
+        job_id = uuid.uuid4()
+        _reprocess_job_set(job_id, tenant.id, request.user.id, len(to_process))
         thread = threading.Thread(
             target=_reprocess_batch_worker,
             args=(to_process, approved),
+            kwargs={"job_id": job_id, "user_id": request.user.id},
             daemon=True,
         )
         thread.start()
 
-    return Response({
+    response_data = {
         "status": "success",
         "enqueued": len(to_process),
         "total_eligible": total_eligible,
+    }
+    if job_id:
+        response_data["job_id"] = str(job_id)
+    return Response(response_data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_reprocess_status(request, job_id):
+    """Retorna o status de um job de reprocessamento RAG pelo job_id (UUID)."""
+    from datetime import datetime
+    job = _reprocess_job_get(str(job_id))
+    if not job:
+        return Response({"error": "Job não encontrado ou expirado."}, status=status.HTTP_404_NOT_FOUND)
+    if str(job.get("tenant_id")) != str(request.user.tenant.id):
+        return Response({"error": "Sem permissão."}, status=status.HTTP_403_FORBIDDEN)
+    current_status = job.get("status", "running")
+    # Detectar stale: ainda running mas started_at > 2h
+    if current_status == "running":
+        started_at_raw = job.get("started_at")
+        if started_at_raw:
+            try:
+                started_dt = datetime.fromisoformat(started_at_raw)
+                # Garantir aware para comparação com timezone.now()
+                if started_dt.tzinfo is None:
+                    started_dt = timezone.make_aware(started_dt)
+                age_seconds = (timezone.now() - started_dt).total_seconds()
+                if age_seconds > 7200:
+                    current_status = "stale"
+            except Exception:
+                pass
+    total = job.get("total") or 0
+    approved = job.get("approved") or 0
+    rejected = job.get("rejected") or 0
+    processed = job.get("processed") or 0
+    percent = round(approved / total * 100, 1) if total > 0 else 0
+    return Response({
+        "status": current_status,
+        "total": total,
+        "processed": processed,
+        "approved": approved,
+        "rejected": rejected,
+        "percent": percent,
+        "started_at": job.get("started_at"),
+        "finished_at": job.get("finished_at"),
     })
 
 
