@@ -14,6 +14,7 @@ export interface ConversationSummaryItem {
   conversation_id: string
   contact_phone: string
   contact_name: string
+  contact_tags?: string[]
   content: string
   metadata: Record<string, unknown>
   status: 'pending' | 'approved' | 'rejected'
@@ -255,7 +256,17 @@ export function RagMemoriesManager() {
                       <td className="px-3 py-2 text-sm">
                         <div className="font-medium text-gray-900">{item.contact_name || item.contact_phone || '—'}</div>
                         <div className="text-gray-500">{item.contact_phone}</div>
-                        <div className="text-xs text-gray-400">{item.conversation_id}</div>
+                        {item.contact_tags && item.contact_tags.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {item.contact_tags.map((tag) => (
+                              <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400 mt-1">—</div>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate" title={item.content}>
                         {item.content ? `${item.content.slice(0, 120)}${item.content.length > 120 ? '…' : ''}` : '—'}
@@ -338,7 +349,7 @@ export function RagMemoriesManager() {
                     onChange={(e) => setReprocessScope(e.target.value as 'all' | 'contact')}
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
                   >
-                    <option value="all">Todos os contatos (até 50)</option>
+                    <option value="all">Todos os contatos</option>
                     <option value="contact">Apenas um contato</option>
                   </select>
                 </div>

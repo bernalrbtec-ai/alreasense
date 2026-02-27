@@ -123,6 +123,13 @@ def proxy_rotate(request):
             {"error": err},
             status=status.HTTP_409_CONFLICT if "em execução" in err else status.HTTP_400_BAD_REQUEST,
         )
+    # Falha com log criado (ex.: credenciais ausentes) — retorna 400 para o cliente exibir o erro
+    if err and log and log.status == "failed":
+        serializer = ProxyRotationLogSerializer(log)
+        return Response(
+            {"error": err, "log": serializer.data},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     serializer = ProxyRotationLogSerializer(log)
     return Response(serializer.data, status=status.HTTP_200_OK)

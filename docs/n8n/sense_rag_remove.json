@@ -1,0 +1,57 @@
+{
+  "name": "Sense - RAG remove (remover do pgvector)",
+  "nodes": [
+    {
+      "id": "wh-rag-remove",
+      "name": "Webhook RAG remove",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-remove",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "sense-rag-remove"
+    },
+    {
+      "id": "code-validar",
+      "name": "Validar e localizar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "// Payload: tenant_id, source (conversation_summary), conversation_id\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst tenantId = body.tenant_id;\nconst source = body.source || 'conversation_summary';\nconst conversationId = body.conversation_id;\nif (!tenantId || !conversationId) {\n  throw new Error('tenant_id e conversation_id são obrigatórios');\n}\nreturn [{ json: { tenant_id: tenantId, source, conversation_id: conversationId } }];\n"
+      }
+    },
+    {
+      "id": "code-delete-placeholder",
+      "name": "DELETE no store (placeholder)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "// Em produção: Postgres (pgvector) DELETE WHERE tenant_id + source + metadata->>'conversation_id' = conversation_id\n// Sempre responder 200 (idempotente: documento inexistente = ok)\nconst item = $input.first().json;\nreturn [{ json: { status: 'ok' } }];\n"
+      },
+      "notesInFlow": true,
+      "notes": "Substituir por Postgres node: DELETE FROM ... WHERE tenant_id = $json.tenant_id AND source = $json.source AND metadata->>'conversation_id' = $json.conversation_id. Responder sempre 200."
+    },
+    {
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [660, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook RAG remove": { "main": [[{ "node": "Validar e localizar", "type": "main", "index": 0 }]] },
+    "Validar e localizar": { "main": [[{ "node": "DELETE no store (placeholder)", "type": "main", "index": 0 }]] },
+    "DELETE no store (placeholder)": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

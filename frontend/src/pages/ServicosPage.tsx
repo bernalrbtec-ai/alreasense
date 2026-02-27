@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -22,6 +22,16 @@ interface ProxyOverview {
   warnings: string[]
 }
 
+interface InstanceLog {
+  id?: number
+  instance_name: string
+  proxy_host: string
+  proxy_port: number
+  success: boolean
+  error_message: string | null
+  created_at?: string
+}
+
 interface RotationLog {
   id: number
   started_at: string
@@ -34,6 +44,8 @@ interface RotationLog {
   triggered_by: string
   created_by_email: string | null
   created_at: string
+  error_message?: string | null
+  instance_logs?: InstanceLog[]
 }
 
 interface ProxyStats {
@@ -54,6 +66,7 @@ export default function ServicosPage() {
   const [isLoadingStats, setIsLoadingStats] = useState(false)
   const [isRotating, setIsRotating] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null)
 
   const fetchOverview = async () => {
     try {
@@ -332,6 +345,9 @@ export default function ServicosPage() {
                 <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                   <thead>
                     <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase w-8">
+                        {' '}
+                      </th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                         Data/Hora
                       </th>
@@ -350,30 +366,93 @@ export default function ServicosPage() {
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                         Acionado por
                       </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Erro
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {history.results.map((log) => (
-                      <tr key={log.id} className="border-t border-gray-200 dark:border-gray-700">
-                        <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
-                          {formatDate(log.started_at)}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(
-                              log.status
-                            )}`}
-                          >
-                            {log.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2 text-sm">{log.num_proxies}</td>
-                        <td className="px-4 py-2 text-sm">{log.num_instances}</td>
-                        <td className="px-4 py-2 text-sm">{log.num_updated}</td>
-                        <td className="px-4 py-2 text-sm">
-                          {log.created_by_email || log.triggered_by}
-                        </td>
-                      </tr>
+                      <React.Fragment key={log.id}>
+                        <tr
+                          className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                        >
+                          <td className="px-4 py-2 text-sm">
+                            {log.instance_logs && log.instance_logs.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => setExpandedLogId(expandedLogId === log.id ? null : log.id)}
+                                className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+                                aria-label={expandedLogId === log.id ? 'Recolher detalhes' : 'Expandir detalhes'}
+                              >
+                                {expandedLogId === log.id ? (
+                                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-gray-500" />
+                                )}
+                              </button>
+                            ) : (
+                              <span className="w-4 inline-block" />
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
+                            {formatDate(log.started_at)}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${getStatusBadge(
+                                log.status
+                              )}`}
+                            >
+                              {log.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-sm">{log.num_proxies}</td>
+                          <td className="px-4 py-2 text-sm">{log.num_instances}</td>
+                          <td className="px-4 py-2 text-sm">{log.num_updated}</td>
+                          <td className="px-4 py-2 text-sm">
+                            {log.created_by_email || log.triggered_by}
+                          </td>
+                          <td className="px-4 py-2 text-sm max-w-[200px]">
+                            {log.error_message ? (
+                              <span
+                                className="text-red-700 dark:text-red-300 truncate block"
+                                title={log.error_message}
+                              >
+                                {log.error_message.length > 60
+                                  ? `${log.error_message.slice(0, 60)}…`
+                                  : log.error_message}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                        </tr>
+                        {expandedLogId === log.id && log.instance_logs && log.instance_logs.length > 0 && (
+                          <tr key={`${log.id}-detail`} className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
+                            <td colSpan={9} className="px-4 py-3">
+                              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                                Detalhe por instância
+                              </p>
+                              <ul className="space-y-1 text-sm">
+                                {log.instance_logs.map((inst, idx) => (
+                                  <li
+                                    key={inst.instance_name + String(idx)}
+                                    className={`flex flex-wrap gap-2 items-baseline ${
+                                      inst.success ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-300'
+                                    }`}
+                                  >
+                                    <span className="font-medium">{inst.instance_name}</span>
+                                    <span className="text-xs">
+                                      {inst.success ? 'OK' : `Erro: ${inst.error_message || '—'}`}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     ))}
                   </tbody>
                 </table>

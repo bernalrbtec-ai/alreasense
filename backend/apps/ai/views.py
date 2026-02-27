@@ -1988,8 +1988,8 @@ def _rag_remove_for_summary(summary):
         logger.warning("[RAG] Erro ao chamar rag-remove para conversation_id=%s: %s", summary.conversation_id, e)
 
 
-def _serialize_conversation_summary(item):
-    return {
+def _serialize_conversation_summary(item, contact_tags=None):
+    out = {
         "id": item.id,
         "conversation_id": str(item.conversation_id),
         "contact_phone": item.contact_phone or "",
@@ -2002,6 +2002,9 @@ def _serialize_conversation_summary(item):
         "created_at": timezone.localtime(item.created_at).isoformat(),
         "updated_at": timezone.localtime(item.updated_at).isoformat(),
     }
+    if contact_tags is not None:
+        out["contact_tags"] = contact_tags
+    return out
 
 
 @api_view(["GET"])
@@ -2042,7 +2045,27 @@ def conversation_summary_list(request):
     pagination = LimitOffsetPagination()
     pagination.default_limit = 20
     results = pagination.paginate_queryset(queryset, request)
-    data = [_serialize_conversation_summary(item) for item in results]
+    # Resolver tags do contato por telefone (para exibir em vez do UUID na UI)
+    contact_tags_by_phone = {}
+    normalize_phone_for_search = None
+    if results:
+        from apps.contacts.models import Contact
+        from apps.contacts.signals import normalize_phone_for_search as _norm
+        normalize_phone_for_search = _norm
+        phones = list({item.contact_phone for item in results if item.contact_phone})
+        phones_for_query = set(phones) | {_norm(p) for p in phones}
+        for c in Contact.objects.filter(tenant=tenant, phone__in=phones_for_query).prefetch_related("tags"):
+            key_norm = _norm(c.phone)
+            tag_names = [t.name for t in c.tags.all()]
+            contact_tags_by_phone[key_norm] = tag_names
+            contact_tags_by_phone[c.phone] = tag_names
+    data = []
+    for item in results:
+        tags = []
+        if item.contact_phone and normalize_phone_for_search:
+            key = normalize_phone_for_search(item.contact_phone)
+            tags = contact_tags_by_phone.get(key) or contact_tags_by_phone.get(item.contact_phone) or []
+        data.append(_serialize_conversation_summary(item, contact_tags=tags))
     return pagination.get_paginated_response(data)
 
 
@@ -2094,7 +2117,7 @@ def conversation_summary_detail(request, pk):
     return Response({"error": "Ação inválida. Use action: approve | reject | edit (com content para edit)."}, status=status.HTTP_400_BAD_REQUEST)
 
 
-REPROCESS_BATCH_LIMIT = 50
+REPROCESS_BATCH_LIMIT = 10000
 
 
 def _reprocess_batch_worker(conv_ids, approved_map):

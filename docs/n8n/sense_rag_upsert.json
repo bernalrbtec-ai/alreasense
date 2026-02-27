@@ -1,0 +1,57 @@
+{
+  "name": "Sense - RAG upsert (embed + pgvector)",
+  "nodes": [
+    {
+      "id": "wh-rag-upsert",
+      "name": "Webhook RAG upsert",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-upsert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "sense-rag-upsert"
+    },
+    {
+      "id": "code-validar",
+      "name": "Validar tenant_id e content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "// Payload: tenant_id, source (company|conversation_summary|secretary), content, metadata\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst tenantId = body.tenant_id;\nconst source = body.source || 'conversation_summary';\nconst content = (body.content || '').toString().trim();\nconst metadata = body.metadata || {};\nif (!tenantId || !content) {\n  throw new Error('tenant_id e content são obrigatórios');\n}\nreturn [{ json: { tenant_id: tenantId, source, content, metadata } }];\n"
+      }
+    },
+    {
+      "id": "code-embed-placeholder",
+      "name": "Embedding + persistir (placeholder)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": {
+        "jsCode": "// Em produção: substituir por nó HTTP Request (API de embedding) + nó Postgres (pgvector) ou API Sense.\n// Política: source=company -> replace por tenant+source; source=conversation_summary -> upsert por (tenant_id, source, metadata.conversation_id)\nconst item = $input.first().json;\n// Simula sucesso; em produção aqui iria chamar embedding e INSERT/UPDATE no pgvector\nreturn [{ json: { status: 'ok' } }];\n"
+      },
+      "notesInFlow": true,
+      "notes": "Substituir por: 1) HTTP Request para serviço de embedding, 2) Postgres (pgvector) INSERT ou DELETE+INSERT conforme source."
+    },
+    {
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [660, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook RAG upsert": { "main": [[{ "node": "Validar tenant_id e content", "type": "main", "index": 0 }]] },
+    "Validar tenant_id e content": { "main": [[{ "node": "Embedding + persistir (placeholder)", "type": "main", "index": 0 }]] },
+    "Embedding + persistir (placeholder)": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

@@ -72,8 +72,13 @@ class EvolutionAPIManager:
             logger.error(f"✗ Erro ao listar instâncias: {e}")
             return []
 
-    def update_proxy(self, instance_name: str, proxy_data: Dict) -> bool:
-        """Atualiza o proxy de uma instância específica."""
+    def update_proxy(self, instance_name: str, proxy_data: Dict) -> Tuple[bool, Optional[str]]:
+        """
+        Atualiza o proxy de uma instância específica.
+        Retorna (sucesso, detalhe_erro). Em sucesso, detalhe_erro é None.
+        Em 400 ou exceção, detalhe_erro contém o corpo da resposta ou a mensagem (truncado).
+        """
+        _MAX_ERROR_LEN = 500
         try:
             url = f"{self.base_url}/proxy/set/{instance_name}"
             payload = {
@@ -89,12 +94,15 @@ class EvolutionAPIManager:
             )
             if response.status_code == 400:
                 logger.error(f"✗ Erro 400 ao atualizar proxy: {response.text}")
+                detail = (response.text or "")[: _MAX_ERROR_LEN]
+                return False, detail or f"Evolution API 400 para {instance_name}"
             response.raise_for_status()
             logger.info(f"✓ Proxy atualizado para instância '{instance_name}'")
-            return True
+            return True, None
         except requests.exceptions.RequestException as e:
             logger.error(f"✗ Erro ao atualizar proxy de '{instance_name}': {e}")
-            return False
+            detail = str(e)[: _MAX_ERROR_LEN] if str(e) else f"Falha ao atualizar proxy de {instance_name}"
+            return False, detail
 
     def restart_instance(self, instance_name: str) -> bool:
         """Reinicia uma instância para aplicar as mudanças."""
@@ -233,7 +241,19 @@ def run_proxy_rotation(
     notification_phone = getattr(settings, "PROXY_NOTIFICATION_PHONE", "")
 
     if not webshare_key or not evolution_url or not evolution_key:
-        return None, "Credenciais não configuradas (WEBSHARE_API_KEY, EVOLUTION_API_URL, EVOLUTION_API_KEY)."
+        err_msg = "Credenciais não configuradas (WEBSHARE_API_KEY, EVOLUTION_API_URL, EVOLUTION_API_KEY)."
+        log = ProxyRotationLog.objects.create(
+            status="failed",
+            triggered_by=triggered_by,
+            strategy=strategy,
+            error_message=err_msg,
+            finished_at=timezone.now(),
+            num_proxies=0,
+            num_instances=0,
+            num_updated=0,
+            created_by=user,
+        )
+        return log, err_msg
 
     # Criar log
     log = ProxyRotationLog.objects.create(
@@ -284,7 +304,8 @@ def run_proxy_rotation(
             success = False
             err_msg = None
 
-            if evolution.update_proxy(instance_name, proxy_data):
+            updated_ok, update_error_detail = evolution.update_proxy(instance_name, proxy_data)
+            if updated_ok:
                 time.sleep(wait_after_update)
                 if restart_instances:
                     if evolution.restart_instance(instance_name):
@@ -298,7 +319,7 @@ def run_proxy_rotation(
                     success_count += 1
                 time.sleep(wait_between)
             else:
-                err_msg = f"Falha ao atualizar proxy de {instance_name}"
+                err_msg = update_error_detail or f"Falha ao atualizar proxy de {instance_name}"
                 errors.append(err_msg)
 
             ProxyRotationInstanceLog.objects.create(

@@ -1,0 +1,73 @@
+{
+  "name": "Sense - Summarize (resumo de conversa)",
+  "nodes": [
+    {
+      "id": "wh-summarize",
+      "name": "Webhook Summarize",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "summarize",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "sense-summarize"
+    },
+    {
+      "id": "code-montar-texto",
+      "name": "Montar texto das mensagens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300],
+      "parameters": {
+        "jsCode": "// Payload: tenant_id, conversation_id, contact_phone, contact_name, messages[], assigned_to_id, department_id, closed_at\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\nconst messages = Array.isArray(body.messages) ? body.messages : [];\nconst text = messages\n  .map(m => `${m.sender_name || m.direction || '?'}: ${(m.content || '').trim()}`)\n  .filter(Boolean)\n  .join('\\n\\n');\nconst model = (body.model && String(body.model).trim()) || 'qwen3:14b';\nreturn [{ json: { prompt: `Resuma esta conversa de atendimento. Extraia em uma frase o assunto principal (subject), sentimento (sentiment: positivo/neutro/negativo), satisfação (satisfaction: 1-5) e um resumo conciso (summary).\\n\\nMensagens:\\n${text || '(vazio)'}`, model } }];\n"
+      }
+    },
+    {
+      "id": "http-llm",
+      "name": "LLM Resumo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model || 'qwen3:14b', prompt: $json.prompt, stream: false } }}",
+        "options": {}
+      },
+      "notesInFlow": true,
+      "notes": "Ajuste URL e model para seu LLM (Ollama/OpenAI). Backend espera JSON com summary, subject, sentiment, satisfaction."
+    },
+    {
+      "id": "code-extrair",
+      "name": "Extrair summary, subject, sentiment, satisfaction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300],
+      "parameters": {
+        "jsCode": "// Resposta do LLM: extrair summary (obrigatório), subject, sentiment, satisfaction\nconst item = $input.first().json;\nconst rawText = (item.response || item.message?.content || '').trim() || '(sem resposta)';\n// Parse simples: linhas tipo 'summary: ...' ou retorna tudo como summary\nlet summary = rawText;\nlet subject = '';\nlet sentiment = '';\nlet satisfaction = '';\nconst lines = rawText.split(/\\n/);\nfor (const line of lines) {\n  const m = line.match(/^(summary|subject|sentiment|satisfaction)\\s*[:=]\\s*(.+)$/i);\n  if (m) {\n    const key = m[1].toLowerCase();\n    const val = m[2].trim();\n    if (key === 'summary') summary = val;\n    else if (key === 'subject') subject = val;\n    else if (key === 'sentiment') sentiment = val;\n    else if (key === 'satisfaction') satisfaction = val;\n  }\n}\nreturn [{ json: { summary: summary || '', subject, sentiment, satisfaction } }];\n"
+      }
+    },
+    {
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [880, 300],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Webhook Summarize": { "main": [[{ "node": "Montar texto das mensagens", "type": "main", "index": 0 }]] },
+    "Montar texto das mensagens": { "main": [[{ "node": "LLM Resumo", "type": "main", "index": 0 }]] },
+    "LLM Resumo": { "main": [[{ "node": "Extrair summary, subject, sentiment, satisfaction", "type": "main", "index": 0 }]] },
+    "Extrair summary, subject, sentiment, satisfaction": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+  },
+  "active": false,
+  "settings": {},
+  "meta": { "templateCredsSetupCompleted": false }
+}

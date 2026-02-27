@@ -96,3 +96,12 @@ Escolha UMA abordagem:
 
 **Solução:** Documentar qual abordagem usar e não misturar
 
+### Upload de .xls retorna 400 (Tipo de arquivo não permitido)
+
+**Causa:** A variável `ATTACHMENTS_ALLOWED_MIME` no backend (Railway) está definida com valor antigo, sem `application/vnd.ms-excel` (formato .xls).
+
+**Solução:** No Railway → Backend → Variables, edite `ATTACHMENTS_ALLOWED_MIME` e inclua no final: `,application/vnd.ms-excel`  
+Ou use o valor completo (inclui .xls e .xlsx):  
+`image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel`  
+**Alternativa:** Remova a variável `ATTACHMENTS_ALLOWED_MIME` para usar o default do código (já inclui .xls). Depois faça redeploy.
+

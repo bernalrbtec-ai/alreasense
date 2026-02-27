@@ -390,11 +390,38 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     contact_phone_raw = (conversation.contact_phone or "").strip()
     contact_phone_normalized = normalize_contact_phone_for_rag(contact_phone_raw)
 
+    # Último departamento que atendeu o contato e data do último contato (para a secretária sugerir)
+    last_department_name = conversation.department.name if conversation.department else None
+    last_department_id = str(conversation.department_id) if conversation.department_id else None
+    last_contact_dt = None
+    if recent_messages:
+        last_contact_dt = recent_messages[-1].created_at
+    elif conversation.updated_at:
+        last_contact_dt = conversation.updated_at
+    else:
+        last_contact_dt = message.created_at
+    last_contact_date_iso = last_contact_dt.isoformat() if last_contact_dt else None
+    try:
+        last_contact_date_readable = last_contact_dt.strftime("%d/%m/%Y %H:%M") if last_contact_dt else None
+    except Exception:
+        last_contact_date_readable = last_contact_date_iso
+
     server_time_utc = _server_time_utc_iso()
     tenant_name = getattr(conversation.tenant, "name", "") or ""
     prompt_with_data = _build_system_data_block(
         tenant_name, business_hours_info, server_time_utc
     ) + (prompt or "").strip()
+    if last_department_name or last_contact_date_readable:
+        contact_context_lines = [
+            "",
+            "=== CONTATO (use para sugerir departamento ou referência ao último atendimento) ===",
+        ]
+        if last_department_name:
+            contact_context_lines.append(f"Último departamento que atendeu o contato: {last_department_name}.")
+        if last_contact_date_readable:
+            contact_context_lines.append(f"Data do último contato: {last_contact_date_readable}.")
+        contact_context_lines.append("=== FIM ===\n")
+        prompt_with_data = prompt_with_data + "\n".join(contact_context_lines)
 
     return {
         "agent_type": "secretary",
@@ -409,8 +436,12 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
             "contact_name": conversation.contact_name,
             "contact_phone": contact_phone_raw,
             "contact_phone_normalized": contact_phone_normalized,
-            "department": conversation.department.name if conversation.department else None,
-            "department_id": str(conversation.department_id) if conversation.department_id else None,
+            "department": last_department_name,
+            "department_id": last_department_id,
+            "last_department_name": last_department_name,
+            "last_department_id": last_department_id,
+            "last_contact_date": last_contact_date_iso,
+            "last_contact_date_readable": last_contact_date_readable,
         },
         "message": {
             "id": str(message.id),

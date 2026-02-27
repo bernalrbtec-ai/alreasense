@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from apps.chat.models import Conversation, Message
 from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
-from apps.ai.models import ConversationSummary, TenantSecretaryProfile
+from apps.ai.models import ConversationSummary, TenantSecretaryProfile, TenantAiSettings
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,8 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
 
         contact_phone_normalized = normalize_contact_phone_for_rag(conversation.contact_phone or "")
         closed_at = conversation.updated_at if conversation.updated_at else timezone.now()
+        ai_settings = TenantAiSettings.objects.filter(tenant_id=conversation.tenant_id).first()
+        default_model = (getattr(ai_settings, "agent_model", None) or "").strip() or "qwen3:14b"
         summarize_payload = {
             "tenant_id": str(conversation.tenant_id),
             "conversation_id": str(conversation.id),
@@ -93,6 +95,7 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             "department_id": str(conversation.department_id) if conversation.department_id else None,
             "department_name": (conversation.department.name if conversation.department else None) or "",
             "closed_at": closed_at.isoformat(),
+            "model": default_model,
         }
         summary = None
         summarize_response_data = {}
