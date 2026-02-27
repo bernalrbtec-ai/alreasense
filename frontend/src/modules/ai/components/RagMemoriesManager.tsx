@@ -8,6 +8,7 @@ import LoadingSpinner from '../../../components/ui/LoadingSpinner'
 import { toast } from 'sonner'
 import { api } from '../../../lib/api'
 import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../../lib/toastHelper'
+import { useAuthStore } from '../../../stores/authStore'
 
 export interface ConversationSummaryItem {
   id: number
@@ -60,12 +61,19 @@ export function RagMemoriesManager() {
   const [reprocessScope, setReprocessScope] = useState<'all' | 'contact'>('all')
   const [reprocessContactPhone, setReprocessContactPhone] = useState('')
   const [reprocessSubmitting, setReprocessSubmitting] = useState(false)
+  const [reprocessNotifyOptions, setReprocessNotifyOptions] = useState<{ has_smtp: boolean; has_whatsapp: boolean } | null>(null)
+  const [reprocessNotifyWhatsapp, setReprocessNotifyWhatsapp] = useState(false)
+  const [reprocessNotifyWhatsappPhone, setReprocessNotifyWhatsappPhone] = useState('')
+  const [reprocessNotifyEmail, setReprocessNotifyEmail] = useState(false)
+  const [reprocessNotifyEmailAddress, setReprocessNotifyEmailAddress] = useState('')
 
   const [reprocessJobId, setReprocessJobId] = useState<string | null>(null)
   const [reprocessJobData, setReprocessJobData] = useState<{
     status: string; total: number; processed: number;
-    approved: number; rejected: number; percent: number
+    approved: number; rejected: number; percent: number;
+    notify_whatsapp_requested?: boolean; notify_email_requested?: boolean;
   } | null>(null)
+  const { user: authUser } = useAuthStore()
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollErrorCountRef = useRef(0)
 
@@ -96,6 +104,19 @@ export function RagMemoriesManager() {
       fetchAutoApproveConfig()
     }
   }, [autoApproveOpen, autoApproveConfig, autoApproveLoading, fetchAutoApproveConfig])
+
+  useEffect(() => {
+    if (reprocessModalOpen) {
+      setReprocessNotifyOptions(null)
+      setReprocessNotifyWhatsapp(false)
+      setReprocessNotifyEmail(false)
+      setReprocessNotifyWhatsappPhone(authUser?.phone ?? '')
+      setReprocessNotifyEmailAddress(authUser?.email ?? '')
+      api.get<{ has_smtp: boolean; has_whatsapp: boolean }>('ai/summaries/reprocess/notify-options/')
+        .then(({ data }) => setReprocessNotifyOptions(data))
+        .catch(() => setReprocessNotifyOptions({ has_smtp: false, has_whatsapp: false }))
+    }
+  }, [reprocessModalOpen, authUser?.phone, authUser?.email])
 
   const stopPolling = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -233,14 +254,28 @@ export function RagMemoriesManager() {
       toast.error('Informe o telefone do contato para reprocessar por contato.')
       return
     }
+    if (reprocessNotifyWhatsapp && !reprocessNotifyWhatsappPhone.trim()) {
+      toast.error('Marque "Notificar por WhatsApp" apenas se informar o número para envio.')
+      return
+    }
+    if (reprocessNotifyEmail && !reprocessNotifyEmailAddress.trim()) {
+      toast.error('Marque "Notificar por Email" apenas se informar o email para envio.')
+      return
+    }
     setReprocessSubmitting(true)
     try {
-      const payload: { scope: string; contact_phone?: string } = { scope: reprocessScope }
+      const payload: { scope: string; contact_phone?: string; notify_whatsapp_phone?: string; notify_email?: string } = { scope: reprocessScope }
       if (reprocessScope === 'contact') payload.contact_phone = reprocessContactPhone.trim()
+      if (reprocessNotifyWhatsapp && reprocessNotifyWhatsappPhone.trim()) payload.notify_whatsapp_phone = reprocessNotifyWhatsappPhone.trim()
+      if (reprocessNotifyEmail && reprocessNotifyEmailAddress.trim()) payload.notify_email = reprocessNotifyEmailAddress.trim()
       const { data } = await api.post<{ status: string; enqueued: number; total_eligible: number; job_id?: string }>('ai/summaries/reprocess/', payload)
       setReprocessModalOpen(false)
       setReprocessScope('all')
       setReprocessContactPhone('')
+      setReprocessNotifyWhatsapp(false)
+      setReprocessNotifyWhatsappPhone('')
+      setReprocessNotifyEmail(false)
+      setReprocessNotifyEmailAddress('')
       if (data.job_id && data.enqueued > 0) {
         setReprocessJobId(data.job_id)
         setReprocessJobData({ status: 'running', total: data.enqueued, processed: 0, approved: 0, rejected: 0, percent: 0 })
@@ -550,6 +585,56 @@ export function RagMemoriesManager() {
                     />
                   </div>
                 )}
+                <div className="border-t border-gray-200 pt-3 mt-3 space-y-3">
+                  <p className="text-sm font-medium text-gray-700">Notificar quando concluir (opcional)</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="reprocess-notify-whatsapp"
+                        checked={reprocessNotifyWhatsapp}
+                        onChange={(e) => setReprocessNotifyWhatsapp(e.target.checked)}
+                        disabled={reprocessNotifyOptions === null || !reprocessNotifyOptions?.has_whatsapp}
+                      />
+                      <Label htmlFor="reprocess-notify-whatsapp" className="text-sm">
+                        Notificar por WhatsApp
+                        {reprocessNotifyOptions !== null && !reprocessNotifyOptions?.has_whatsapp && (
+                          <span className="text-gray-400 ml-1">(não configurado)</span>
+                        )}
+                      </Label>
+                    </div>
+                    {reprocessNotifyWhatsapp && (
+                      <Input
+                        value={reprocessNotifyWhatsappPhone}
+                        onChange={(e) => setReprocessNotifyWhatsappPhone(e.target.value)}
+                        placeholder="Ex: 5511999999999"
+                        className="ml-6 max-w-xs"
+                      />
+                    )}
+                  </div>
+                  {reprocessNotifyOptions?.has_smtp && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          id="reprocess-notify-email"
+                          checked={reprocessNotifyEmail}
+                          onChange={(e) => setReprocessNotifyEmail(e.target.checked)}
+                        />
+                        <Label htmlFor="reprocess-notify-email" className="text-sm">Notificar por Email</Label>
+                      </div>
+                      {reprocessNotifyEmail && (
+                        <Input
+                          type="email"
+                          value={reprocessNotifyEmailAddress}
+                          onChange={(e) => setReprocessNotifyEmailAddress(e.target.value)}
+                          placeholder="seu@email.com"
+                          className="ml-6 max-w-xs"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => !reprocessSubmitting && setReprocessModalOpen(false)} disabled={reprocessSubmitting}>
@@ -637,9 +722,15 @@ export function RagMemoriesManager() {
                       <div className="text-xs text-gray-500 mt-1">Taxa de sucesso</div>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mb-4 text-center">
-                    Um relatório foi enviado por WhatsApp e email.
-                  </p>
+                  {(reprocessJobData.notify_whatsapp_requested || reprocessJobData.notify_email_requested) && (
+                    <p className="text-xs text-gray-400 mb-4 text-center">
+                      {reprocessJobData.notify_whatsapp_requested && reprocessJobData.notify_email_requested
+                        ? 'Um relatório foi enviado por WhatsApp e email.'
+                        : reprocessJobData.notify_whatsapp_requested
+                          ? 'Um relatório foi enviado por WhatsApp.'
+                          : 'Um relatório foi enviado por email.'}
+                    </p>
+                  )}
                   <div className="flex justify-end">
                     <Button onClick={handleCloseJobModal}>Fechar</Button>
                   </div>

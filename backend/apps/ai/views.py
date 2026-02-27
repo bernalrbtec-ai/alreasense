@@ -2105,7 +2105,7 @@ REPROCESS_JOB_KEY_PREFIX = "reprocess_job:"
 REPROCESS_JOB_TTL = 3600  # 1 hora
 
 
-def _reprocess_job_set(job_id, tenant_id, user_id, total):
+def _reprocess_job_set(job_id, tenant_id, user_id, total, notify_whatsapp_phone=None, notify_email=None):
     """Cria job de reprocessamento no Redis. Retorna True se ok, False se Redis indisponível."""
     client = get_redis_client()
     if not client:
@@ -2120,6 +2120,8 @@ def _reprocess_job_set(job_id, tenant_id, user_id, total):
         "approved": 0,
         "rejected": 0,
         "started_at": timezone.now().isoformat(),
+        "notify_whatsapp_phone": (notify_whatsapp_phone or "").strip() or None,
+        "notify_email": (notify_email or "").strip() or None,
     }
     try:
         client.setex(key, REPROCESS_JOB_TTL, json.dumps(value))
@@ -2165,8 +2167,8 @@ def _reprocess_job_update(job_id, processed, approved, rejected, done=False):
         logger.warning("[RAG] reprocess_job Redis update failed: %s", e)
 
 
-def _reprocess_send_report(user, total, approved, rejected, started_at_iso):
-    """Envia relatório de reprocessamento por WhatsApp e email. Erros são apenas logados."""
+def _reprocess_send_report(tenant_id, notify_phone, notify_email, total, approved, rejected, started_at_iso):
+    """Envia relatório de reprocessamento por WhatsApp e/ou email conforme solicitado. Erros são apenas logados."""
     from datetime import datetime
     try:
         started_str = datetime.fromisoformat(started_at_iso).strftime("%d/%m/%Y %H:%M") if started_at_iso else "?"
@@ -2180,44 +2182,55 @@ def _reprocess_send_report(user, total, approved, rejected, started_at_iso):
         f"Taxa de sucesso: {percent}%\n\n"
         f"Iniciado em: {started_str}"
     )
-    # WhatsApp
     try:
-        from apps.notifications.services import send_whatsapp_notification
-        send_whatsapp_notification(user, message)
-        logger.info("[RAG] Relatório WhatsApp enviado para %s", user.email)
-    except Exception as e:
-        logger.warning("[RAG] Falha ao enviar relatório WhatsApp: %s", e)
-    # Email via SMTPConfig do tenant
-    try:
-        from apps.notifications.models import SMTPConfig
-        from django.core.mail import get_connection, EmailMessage as DjangoEmailMessage
-        smtp = SMTPConfig.objects.filter(tenant=user.tenant, is_active=True, is_default=True).first()
-        if not smtp:
-            smtp = SMTPConfig.objects.filter(tenant=user.tenant, is_active=True).first()
-        if smtp and user.email:
-            conn = get_connection(
-                backend="django.core.mail.backends.smtp.EmailBackend",
-                host=smtp.host,
-                port=smtp.port,
-                username=smtp.username,
-                password=smtp.password,
-                use_tls=smtp.use_tls,
-                use_ssl=smtp.use_ssl,
-                fail_silently=False,
-                timeout=30,
-            )
-            from_address = f"{smtp.from_name} <{smtp.from_email}>" if smtp.from_name else smtp.from_email
-            email = DjangoEmailMessage(
-                subject="Reprocessamento RAG concluído",
-                body=message.replace("*", "").replace("|", "-"),
-                from_email=from_address,
-                to=[user.email],
-                connection=conn,
-            )
-            email.send(fail_silently=False)
-            logger.info("[RAG] Relatório email enviado para %s", user.email)
-    except Exception as e:
-        logger.warning("[RAG] Falha ao enviar relatório email: %s", e)
+        tid = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+    except (ValueError, TypeError):
+        logger.warning("[RAG] tenant_id inválido para envio de relatório: %s", tenant_id)
+        return
+    tenant = Tenant.objects.filter(id=tid).first()
+    if not tenant:
+        logger.warning("[RAG] Tenant %s não encontrado para envio de relatório", tenant_id)
+        return
+    if notify_phone:
+        try:
+            from apps.notifications.services import send_whatsapp_to_phone
+            send_whatsapp_to_phone(tenant, notify_phone, message)
+            logger.info("[RAG] Relatório WhatsApp enviado para %s", notify_phone)
+        except Exception as e:
+            logger.warning("[RAG] Falha ao enviar relatório WhatsApp: %s", e)
+    if notify_email:
+        try:
+            from apps.notifications.models import SMTPConfig
+            from django.core.mail import get_connection, EmailMessage as DjangoEmailMessage
+            smtp = SMTPConfig.objects.filter(tenant=tenant, is_active=True, is_default=True).first()
+            if not smtp:
+                smtp = SMTPConfig.objects.filter(tenant=tenant, is_active=True).first()
+            if smtp:
+                conn = get_connection(
+                    backend="django.core.mail.backends.smtp.EmailBackend",
+                    host=smtp.host,
+                    port=smtp.port,
+                    username=smtp.username,
+                    password=smtp.password,
+                    use_tls=smtp.use_tls,
+                    use_ssl=smtp.use_ssl,
+                    fail_silently=False,
+                    timeout=30,
+                )
+                from_address = f"{smtp.from_name} <{smtp.from_email}>" if smtp.from_name else smtp.from_email
+                email = DjangoEmailMessage(
+                    subject="Reprocessamento RAG concluído",
+                    body=message.replace("*", "").replace("|", "-"),
+                    from_email=from_address,
+                    to=[notify_email],
+                    connection=conn,
+                )
+                email.send(fail_silently=False)
+                logger.info("[RAG] Relatório email enviado para %s", notify_email)
+            else:
+                logger.warning("[RAG] SMTP não configurado para tenant %s", tenant_id)
+        except Exception as e:
+            logger.warning("[RAG] Falha ao enviar relatório email: %s", e)
 
 
 def _reprocess_batch_worker(conv_ids, approved_map, job_id=None, user_id=None):
@@ -2233,6 +2246,8 @@ def _reprocess_batch_worker(conv_ids, approved_map, job_id=None, user_id=None):
     job_data = _reprocess_job_get(str(job_id)) if job_id else None
     started_at_iso = (job_data or {}).get("started_at")
     tenant_id = (job_data or {}).get("tenant_id")
+    notify_phone = (job_data or {}).get("notify_whatsapp_phone") or ""
+    notify_email = (job_data or {}).get("notify_email") or ""
 
     for conv_id in conv_ids:
         try:
@@ -2267,16 +2282,28 @@ def _reprocess_batch_worker(conv_ids, approved_map, job_id=None, user_id=None):
     if job_id:
         _reprocess_job_update(str(job_id), processed, approved_count, rejected_count, done=True)
 
-    # Enviar relatório se tiver user_id
-    if user_id:
+    # Enviar relatório apenas se foi solicitado (notify_phone e/ou notify_email)
+    if tenant_id and (notify_phone or notify_email):
         try:
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            user = User.objects.filter(id=user_id).select_related("tenant").first()
-            if user:
-                _reprocess_send_report(user, len(conv_ids), approved_count, rejected_count, started_at_iso)
+            _reprocess_send_report(
+                tenant_id, notify_phone or None, notify_email or None,
+                len(conv_ids), approved_count, rejected_count, started_at_iso,
+            )
         except Exception as e:
-            logger.warning("[RAG] Falha ao buscar user para relatório: %s", e)
+            logger.warning("[RAG] Falha ao enviar relatório: %s", e)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_reprocess_notify_options(request):
+    """Retorna opções de notificação para o modal de reprocessamento: has_smtp e has_whatsapp."""
+    from apps.notifications.models import SMTPConfig
+    from apps.notifications.services import _get_whatsapp_config_for_tenant
+    tenant = request.user.tenant
+    has_smtp = SMTPConfig.objects.filter(tenant=tenant, is_active=True).exists()
+    base_url, api_key, _ = _get_whatsapp_config_for_tenant(tenant)
+    has_whatsapp = bool(base_url and api_key)
+    return Response({"has_smtp": has_smtp, "has_whatsapp": has_whatsapp})
 
 
 @api_view(["POST"])
@@ -2332,6 +2359,27 @@ def conversation_summary_reprocess(request):
     total_eligible = conversations_qs.count()
     to_process = list(conversations_qs.values_list("id", flat=True)[:REPROCESS_BATCH_LIMIT])
 
+    raw_phone = (data.get("notify_whatsapp_phone") or "").strip() or None
+    raw_email = (data.get("notify_email") or "").strip() or None
+    if raw_phone is not None and len(raw_phone) > 50:
+        return Response(
+            {"error": "notify_whatsapp_phone muito longo."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if raw_email is not None:
+        if len(raw_email) > 254:
+            return Response(
+                {"error": "notify_email muito longo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not re.match(r"^[^@]+@[^@]+\.[^@]+$", raw_email):
+            return Response(
+                {"error": "notify_email com formato inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    notify_whatsapp_phone = raw_phone
+    notify_email = raw_email
+
     approved = {
         s.conversation_id: s
         for s in ConversationSummary.objects.filter(
@@ -2344,7 +2392,11 @@ def conversation_summary_reprocess(request):
     job_id = None
     if to_process:
         job_id = uuid.uuid4()
-        _reprocess_job_set(job_id, tenant.id, request.user.id, len(to_process))
+        _reprocess_job_set(
+            job_id, tenant.id, request.user.id, len(to_process),
+            notify_whatsapp_phone=notify_whatsapp_phone,
+            notify_email=notify_email,
+        )
         thread = threading.Thread(
             target=_reprocess_batch_worker,
             args=(to_process, approved),
@@ -2393,6 +2445,8 @@ def conversation_summary_reprocess_status(request, job_id):
     rejected = job.get("rejected") or 0
     processed = job.get("processed") or 0
     percent = round(approved / total * 100, 1) if total > 0 else 0
+    notify_whatsapp_phone = job.get("notify_whatsapp_phone") or ""
+    notify_email = job.get("notify_email") or ""
     return Response({
         "status": current_status,
         "total": total,
@@ -2402,6 +2456,8 @@ def conversation_summary_reprocess_status(request, job_id):
         "percent": percent,
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
+        "notify_whatsapp_requested": bool(notify_whatsapp_phone),
+        "notify_email_requested": bool(notify_email),
     })
 
 

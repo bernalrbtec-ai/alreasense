@@ -56,9 +56,37 @@ def normalize_phone(phone):
     return phone_clean
 
 
-def _get_whatsapp_config(user):
+def _get_whatsapp_config_for_tenant(tenant):
     """
     Helper para buscar configuração WhatsApp do tenant.
+    
+    Args:
+        tenant: Instância de Tenant
+    
+    Returns:
+        tuple: (base_url, api_key, instance_name) ou (None, None, None) se não encontrado
+    """
+    instance = WhatsAppInstance.objects.filter(
+        tenant=tenant,
+        is_active=True,
+        status='active'
+    ).select_related('tenant').first()
+    if instance and instance.api_url and instance.api_key:
+        return instance.api_url.rstrip('/'), instance.api_key, instance.instance_name
+    connection = EvolutionConnection.objects.filter(
+        tenant=tenant,
+        is_active=True
+    ).select_related('tenant').first()
+    if connection and connection.base_url and connection.api_key:
+        instance = WhatsAppInstance.objects.filter(tenant=tenant, is_active=True).first()
+        instance_name = instance.instance_name if instance else 'default'
+        return connection.base_url.rstrip('/'), connection.api_key, instance_name
+    return None, None, None
+
+
+def _get_whatsapp_config(user):
+    """
+    Helper para buscar configuração WhatsApp do tenant (via user).
     
     Args:
         user: Instância de User
@@ -66,32 +94,7 @@ def _get_whatsapp_config(user):
     Returns:
         tuple: (base_url, api_key, instance_name) ou (None, None, None) se não encontrado
     """
-    # Buscar instância WhatsApp ativa do tenant
-    instance = WhatsAppInstance.objects.filter(
-        tenant=user.tenant,
-        is_active=True,
-        status='active'
-    ).select_related('tenant').first()
-    
-    if instance and instance.api_url and instance.api_key:
-        return instance.api_url.rstrip('/'), instance.api_key, instance.instance_name
-    
-    # Fallback: buscar EvolutionConnection
-    connection = EvolutionConnection.objects.filter(
-        tenant=user.tenant,
-        is_active=True
-    ).select_related('tenant').first()
-    
-    if connection and connection.base_url and connection.api_key:
-        # Buscar instância para pegar instance_name
-        instance = WhatsAppInstance.objects.filter(
-            tenant=user.tenant,
-            is_active=True
-        ).first()
-        instance_name = instance.instance_name if instance else 'default'
-        return connection.base_url.rstrip('/'), connection.api_key, instance_name
-    
-    return None, None, None
+    return _get_whatsapp_config_for_tenant(user.tenant)
 
 
 def send_whatsapp_notification(user, message):
@@ -201,6 +204,70 @@ def send_whatsapp_notification(user, message):
             else:
                 raise
     
+    return False
+
+
+def send_whatsapp_to_phone(tenant, phone, message):
+    """
+    Envia notificação via WhatsApp para um número específico usando a config do tenant.
+
+    Args:
+        tenant: Instância de Tenant
+        phone: String com o telefone de destino
+        message: String com a mensagem
+
+    Returns:
+        bool: True se enviado com sucesso
+
+    Raises:
+        ValueError: Se telefone inválido ou config WhatsApp não disponível
+    """
+    if not phone or not str(phone).strip():
+        raise ValueError("Telefone de destino não informado")
+    phone_normalized = normalize_phone(str(phone).strip())
+    if not phone_normalized:
+        raise ValueError(f"Telefone não pôde ser normalizado: {phone}")
+    base_url, api_key, instance_name = _get_whatsapp_config_for_tenant(tenant)
+    if not base_url or not api_key:
+        logger.warning(
+            "⚠️ [WHATSAPP NOTIFICATION] API URL ou API Key não configurados para tenant %s",
+            getattr(tenant, "id", tenant),
+        )
+        raise ValueError("API WhatsApp não configurada para o tenant")
+    url = f"{base_url}/message/sendText/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    phone_for_api = phone_normalized.replace("+", "")
+    payload = {"number": phone_for_api, "text": message}
+    max_retries = 3
+    base_delay = 1
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            if response.status_code in [200, 201]:
+                logger.info(
+                    "✅ [WHATSAPP NOTIFICATION] Enviado para %s (tenant %s)",
+                    phone_normalized,
+                    getattr(tenant, "id", "?"),
+                )
+                return True
+            logger.warning(
+                "⚠️ [WHATSAPP NOTIFICATION] Erro ao enviar para %s: %s %s (tentativa %s/%s)",
+                phone_normalized,
+                response.status_code,
+                response.text[:200],
+                attempt + 1,
+                max_retries,
+            )
+        except Exception as e:
+            logger.warning(
+                "⚠️ [WHATSAPP NOTIFICATION] Falha ao enviar para %s (tentativa %s/%s): %s",
+                phone_normalized,
+                attempt + 1,
+                max_retries,
+                e,
+            )
+        if attempt < max_retries - 1:
+            time.sleep(base_delay * (2 ** attempt))
     return False
 
 
