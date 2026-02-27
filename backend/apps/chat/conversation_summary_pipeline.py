@@ -139,6 +139,7 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             ) or getattr(conversation.assigned_to, "name", None) or ""
         department_name = (conversation.department.name if conversation.department else None) or ""
 
+        confidence = summarize_response_data.get("confidence")
         summary_metadata = {
             "contact_phone": contact_phone_normalized,
             "conversation_id": str(conversation.id),
@@ -147,6 +148,7 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             "subject": subject,
             "sentiment": sentiment,
             "satisfaction": satisfaction,
+            "confidence": confidence,
             "who_attended_id": who_attended_id,
             "who_attended_name": who_attended_name,
             "department_name": department_name,

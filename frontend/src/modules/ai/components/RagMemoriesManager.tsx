@@ -42,6 +42,20 @@ const STATUS_OPTIONS: { value: '' | 'pending' | 'approved' | 'rejected'; label: 
   { value: 'rejected', label: 'Reprovado' },
 ]
 
+function formatSatisfaction(value: unknown): string {
+  if (value == null || value === '') return '—'
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isNaN(n) && n >= 1 && n <= 5) return String(Math.round(n))
+  return String(value)
+}
+
+function formatConfidence(value: unknown): string {
+  if (value == null || value === '') return '—'
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isNaN(n) && n >= 0 && n <= 1) return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return String(value)
+}
+
 export function RagMemoriesManager() {
   const [items, setItems] = useState<ConversationSummaryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -578,6 +592,8 @@ export function RagMemoriesManager() {
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Confiança</th>
                     <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                   </tr>
                 </thead>
@@ -617,6 +633,12 @@ export function RagMemoriesManager() {
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-500">
                         {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString('pt-BR') : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
+                        {formatSatisfaction(item.metadata?.satisfaction)}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
+                        {formatConfidence(item.metadata?.confidence)}
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex justify-end gap-1">
