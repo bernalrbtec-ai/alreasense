@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.conf import settings
 from django.db.models import Q
+from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 
@@ -2010,9 +2011,9 @@ def _serialize_conversation_summary(item, contact_tags=None):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def conversation_summary_list(request):
-    """Lista resumos de conversa para gestão RAG (filtros: status, contact_phone, contact_name, from_date, to_date)."""
+    """Lista resumos de conversa para gestão RAG (filtros: status, contact_phone, contact_name, from_date, to_date). Ordenação: nome do contato A->Z, depois mais recente."""
     tenant = request.user.tenant
-    queryset = ConversationSummary.objects.filter(tenant=tenant).order_by("-created_at")
+    queryset = ConversationSummary.objects.filter(tenant=tenant).order_by(Lower("contact_name"), "-created_at")
 
     status_param = request.query_params.get("status")
     if status_param and status_param in (ConversationSummary.STATUS_PENDING, ConversationSummary.STATUS_APPROVED, ConversationSummary.STATUS_REJECTED):
