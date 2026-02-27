@@ -265,6 +265,11 @@ class TenantSecretaryProfile(models.Model):
         blank=True,
         help_text='Minutos sem interação no Inbox para fechar conversa (0=desativado, máx. 1440=24h).',
     )
+    summary_auto_approve_config = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Config de aprovação automática de resumos RAG: enabled, criteria (min_words, max_words, etc.).',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

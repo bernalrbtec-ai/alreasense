@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Check, X, Edit, RefreshCw, Search, FileText } from 'lucide-react'
+import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
@@ -18,6 +18,9 @@ export interface ConversationSummaryItem {
   content: string
   metadata: Record<string, unknown>
   status: 'pending' | 'approved' | 'rejected'
+  status_display?: string
+  is_auto_approved?: boolean
+  is_auto_rejected?: boolean
   reviewed_at: string | null
   reviewed_by_id: number | null
   created_at: string
@@ -62,6 +65,42 @@ export function RagMemoriesManager() {
   const [editItem, setEditItem] = useState<ConversationSummaryItem | null>(null)
   const [editContent, setEditContent] = useState('')
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  const [autoApproveOpen, setAutoApproveOpen] = useState(false)
+  const [autoApproveConfig, setAutoApproveConfig] = useState<{ enabled: boolean; criteria: Record<string, { enabled: boolean; value?: number }>; criterion_defaults?: Record<string, { label: string; type: string; default: unknown }> } | null>(null)
+  const [autoApproveLoading, setAutoApproveLoading] = useState(false)
+  const [autoApproveSaving, setAutoApproveSaving] = useState(false)
+
+  const fetchAutoApproveConfig = useCallback(async () => {
+    setAutoApproveLoading(true)
+    try {
+      const { data } = await api.get<{ enabled: boolean; criteria: Record<string, { enabled: boolean; value?: number }>; criterion_defaults?: Record<string, { label: string; type: string; default: unknown }> }>('ai/summaries/auto-approve-config/')
+      setAutoApproveConfig(data)
+    } catch (e) {
+      showErrorToast('carregar', 'Config. aprovação automática', e)
+    } finally {
+      setAutoApproveLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (autoApproveOpen && !autoApproveConfig && !autoApproveLoading) {
+      fetchAutoApproveConfig()
+    }
+  }, [autoApproveOpen, autoApproveConfig, autoApproveLoading, fetchAutoApproveConfig])
+
+  const handleSaveAutoApproveConfig = async () => {
+    if (!autoApproveConfig) return
+    setAutoApproveSaving(true)
+    try {
+      await api.patch('ai/summaries/auto-approve-config/', { enabled: autoApproveConfig.enabled, criteria: autoApproveConfig.criteria })
+      toast.success('Configuração de aprovação automática salva.')
+    } catch (e: any) {
+      showErrorToast('salvar', 'Config. aprovação automática', e)
+    } finally {
+      setAutoApproveSaving(false)
+    }
+  }
 
   const fetchList = useCallback(async (off = 0) => {
     setLoading(true)
@@ -161,8 +200,88 @@ export function RagMemoriesManager() {
     }
   }
 
+  const criterionOrder = ['min_words', 'max_words', 'min_messages', 'has_subject', 'no_placeholders', 'sentiment_not_negative', 'satisfaction_min', 'confidence_min']
+
   return (
     <div className="space-y-4">
+      <Card className="p-4">
+        <button
+          type="button"
+          onClick={() => setAutoApproveOpen((o) => !o)}
+          className="flex items-center gap-2 w-full text-left font-medium text-gray-900"
+        >
+          {autoApproveOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          Aprovação automática de resumos
+        </button>
+        {autoApproveOpen && (
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            {autoApproveLoading ? (
+              <div className="flex justify-center py-4"><LoadingSpinner /></div>
+            ) : autoApproveConfig ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="auto-approve-enabled"
+                    checked={autoApproveConfig.enabled}
+                    onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, enabled: e.target.checked } : c)}
+                  />
+                  <Label htmlFor="auto-approve-enabled" className="text-sm">Ativar aprovação automática</Label>
+                </div>
+                <p className="text-xs text-gray-500">Quando ativo, resumos que passarem em todos os critérios marcados abaixo serão aprovados e enviados ao RAG automaticamente.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {criterionOrder.map((cid) => {
+                    const c = autoApproveConfig.criteria[cid]
+                    const def = autoApproveConfig.criterion_defaults?.[cid]
+                    if (!c) return null
+                    const isNumber = def?.type === 'number'
+                    return (
+                      <div key={cid} className="flex items-center gap-2 flex-wrap">
+                        <input
+                          type="checkbox"
+                          id={`crit-${cid}`}
+                          checked={c.enabled}
+                          onChange={(e) => setAutoApproveConfig((cfg) => {
+                            if (!cfg) return cfg
+                            const next = { ...cfg.criteria[cid], enabled: e.target.checked }
+                            return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
+                          })}
+                        />
+                        <Label htmlFor={`crit-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
+                        {isNumber && c.enabled && (
+                          <Input
+                            type="number"
+                            min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
+                            max={cid === 'confidence_min' ? 1 : cid === 'satisfaction_min' ? 5 : undefined}
+                            value={c.value ?? def?.default ?? ''}
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              const v = raw === '' ? undefined : Number(raw)
+                              const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
+                              setAutoApproveConfig((cfg) => {
+                                if (!cfg) return cfg
+                                return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
+                              })
+                            }}
+                            className="w-20 text-sm"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <Button size="sm" onClick={handleSaveAutoApproveConfig} disabled={autoApproveSaving}>
+                  <Save className="h-4 w-4 mr-1" />
+                  {autoApproveSaving ? 'Salvando…' : 'Salvar'}
+                </Button>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">Não foi possível carregar a configuração.</p>
+            )}
+          </div>
+        )}
+      </Card>
+
       <Card className="p-6">
         <h3 className="text-lg font-medium text-gray-900 mb-2">RAG e Lembranças</h3>
         <p className="text-sm text-gray-600 mb-4">
@@ -275,8 +394,8 @@ export function RagMemoriesManager() {
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                           item.status === 'approved' ? 'bg-green-100 text-green-800' :
                           item.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {item.status === 'pending' ? 'Pendente' : item.status === 'approved' ? 'Aprovado' : 'Reprovado'}
+                        }`} title={item.is_auto_rejected ? (item.metadata?.auto_rejected_reason as string) || 'Reprovado automaticamente' : undefined}>
+                          {item.status_display ?? (item.status === 'pending' ? 'Pendente' : item.status === 'approved' ? 'Aprovado' : 'Reprovado')}
                         </span>
                       </td>
                       <td className="px-3 py-2 text-xs text-gray-500">

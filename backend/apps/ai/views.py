@@ -1942,62 +1942,35 @@ def rebuild_transcription_metrics_endpoint(request):
 
 # ----- Conversation summaries (Gestão RAG) -----
 
-RAG_WEBHOOK_TIMEOUT = 30
-
-
-def _rag_upsert_for_summary(summary):
-    """Envia resumo aprovado para o pgvector via n8n (rag-upsert)."""
-    url = getattr(settings, "N8N_RAG_WEBHOOK_URL", "") or ""
-    if not url:
-        logger.warning("[RAG] N8N_RAG_WEBHOOK_URL não configurado, skip upsert.")
-        return
-    meta = summary.metadata or {}
-    payload = {
-        "tenant_id": str(summary.tenant_id),
-        "source": "conversation_summary",
-        "content": summary.content,
-        "metadata": {
-            "contact_phone": summary.contact_phone,
-            "conversation_id": str(summary.conversation_id),
-            **{k: v for k, v in meta.items() if k not in ("contact_phone", "conversation_id")},
-        },
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
-        resp.raise_for_status()
-        logger.info("[RAG] Upsert ok para conversation_id=%s", summary.conversation_id)
-    except Exception as e:
-        logger.warning("[RAG] Erro ao chamar rag-upsert para conversation_id=%s: %s", summary.conversation_id, e)
-
-
-def _rag_remove_for_summary(summary):
-    """Sinaliza remoção do resumo no pgvector (n8n). Requer N8N_RAG_REMOVE_WEBHOOK_URL."""
-    url = getattr(settings, "N8N_RAG_REMOVE_WEBHOOK_URL", "") or ""
-    if not url:
-        logger.info("[RAG] N8N_RAG_REMOVE_WEBHOOK_URL não configurado, skip remove.")
-        return
-    payload = {
-        "tenant_id": str(summary.tenant_id),
-        "source": "conversation_summary",
-        "conversation_id": str(summary.conversation_id),
-    }
-    try:
-        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
-        resp.raise_for_status()
-        logger.info("[RAG] Remove ok para conversation_id=%s", summary.conversation_id)
-    except Exception as e:
-        logger.warning("[RAG] Erro ao chamar rag-remove para conversation_id=%s: %s", summary.conversation_id, e)
+from apps.ai.summary_rag import rag_upsert_for_summary, rag_remove_for_summary
 
 
 def _serialize_conversation_summary(item, contact_tags=None):
+    meta = item.metadata or {}
+    status_val = item.status
+    is_auto_approved = meta.get("auto_approved") is True
+    is_auto_rejected = meta.get("auto_rejected") is True
+    if status_val == ConversationSummary.STATUS_APPROVED and is_auto_approved:
+        status_display = "Aprovado (automático)"
+    elif status_val == ConversationSummary.STATUS_REJECTED and is_auto_rejected:
+        status_display = "Reprovado (automático)"
+    elif status_val == ConversationSummary.STATUS_APPROVED:
+        status_display = "Aprovado"
+    elif status_val == ConversationSummary.STATUS_REJECTED:
+        status_display = "Reprovado"
+    else:
+        status_display = "Pendente"
     out = {
         "id": item.id,
         "conversation_id": str(item.conversation_id),
         "contact_phone": item.contact_phone or "",
         "contact_name": item.contact_name or "",
         "content": item.content or "",
-        "metadata": item.metadata or {},
-        "status": item.status,
+        "metadata": meta,
+        "status": status_val,
+        "status_display": status_display,
+        "is_auto_approved": is_auto_approved,
+        "is_auto_rejected": is_auto_rejected,
         "reviewed_at": timezone.localtime(item.reviewed_at).isoformat() if item.reviewed_at else None,
         "reviewed_by_id": item.reviewed_by_id,
         "created_at": timezone.localtime(item.created_at).isoformat(),
@@ -2090,13 +2063,16 @@ def conversation_summary_detail(request, pk):
         summary.reviewed_at = timezone.now()
         summary.reviewed_by = request.user
         summary.updated_at = timezone.now()
-        summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
-        _rag_upsert_for_summary(summary)
+        meta = dict(summary.metadata or {})
+        meta.pop("auto_approved", None)
+        summary.metadata = meta
+        summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at", "metadata"])
+        rag_upsert_for_summary(summary)
         return Response(_serialize_conversation_summary(summary))
 
     if action == "reject":
         if was_approved:
-            _rag_remove_for_summary(summary)
+            rag_remove_for_summary(summary)
         summary.status = ConversationSummary.STATUS_REJECTED
         summary.reviewed_at = timezone.now()
         summary.reviewed_by = request.user
@@ -2110,9 +2086,12 @@ def conversation_summary_detail(request, pk):
             return Response({"error": "Conteúdo não pode ser vazio."}, status=status.HTTP_400_BAD_REQUEST)
         summary.content = content_str[:65535]
         summary.updated_at = timezone.now()
-        summary.save(update_fields=["content", "updated_at"])
+        meta = dict(summary.metadata or {})
+        meta.pop("auto_approved", None)
+        summary.metadata = meta
+        summary.save(update_fields=["content", "updated_at", "metadata"])
         if summary.status == ConversationSummary.STATUS_APPROVED:
-            _rag_upsert_for_summary(summary)
+            rag_upsert_for_summary(summary)
         return Response(_serialize_conversation_summary(summary))
 
     return Response({"error": "Ação inválida. Use action: approve | reject | edit (com content para edit)."}, status=status.HTTP_400_BAD_REQUEST)
@@ -2132,7 +2111,7 @@ def _reprocess_batch_worker(conv_ids, approved_map):
         try:
             summary = approved_map.get(conv_id)
             if summary:
-                _rag_remove_for_summary(summary)
+                rag_remove_for_summary(summary)
             conv = Conversation.objects.filter(id=conv_id).first()
             if conv and conv.metadata:
                 meta = dict(conv.metadata)
@@ -2221,3 +2200,98 @@ def conversation_summary_reprocess(request):
         "enqueued": len(to_process),
         "total_eligible": total_eligible,
     })
+
+
+# ----- Aprovação automática (config por tenant) -----
+
+from apps.ai.summary_auto_approve import CRITERION_DEFAULTS
+
+
+def _get_default_auto_approve_config():
+    """Config padrão com todos os critérios e valores default."""
+    criteria = {}
+    for cid, spec in CRITERION_DEFAULTS.items():
+        entry = {"enabled": False}
+        if spec.get("type") == "number":
+            entry["value"] = spec.get("default")
+        criteria[cid] = entry
+    return {"enabled": False, "criteria": criteria}
+
+
+def _validate_auto_approve_config(data):
+    """Valida e normaliza o config. Levanta ValueError com mensagem ou retorna dict limpo."""
+    if not isinstance(data, dict):
+        raise ValueError("Config deve ser um objeto.")
+    enabled = data.get("enabled", False)
+    criteria_raw = data.get("criteria")
+    if criteria_raw is not None and not isinstance(criteria_raw, dict):
+        raise ValueError("criteria deve ser um objeto.")
+    criteria = {}
+    for cid, c in (criteria_raw or {}).items():
+        if cid not in CRITERION_DEFAULTS:
+            continue
+        spec = CRITERION_DEFAULTS[cid]
+        entry = {"enabled": bool(c.get("enabled"))}
+        if spec.get("type") == "number":
+            try:
+                v = c.get("value") if "value" in c else spec.get("default")
+                v = float(v) if v is not None else spec.get("default")
+            except (TypeError, ValueError):
+                v = spec.get("default")
+            if entry["enabled"] and v is not None:
+                if cid == "min_words" and (v < 1 or v > 500):
+                    raise ValueError("min_words deve estar entre 1 e 500.")
+                if cid == "max_words" and (v < 50 or v > 2000):
+                    raise ValueError("max_words deve estar entre 50 e 2000.")
+                if cid == "satisfaction_min" and (v < 1 or v > 5):
+                    raise ValueError("satisfaction_min deve estar entre 1 e 5.")
+                if cid == "confidence_min" and (v < 0 or v > 1):
+                    raise ValueError("confidence_min deve estar entre 0 e 1.")
+                if cid == "min_messages" and (v < 1 or v > 100):
+                    raise ValueError("min_messages deve estar entre 1 e 100.")
+                entry["value"] = v
+        criteria[cid] = entry
+    if criteria.get("min_words", {}).get("enabled") and criteria.get("max_words", {}).get("enabled"):
+        min_v = criteria["min_words"].get("value", CRITERION_DEFAULTS["min_words"]["default"])
+        max_v = criteria["max_words"].get("value", CRITERION_DEFAULTS["max_words"]["default"])
+        if max_v < min_v:
+            raise ValueError("max_words deve ser >= min_words quando ambos estão ativos.")
+    return {"enabled": bool(enabled), "criteria": criteria}
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_auto_approve_config(request):
+    """GET: retorna config de aprovação automática (com defaults). PATCH: atualiza config."""
+    tenant = request.user.tenant
+    profile = TenantSecretaryProfile.objects.filter(tenant=tenant).first()
+    if not profile:
+        return Response({"error": "Perfil da secretária não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        try:
+            raw = getattr(profile, "summary_auto_approve_config", None) or {}
+        except Exception:
+            raw = {}
+        if not isinstance(raw, dict):
+            raw = {}
+        default = _get_default_auto_approve_config()
+        criteria = default.get("criteria", {}).copy()
+        for cid, c in (raw.get("criteria") or {}).items():
+            if cid in criteria:
+                criteria[cid] = {**criteria[cid], **c}
+        return Response({
+            "enabled": raw.get("enabled", False),
+            "criteria": criteria,
+            "criterion_defaults": {k: {"label": v.get("label"), "type": v.get("type"), "default": v.get("default")} for k, v in CRITERION_DEFAULTS.items()},
+        })
+
+    # PATCH
+    data = request.data or {}
+    try:
+        config = _validate_auto_approve_config(data)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    profile.summary_auto_approve_config = config
+    profile.save(update_fields=["summary_auto_approve_config", "updated_at"])
+    return Response(config)

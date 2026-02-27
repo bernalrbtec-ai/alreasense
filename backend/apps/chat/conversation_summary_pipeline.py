@@ -151,7 +151,39 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             "who_attended_name": who_attended_name,
             "department_name": department_name,
         }
-        ConversationSummary.objects.update_or_create(
+
+        status_to_use = ConversationSummary.STATUS_PENDING
+        try:
+            from apps.ai.summary_auto_approve import should_auto_reject, evaluate_criteria
+            from apps.ai.summary_rag import rag_upsert_for_summary
+
+            rejected, reject_reason = should_auto_reject(summary)
+            if rejected:
+                status_to_use = ConversationSummary.STATUS_REJECTED
+                summary_metadata["auto_rejected"] = True
+                summary_metadata["auto_rejected_reason"] = reject_reason or "resumo indica ausência de mensagens no diálogo"
+            else:
+                config = getattr(profile, "summary_auto_approve_config", None) or {}
+                if isinstance(config, dict) and config.get("enabled"):
+                    context = {
+                        "content": summary,
+                        "metadata": summary_metadata,
+                        "message_count": len(messages_list),
+                        "confidence": summarize_response_data.get("confidence"),
+                    }
+                    eval_result = evaluate_criteria(config, context)
+                    if eval_result.get("approved"):
+                        status_to_use = ConversationSummary.STATUS_APPROVED
+                        summary_metadata["auto_approved"] = True
+                        summary_metadata["auto_approve_results"] = eval_result.get("results") or {}
+        except Exception as e:
+            logger.warning(
+                "[CONVERSATION SUMMARY] Erro na avaliação de aprovação automática, usando PENDING: %s",
+                e,
+                exc_info=True,
+            )
+
+        obj, _ = ConversationSummary.objects.update_or_create(
             tenant_id=conversation.tenant_id,
             conversation_id=conversation.id,
             defaults={
@@ -159,9 +191,15 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
                 "contact_name": (conversation.contact_name or "")[: 255],
                 "content": summary,
                 "metadata": summary_metadata,
-                "status": ConversationSummary.STATUS_PENDING,
+                "status": status_to_use,
             },
         )
+
+        if status_to_use == ConversationSummary.STATUS_APPROVED:
+            try:
+                rag_upsert_for_summary(obj)
+            except Exception as e:
+                logger.warning("[CONVERSATION SUMMARY] Erro ao chamar rag_upsert após aprovação automática: %s", e)
 
         conversation.refresh_from_db()
         meta = conversation.metadata or {}
