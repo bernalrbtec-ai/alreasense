@@ -952,7 +952,7 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
         
         try:
             success, message = smtp_config.test_connection(test_email)
-            smtp_config.refresh_from_db(update_fields=['last_test', 'last_test_status', 'last_test_error'])
+            # test_connection() já atualiza last_test/last_test_status/last_test_error e chama save()
             response_serializer = self.get_serializer(smtp_config)
             return Response({
                 'success': success,
