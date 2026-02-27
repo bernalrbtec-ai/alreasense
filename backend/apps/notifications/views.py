@@ -947,37 +947,70 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
         smtp_config = self.get_object()
         serializer = TestSMTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
         test_email = serializer.validated_data['test_email']
-        
+        config_id = str(smtp_config.pk)
+        tenant_name = getattr(smtp_config.tenant, 'name', None) or 'global'
+        config_name = getattr(smtp_config, 'name', '') or config_id
+
         try:
             success, message = smtp_config.test_connection(test_email)
-            # test_connection() já atualiza last_test/last_test_status/last_test_error e chama save()
+            if success:
+                logger.info(
+                    'SMTP test ok config_id=%s tenant=%s name=%s dest=%s',
+                    config_id, tenant_name, config_name, test_email
+                )
+            else:
+                logger.warning(
+                    'SMTP test failed config_id=%s tenant=%s name=%s dest=%s error=%s',
+                    config_id, tenant_name, config_name, test_email, message
+                )
             response_serializer = self.get_serializer(smtp_config)
             return Response({
                 'success': success,
                 'message': message,
                 'smtp_config': response_serializer.data
-            }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
-        except BadSignature:
+            }, status=status.HTTP_200_OK)
+        except BadSignature as e:
+            logger.error(
+                'SMTP test password unreadable (BadSignature) config_id=%s tenant=%s name=%s exc=%s',
+                config_id, tenant_name, config_name, e
+            )
             safe_config = SMTPConfig.objects.filter(pk=smtp_config.pk).defer('password').first()
             response_serializer = self.get_serializer(safe_config) if safe_config else None
+            user_message = (
+                'Não foi possível ler a senha desta configuração (chave de criptografia diferente). '
+                'Edite a configuração SMTP, informe a senha da conta novamente e salve.'
+            )
             return Response({
                 'success': False,
-                'message': 'Não foi possível ler a senha (chave de criptografia alterada). Edite a configuração e salve a senha novamente.',
+                'message': user_message,
+                'error_code': 'password_unreadable',
                 'smtp_config': response_serializer.data if response_serializer else None,
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             err_msg = str(e)
-            # Em alguns ambientes BadSignature pode vir como Exception com esta mensagem
             if 'Signature version not supported' in err_msg or 'BadSignature' in err_msg:
+                logger.error(
+                    'SMTP test password unreadable (signature error) config_id=%s tenant=%s name=%s exc=%s',
+                    config_id, tenant_name, config_name, e,
+                    exc_info=True
+                )
                 safe_config = SMTPConfig.objects.filter(pk=smtp_config.pk).defer('password').first()
                 response_serializer = self.get_serializer(safe_config) if safe_config else None
+                user_message = (
+                    'Não foi possível ler a senha desta configuração (chave de criptografia diferente). '
+                    'Edite a configuração SMTP, informe a senha da conta novamente e salve.'
+                )
                 return Response({
                     'success': False,
-                    'message': 'Não foi possível ler a senha (chave de criptografia alterada). Edite a configuração e salve a senha novamente.',
+                    'message': user_message,
+                    'error_code': 'password_unreadable',
                     'smtp_config': response_serializer.data if response_serializer else None,
                 }, status=status.HTTP_400_BAD_REQUEST)
+            logger.exception(
+                'SMTP test exception config_id=%s tenant=%s name=%s dest=%s: %s',
+                config_id, tenant_name, config_name, test_email, err_msg
+            )
             return Response({
                 'success': False,
                 'message': err_msg
