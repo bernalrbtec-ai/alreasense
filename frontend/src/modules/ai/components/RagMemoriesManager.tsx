@@ -283,10 +283,24 @@ export function RagMemoriesManager() {
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-2">RAG e Lembranças</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
-        </p>
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">RAG e Lembranças</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
+            </p>
+          </div>
+          <div className="flex gap-2 ml-4 shrink-0">
+            <Button variant="default" size="sm" onClick={handleSearch}>
+              <Search className="h-4 w-4 mr-1" />
+              Buscar
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Reprocessar
+            </Button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
           <div>
@@ -337,16 +351,6 @@ export function RagMemoriesManager() {
               className="mt-1"
             />
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Button variant="default" size="sm" onClick={handleSearch}>
-            <Search className="h-4 w-4 mr-1" />
-            Buscar
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)}>
-            <RefreshCw className="h-4 w-4 mr-1" />
-            Reprocessar
-          </Button>
         </div>
 
         {loading ? (
