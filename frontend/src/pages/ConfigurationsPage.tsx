@@ -96,12 +96,18 @@ interface SMTPConfig {
   name: string
   host: string
   port: number
+  username?: string
   from_email: string
   from_name: string
+  use_tls?: boolean
+  use_ssl?: boolean
+  verify_ssl?: boolean
   is_active: boolean
   is_default: boolean
   last_test_status: string
-  last_test: string
+  last_test: string | null
+  last_test_error?: string
+  last_test_status_display?: string
 }
 
 interface EvolutionConfig {
@@ -309,12 +315,23 @@ export default function ConfigurationsPage() {
     name: '',
     host: '',
     port: 587,
+    username: '',
+    password: '',
+    use_tls: true,
+    use_ssl: false,
+    verify_ssl: true,
     from_email: '',
     from_name: '',
     is_active: true,
     is_default: false
   })
   const [showSmtpPassword, setShowSmtpPassword] = useState(false)
+  // Modal de teste SMTP
+  const [smtpTestModalOpen, setSmtpTestModalOpen] = useState(false)
+  const [smtpTestConfig, setSmtpTestConfig] = useState<SMTPConfig | null>(null)
+  const [smtpTestEmail, setSmtpTestEmail] = useState('')
+  const [smtpTestLoading, setSmtpTestLoading] = useState(false)
+  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null)
   
   // Estados para plano
   const [tenant, setTenant] = useState<Tenant | null>(null)
@@ -956,14 +973,36 @@ export default function ConfigurationsPage() {
 
   // Funções para SMTP
   const handleSaveSmtpConfig = async () => {
+    if (!smtpFormData.username?.trim()) {
+      showErrorToast('Informe o usuário/email de autenticação')
+      return
+    }
+    if (!editingSmtp && !smtpFormData.password?.trim()) {
+      showErrorToast('Informe a senha da conta para nova configuração')
+      return
+    }
+    const payload: Record<string, unknown> = {
+      name: smtpFormData.name,
+      host: smtpFormData.host,
+      port: smtpFormData.port,
+      username: smtpFormData.username.trim(),
+      use_tls: smtpFormData.use_tls,
+      use_ssl: smtpFormData.use_ssl,
+      verify_ssl: smtpFormData.verify_ssl,
+      from_email: smtpFormData.from_email,
+      from_name: smtpFormData.from_name,
+      is_active: smtpFormData.is_active,
+      is_default: smtpFormData.is_default
+    }
+    if (smtpFormData.password.trim()) payload.password = smtpFormData.password
+
     const toastId = showLoadingToast(editingSmtp ? 'atualizar' : 'criar', 'Configuração SMTP')
-    
     try {
       if (editingSmtp) {
-        await api.patch(`/notifications/smtp-configs/${editingSmtp.id}/`, smtpFormData)
+        await api.patch(`/notifications/smtp-configs/${editingSmtp.id}/`, payload)
         updateToastSuccess(toastId, 'atualizar', 'Configuração SMTP')
       } else {
-        await api.post('/notifications/smtp-configs/', smtpFormData)
+        await api.post('/notifications/smtp-configs/', payload)
         updateToastSuccess(toastId, 'criar', 'Configuração SMTP')
       }
       fetchSmtpConfigs()
@@ -989,16 +1028,58 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const handleTestSmtp = async (config: SMTPConfig) => {
-    const toastId = showLoadingToast('testar', 'SMTP')
-    
+  const handleOpenSmtpTestModal = (config: SMTPConfig) => {
+    setSmtpTestConfig(config)
+    setSmtpTestEmail('')
+    setSmtpTestResult(null)
+    setSmtpTestModalOpen(true)
+  }
+
+  const handleCloseSmtpTestModal = () => {
+    setSmtpTestModalOpen(false)
+    setSmtpTestConfig(null)
+    setSmtpTestEmail('')
+    setSmtpTestResult(null)
+  }
+
+  const handleSendSmtpTest = async () => {
+    if (!smtpTestConfig) return
+    const email = smtpTestEmail.trim()
+    if (!email) {
+      showErrorToast('Informe o email para receber o teste')
+      return
+    }
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!re.test(email)) {
+      showErrorToast('Email inválido')
+      return
+    }
+    setSmtpTestLoading(true)
+    setSmtpTestResult(null)
     try {
-      await api.post(`/notifications/smtp-configs/${config.id}/test/`)
-      updateToastSuccess(toastId, 'testar', 'SMTP')
-      fetchSmtpConfigs()
+      const { data } = await api.post<{ success: boolean; message: string; smtp_config: SMTPConfig }>(
+        `/notifications/smtp-configs/${smtpTestConfig.id}/test/`,
+        { test_email: email }
+      )
+      setSmtpTestResult({ success: data.success, message: data.message })
+      setSmtpConfigs((prev) => prev.map((c) => (c.id === data.smtp_config.id ? data.smtp_config : c)))
+      if (data.success) {
+        showSuccessToast(data.message)
+      } else {
+        showErrorToast(data.message)
+      }
     } catch (error: any) {
-      console.error('Error testing SMTP:', error)
-      updateToastError(toastId, 'testar', 'SMTP', error)
+      const res = error.response
+      const message = res?.data?.message || error.message || 'Erro ao enviar teste'
+      setSmtpTestResult({ success: false, message })
+      showErrorToast(message)
+      if (res?.status === 400 && res?.data?.smtp_config) {
+        setSmtpConfigs((prev) =>
+          prev.map((c) => (c.id === res.data.smtp_config.id ? res.data.smtp_config : c))
+        )
+      }
+    } finally {
+      setSmtpTestLoading(false)
     }
   }
 
@@ -1022,6 +1103,11 @@ export default function ConfigurationsPage() {
       name: '',
       host: '',
       port: 587,
+      username: '',
+      password: '',
+      use_tls: true,
+      use_ssl: false,
+      verify_ssl: true,
       from_email: '',
       from_name: '',
       is_active: true,
@@ -2163,7 +2249,24 @@ export default function ConfigurationsPage() {
                 <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h4 className="font-medium text-gray-900 mb-2">Nenhuma configuração SMTP</h4>
                 <p className="text-gray-600 mb-4">Configure um servidor SMTP para enviar emails</p>
-                <Button onClick={() => setIsSmtpModalOpen(true)}>
+                <Button onClick={() => {
+                  setEditingSmtp(null)
+                  setSmtpFormData({
+                    name: '',
+                    host: '',
+                    port: 587,
+                    username: '',
+                    password: '',
+                    use_tls: true,
+                    use_ssl: false,
+                    verify_ssl: true,
+                    from_email: '',
+                    from_name: '',
+                    is_active: true,
+                    is_default: false
+                  })
+                  setIsSmtpModalOpen(true)
+                }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Configuração
                 </Button>
@@ -2198,15 +2301,28 @@ export default function ConfigurationsPage() {
                             <span className="font-medium">Nome de origem:</span> {config.from_name}
                           </div>
                           <div>
-                            <span className="font-medium">Último teste:</span> {config.last_test || 'Nunca'}
+                            <span className="font-medium">Último teste:</span> {config.last_test ? new Date(config.last_test).toLocaleString('pt-BR') : 'Nunca'}
+                            {config.last_test_status && (
+                              <span className={`ml-2 px-2 py-0.5 text-xs font-medium rounded-full ${
+                                config.last_test_status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`} title={config.last_test_error || undefined}>
+                                {config.last_test_status === 'success' ? 'Sucesso' : 'Falhou'}
+                              </span>
+                            )}
                           </div>
+                          {config.last_test_error && (
+                            <div className="md:col-span-2 text-xs text-red-600" title={config.last_test_error}>
+                              {config.last_test_error.length > 80 ? config.last_test_error.slice(0, 80) + '…' : config.last_test_error}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleTestSmtp(config)}
+                          onClick={() => handleOpenSmtpTestModal(config)}
+                          title="Enviar email de teste"
                         >
                           <TestTube className="h-4 w-4" />
                         </Button>
@@ -2219,6 +2335,11 @@ export default function ConfigurationsPage() {
                               name: config.name,
                               host: config.host,
                               port: config.port,
+                              username: config.username ?? '',
+                              password: '',
+                              use_tls: config.use_tls ?? true,
+                              use_ssl: config.use_ssl ?? false,
+                              verify_ssl: config.verify_ssl ?? true,
                               from_email: config.from_email,
                               from_name: config.from_name,
                               is_active: config.is_active,
@@ -3205,10 +3326,50 @@ export default function ConfigurationsPage() {
                         id="smtp_port"
                         required
                         value={smtpFormData.port}
-                        onChange={(e) => setSmtpFormData({ ...smtpFormData, port: parseInt(e.target.value) })}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, port: parseInt(e.target.value, 10) || 587 })}
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="587"
                       />
+                    </div>
+
+                    <div>
+                      <label htmlFor="smtp_username" className="block text-sm font-medium text-gray-700">
+                        Usuário / Email (autenticação) *
+                      </label>
+                      <input
+                        type="text"
+                        id="smtp_username"
+                        required
+                        value={smtpFormData.username}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, username: e.target.value })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="seu@email.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="smtp_password" className="block text-sm font-medium text-gray-700">
+                        Senha {editingSmtp ? '(deixe em branco para manter)' : '*'}
+                      </label>
+                      <div className="mt-1 flex rounded-md shadow-sm">
+                        <input
+                          type={showSmtpPassword ? 'text' : 'password'}
+                          id="smtp_password"
+                          required={!editingSmtp}
+                          value={smtpFormData.password}
+                          onChange={(e) => setSmtpFormData({ ...smtpFormData, password: e.target.value })}
+                          className="block w-full rounded-md border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-blue-500 sm:text-sm rounded-r-none"
+                          placeholder={editingSmtp ? '••••••••' : 'Senha da conta'}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                          className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 hover:bg-gray-100"
+                          title={showSmtpPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                        >
+                          {showSmtpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
 
                     <div>
@@ -3242,6 +3403,36 @@ export default function ConfigurationsPage() {
                     </div>
                   </div>
 
+                  <div className="mt-4 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">Conexão</p>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={smtpFormData.use_tls}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_tls: e.target.checked })}
+                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Usar TLS (porta 587)</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={smtpFormData.use_ssl}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, use_ssl: e.target.checked })}
+                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Usar SSL (porta 465)</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={smtpFormData.verify_ssl}
+                        onChange={(e) => setSmtpFormData({ ...smtpFormData, verify_ssl: e.target.checked })}
+                        className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Verificar certificado SSL</span>
+                    </label>
+                  </div>
                   <div className="mt-4 space-y-2">
                     <label className="flex items-center">
                       <input
@@ -3280,6 +3471,58 @@ export default function ConfigurationsPage() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de teste SMTP */}
+      {smtpTestModalOpen && smtpTestConfig && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseSmtpTestModal} />
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
+              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <div className="flex items-center mb-4">
+                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <TestTube className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900">
+                    Enviar email de teste
+                  </h3>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">
+                  Configuração: <strong>{smtpTestConfig.name}</strong>
+                </p>
+                <label htmlFor="smtp_test_email" className="block text-sm font-medium text-gray-700 mb-1">
+                  Email para receber o teste *
+                </label>
+                <input
+                  type="email"
+                  id="smtp_test_email"
+                  value={smtpTestEmail}
+                  onChange={(e) => setSmtpTestEmail(e.target.value)}
+                  placeholder="destino@exemplo.com"
+                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  disabled={smtpTestLoading}
+                />
+                {smtpTestResult && (
+                  <div className={`mt-4 p-3 rounded-lg text-sm ${smtpTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                    {smtpTestResult.message}
+                  </div>
+                )}
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <Button
+                  onClick={handleSendSmtpTest}
+                  disabled={smtpTestLoading || !smtpTestEmail.trim()}
+                >
+                  {smtpTestLoading ? 'Enviando...' : 'Enviar teste'}
+                </Button>
+                <Button variant="outline" onClick={handleCloseSmtpTestModal}>
+                  Fechar
+                </Button>
+              </div>
             </div>
           </div>
         </div>

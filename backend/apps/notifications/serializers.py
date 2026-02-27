@@ -232,7 +232,7 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'tenant', 'created_by', 'last_test', 'last_test_status', 'last_test_error', 'created_at', 'updated_at']
         extra_kwargs = {
-            'password': {'write_only': True}  # Don't expose password in responses
+            'password': {'write_only': True, 'required': False}  # Don't expose password; optional on PATCH
         }
     
     def get_created_by_name(self, obj):
@@ -253,6 +253,12 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
                 validated_data['tenant'] = request.user.tenant
         
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Don't overwrite password with empty string on PATCH
+        if validated_data.get('password') in (None, ''):
+            validated_data.pop('password', None)
+        return super().update(instance, validated_data)
 
 
 class TestSMTPSerializer(serializers.Serializer):
