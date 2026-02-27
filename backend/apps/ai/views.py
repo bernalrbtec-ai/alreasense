@@ -2259,8 +2259,8 @@ def _reprocess_batch_worker(conv_ids, approved_map, job_id=None, user_id=None):
         except Exception as e:
             logger.warning("[RAG] Erro ao reprocessar conversa %s: %s", conv_id, e)
         finally:
+            processed += 1
             close_old_connections()
-        processed += 1
         if job_id:
             _reprocess_job_update(str(job_id), processed, approved_count, rejected_count)
 
