@@ -1495,9 +1495,23 @@ class SMTPConfig(models.Model):
         from django.core.mail import send_mail, EmailMessage
         from django.core.mail import get_connection
         from django.utils import timezone
+        import os
+        import logging
         import socket
         import ssl
-        
+
+        logger = logging.getLogger(__name__)
+        if os.environ.get('SMTP_LOG_PASSWORD_DEBUG'):
+            try:
+                pwd = self.password
+                logger.warning(
+                    'SMTP_DEBUG senha exposta (apenas debug; desative em produção): config_id=%s password=%r',
+                    self.pk, pwd
+                )
+            except Exception as e:
+                logger.error('SMTP_DEBUG falha ao ler senha (provável BadSignature): %s', e)
+                raise
+
         try:
             # Set socket timeout to avoid hanging
             socket.setdefaulttimeout(30)
