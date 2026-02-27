@@ -960,7 +960,6 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
                 'smtp_config': response_serializer.data
             }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
         except BadSignature:
-            # Re-serializa o config sem acessar a senha para o frontend atualizar o card
             safe_config = SMTPConfig.objects.filter(pk=smtp_config.pk).defer('password').first()
             response_serializer = self.get_serializer(safe_config) if safe_config else None
             return Response({
@@ -969,9 +968,19 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
                 'smtp_config': response_serializer.data if response_serializer else None,
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            err_msg = str(e)
+            # Em alguns ambientes BadSignature pode vir como Exception com esta mensagem
+            if 'Signature version not supported' in err_msg or 'BadSignature' in err_msg:
+                safe_config = SMTPConfig.objects.filter(pk=smtp_config.pk).defer('password').first()
+                response_serializer = self.get_serializer(safe_config) if safe_config else None
+                return Response({
+                    'success': False,
+                    'message': 'Não foi possível ler a senha (chave de criptografia alterada). Edite a configuração e salve a senha novamente.',
+                    'smtp_config': response_serializer.data if response_serializer else None,
+                }, status=status.HTTP_400_BAD_REQUEST)
             return Response({
                 'success': False,
-                'message': str(e)
+                'message': err_msg
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
