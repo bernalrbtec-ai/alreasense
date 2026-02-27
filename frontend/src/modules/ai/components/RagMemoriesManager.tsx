@@ -349,120 +349,126 @@ export function RagMemoriesManager() {
             {autoApproveLoading ? (
               <div className="flex justify-center py-4"><LoadingSpinner /></div>
             ) : autoApproveConfig ? (
-              <div className="space-y-6">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="auto-approve-enabled"
-                      checked={autoApproveConfig.enabled}
-                      onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, enabled: e.target.checked } : c)}
-                    />
-                    <Label htmlFor="auto-approve-enabled" className="text-sm font-medium">Ativar aprovação automática</Label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 ml-6">Quando ativo, resumos que passarem em todos os critérios marcados abaixo serão aprovados e enviados ao RAG automaticamente.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {criterionOrder.map((cid) => {
-                      const c = autoApproveConfig.criteria[cid]
-                      const def = autoApproveConfig.criterion_defaults?.[cid]
-                      if (!c) return null
-                      const isNumber = def?.type === 'number'
-                      return (
-                        <div key={cid} className="flex items-center gap-2 flex-wrap">
-                          <input
-                            type="checkbox"
-                            id={`crit-${cid}`}
-                            checked={c.enabled}
-                            onChange={(e) => setAutoApproveConfig((cfg) => {
-                              if (!cfg) return cfg
-                              const next = { ...cfg.criteria[cid], enabled: e.target.checked }
-                              return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
-                            })}
-                          />
-                          <Label htmlFor={`crit-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
-                          {isNumber && c.enabled && (
-                            <Input
-                              type="number"
-                              min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
-                              max={cid === 'confidence_min' ? 1 : cid === 'satisfaction_min' ? 5 : undefined}
-                              value={c.value ?? def?.default ?? ''}
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                const v = raw === '' ? undefined : Number(raw)
-                                const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
-                                setAutoApproveConfig((cfg) => {
-                                  if (!cfg) return cfg
-                                  return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
-                                })
-                              }}
-                              className="w-20 text-sm"
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Aprovação automática */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="auto-approve-enabled"
+                        checked={autoApproveConfig.enabled}
+                        onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, enabled: e.target.checked } : c)}
+                      />
+                      <Label htmlFor="auto-approve-enabled" className="text-sm font-medium">Aprovação automática</Label>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 ml-6">Resumos que passarem em <strong>todos</strong> os critérios marcados serão aprovados e enviados ao RAG.</p>
+                    <div className="space-y-2 mt-3 ml-6">
+                      {criterionOrder.map((cid) => {
+                        const c = autoApproveConfig.criteria[cid]
+                        const def = autoApproveConfig.criterion_defaults?.[cid]
+                        if (!c) return null
+                        const isNumber = def?.type === 'number'
+                        return (
+                          <div key={cid} className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="checkbox"
+                              id={`crit-${cid}`}
+                              checked={c.enabled}
+                              onChange={(e) => setAutoApproveConfig((cfg) => {
+                                if (!cfg) return cfg
+                                const next = { ...cfg.criteria[cid], enabled: e.target.checked }
+                                return { ...cfg, criteria: { ...cfg.criteria, [cid]: next } }
+                              })}
                             />
-                          )}
-                        </div>
-                      )
-                    })}
+                            <Label htmlFor={`crit-${cid}`} className="text-sm flex-1 min-w-0">{def?.label ?? cid}</Label>
+                            {isNumber && c.enabled && (
+                              <Input
+                                type="number"
+                                min={cid === 'confidence_min' ? 0 : cid === 'satisfaction_min' ? 1 : undefined}
+                                max={cid === 'confidence_min' ? 1 : cid === 'satisfaction_min' ? 5 : undefined}
+                                value={c.value ?? def?.default ?? ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value
+                                  const v = raw === '' ? undefined : Number(raw)
+                                  const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
+                                  setAutoApproveConfig((cfg) => {
+                                    if (!cfg) return cfg
+                                    return { ...cfg, criteria: { ...cfg.criteria, [cid]: { ...cfg.criteria[cid], value: safe } } }
+                                  })
+                                }}
+                                className="w-20 text-sm shrink-0"
+                              />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  {/* Reprovação automática */}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="reject-enabled"
+                        checked={autoApproveConfig.reject_enabled ?? false}
+                        onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, reject_enabled: e.target.checked } : c)}
+                      />
+                      <Label htmlFor="reject-enabled" className="text-sm font-medium">Reprovação automática</Label>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 ml-6">Resumos que falharem em <strong>qualquer</strong> critério marcado serão reprovados automaticamente.</p>
+                    <div className="space-y-2 mt-3 ml-6">
+                      {rejectCriterionOrder.map((cid) => {
+                        const rej = (autoApproveConfig.reject_criteria || {})[cid]
+                        const def = autoApproveConfig.reject_criterion_defaults?.[cid]
+                        if (!rej && !def) return null
+                        const c = rej || { enabled: false, value: def?.default as number | undefined }
+                        const isNumber = def?.type === 'number'
+                        return (
+                          <div key={cid} className="flex items-center gap-2 flex-wrap">
+                            <input
+                              type="checkbox"
+                              id={`rej-${cid}`}
+                              checked={c.enabled}
+                              onChange={(e) => setAutoApproveConfig((cfg) => {
+                                if (!cfg) return cfg
+                                const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), enabled: e.target.checked } }
+                                return { ...cfg, reject_criteria }
+                              })}
+                            />
+                            <Label htmlFor={`rej-${cid}`} className="text-sm flex-1 min-w-0">{def?.label ?? cid}</Label>
+                            {isNumber && c.enabled && (
+                              <Input
+                                type="number"
+                                min={cid === 'reject_confidence_below' ? 0 : undefined}
+                                max={cid === 'reject_confidence_below' ? 1 : undefined}
+                                step={cid === 'reject_confidence_below' ? 0.1 : undefined}
+                                value={c.value ?? def?.default ?? ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value
+                                  const v = raw === '' ? undefined : Number(raw)
+                                  const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
+                                  setAutoApproveConfig((cfg) => {
+                                    if (!cfg) return cfg
+                                    const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), value: safe } }
+                                    return { ...cfg, reject_criteria }
+                                  })
+                                }}
+                                className="w-20 text-sm shrink-0"
+                              />
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="reject-enabled"
-                      checked={autoApproveConfig.reject_enabled ?? false}
-                      onChange={(e) => setAutoApproveConfig((c) => c ? { ...c, reject_enabled: e.target.checked } : c)}
-                    />
-                    <Label htmlFor="reject-enabled" className="text-sm font-medium">Ativar reprovação automática</Label>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 ml-6">Se ativo, resumos que falharem em <strong>qualquer</strong> critério marcado serão reprovados automaticamente.</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {rejectCriterionOrder.map((cid) => {
-                      const rej = (autoApproveConfig.reject_criteria || {})[cid]
-                      const def = autoApproveConfig.reject_criterion_defaults?.[cid]
-                      if (!rej && !def) return null
-                      const c = rej || { enabled: false, value: def?.default as number | undefined }
-                      const isNumber = def?.type === 'number'
-                      return (
-                        <div key={cid} className="flex items-center gap-2 flex-wrap">
-                          <input
-                            type="checkbox"
-                            id={`rej-${cid}`}
-                            checked={c.enabled}
-                            onChange={(e) => setAutoApproveConfig((cfg) => {
-                              if (!cfg) return cfg
-                              const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), enabled: e.target.checked } }
-                              return { ...cfg, reject_criteria }
-                            })}
-                          />
-                          <Label htmlFor={`rej-${cid}`} className="text-sm flex-1">{def?.label ?? cid}</Label>
-                          {isNumber && c.enabled && (
-                            <Input
-                              type="number"
-                              min={cid === 'reject_confidence_below' ? 0 : undefined}
-                              max={cid === 'reject_confidence_below' ? 1 : undefined}
-                              step={cid === 'reject_confidence_below' ? 0.1 : undefined}
-                              value={c.value ?? def?.default ?? ''}
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                const v = raw === '' ? undefined : Number(raw)
-                                const safe = (v !== undefined && !Number.isNaN(v)) ? v : undefined
-                                setAutoApproveConfig((cfg) => {
-                                  if (!cfg) return cfg
-                                  const reject_criteria = { ...(cfg.reject_criteria || {}), [cid]: { ...(cfg.reject_criteria?.[cid] || {}), value: safe } }
-                                  return { ...cfg, reject_criteria }
-                                })
-                              }}
-                              className="w-20 text-sm"
-                            />
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
+                <div className="flex justify-end pt-2">
+                  <Button size="sm" onClick={handleSaveAutoApproveConfig} disabled={autoApproveSaving}>
+                    <Save className="h-4 w-4 mr-1" />
+                    {autoApproveSaving ? 'Salvando…' : 'Salvar'}
+                  </Button>
                 </div>
-                <Button size="sm" onClick={handleSaveAutoApproveConfig} disabled={autoApproveSaving}>
-                  <Save className="h-4 w-4 mr-1" />
-                  {autoApproveSaving ? 'Salvando…' : 'Salvar'}
-                </Button>
               </div>
             ) : (
               <p className="text-sm text-gray-500">Não foi possível carregar a configuração.</p>
