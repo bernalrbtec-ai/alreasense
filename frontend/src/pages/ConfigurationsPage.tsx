@@ -388,6 +388,8 @@ export default function ConfigurationsPage() {
   const [metaTemplateToDelete, setMetaTemplateToDelete] = useState<MetaWhatsAppTemplate | null>(null)
   const [metaSyncLoading, setMetaSyncLoading] = useState(false)
   const [showMetaTemplatesListModal, setShowMetaTemplatesListModal] = useState(false)
+  const [metaTemplatesModalInstanceId, setMetaTemplatesModalInstanceId] = useState<string | null>(null)
+  const [metaImportingInstanceId, setMetaImportingInstanceId] = useState<string | null>(null)
   const [metaTemplateFormData, setMetaTemplateFormData] = useState({
     name: '',
     template_id: '',
@@ -571,6 +573,25 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const handleImportMetaTemplates = async (instanceId: string) => {
+    setMetaImportingInstanceId(instanceId)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instanceId}/import-templates/`)
+      const data = response.data || {}
+      if (data.success) {
+        showSuccessToast('importar', 'Templates')
+        fetchMetaTemplates()
+      } else {
+        showErrorToast('importar', 'Templates', { message: data.error || 'Falha ao importar templates' })
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message
+      showErrorToast('importar', 'Templates', { message: msg })
+    } finally {
+      setMetaImportingInstanceId(null)
+    }
+  }
+
   useEffect(() => {
     fetchData()
     fetchDepartments()
@@ -596,7 +617,10 @@ export default function ConfigurationsPage() {
   useEffect(() => {
     if (!showMetaTemplatesListModal) return
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isMetaTemplateModalOpen) setShowMetaTemplatesListModal(false)
+      if (e.key === 'Escape' && !isMetaTemplateModalOpen) {
+        setShowMetaTemplatesListModal(false)
+        setMetaTemplatesModalInstanceId(null)
+      }
     }
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
@@ -1864,6 +1888,7 @@ export default function ConfigurationsPage() {
                             <button
                               type="button"
                               onClick={() => {
+                                setMetaTemplatesModalInstanceId(instance.id)
                                 fetchMetaTemplates()
                                 setShowMetaTemplatesListModal(true)
                               }}
@@ -1998,7 +2023,7 @@ export default function ConfigurationsPage() {
       {showMetaTemplatesListModal && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          onClick={() => setShowMetaTemplatesListModal(false)}
+          onClick={() => { setShowMetaTemplatesListModal(false); setMetaTemplatesModalInstanceId(null) }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="meta-templates-modal-title"
@@ -2008,7 +2033,7 @@ export default function ConfigurationsPage() {
               <h3 id="meta-templates-modal-title" className="text-lg font-medium text-gray-900 dark:text-gray-100">Templates WhatsApp (Meta)</h3>
               <button
                 type="button"
-                onClick={() => setShowMetaTemplatesListModal(false)}
+                onClick={() => { setShowMetaTemplatesListModal(false); setMetaTemplatesModalInstanceId(null) }}
                 className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
                 aria-label="Fechar"
               >
@@ -2028,6 +2053,19 @@ export default function ConfigurationsPage() {
                   {metaSyncLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
                   Atualizar status da Meta
                 </Button>
+                {metaTemplatesModalInstanceId && (
+                  <Button
+                    onClick={() => handleImportMetaTemplates(metaTemplatesModalInstanceId)}
+                    disabled={metaImportingInstanceId === metaTemplatesModalInstanceId}
+                    variant="outline"
+                    title="Importar templates da Meta para esta instância"
+                  >
+                    {metaImportingInstanceId === metaTemplatesModalInstanceId ? (
+                      <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                    ) : null}
+                    Importar templates
+                  </Button>
+                )}
                 {!hasMetaInstanceWithWaba && (
                   <span className="text-sm text-amber-600 dark:text-amber-400">
                     Configure o ID da conta Business nas instâncias WhatsApp (tipo Meta) para sincronizar o status.
