@@ -73,6 +73,7 @@ export function RagMemoriesManager() {
     approved: number; rejected: number; percent: number;
     notify_whatsapp_requested?: boolean; notify_email_requested?: boolean;
   } | null>(null)
+  const [reprocessProgressDismissed, setReprocessProgressDismissed] = useState(false)
   const { user: authUser } = useAuthStore()
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollErrorCountRef = useRef(0)
@@ -136,6 +137,7 @@ export function RagMemoriesManager() {
         }>(`ai/summaries/reprocess/${jobId}/status/`)
         setReprocessJobData(data)
         if (data.status === 'done' || data.status === 'stale') {
+          setReprocessProgressDismissed(false)
           stopPolling()
         }
         pollErrorCountRef.current = 0
@@ -277,6 +279,7 @@ export function RagMemoriesManager() {
       setReprocessNotifyEmail(false)
       setReprocessNotifyEmailAddress('')
       if (data.job_id && data.enqueued > 0) {
+        setReprocessProgressDismissed(false)
         setReprocessJobId(data.job_id)
         setReprocessJobData({ status: 'running', total: data.enqueued, processed: 0, approved: 0, rejected: 0, percent: 0 })
         startPolling(data.job_id)
@@ -295,6 +298,7 @@ export function RagMemoriesManager() {
     stopPolling()
     setReprocessJobId(null)
     setReprocessJobData(null)
+    setReprocessProgressDismissed(false)
     fetchList(0)
   }
 
@@ -388,15 +392,22 @@ export function RagMemoriesManager() {
               Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
             </p>
           </div>
-          <div className="flex gap-2 ml-4 shrink-0">
-            <Button variant="default" size="sm" onClick={handleSearch}>
-              <Search className="h-4 w-4 mr-1" />
-              Buscar
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
-              <RefreshCw className="h-4 w-4 mr-1" />
-              Reprocessar
-            </Button>
+          <div className="flex flex-col gap-1 ml-4 shrink-0">
+            <div className="flex gap-2">
+              <Button variant="default" size="sm" onClick={handleSearch}>
+                <Search className="h-4 w-4 mr-1" />
+                Buscar
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Reprocessar
+              </Button>
+            </div>
+            {reprocessJobId && reprocessJobData?.status === 'running' && reprocessProgressDismissed && (
+              <p className="text-xs text-gray-500">
+                Reprocessando em background ({reprocessJobData.processed} de {reprocessJobData.total})…
+              </p>
+            )}
           </div>
         </div>
 
@@ -679,8 +690,8 @@ export function RagMemoriesManager() {
         </div>
       )}
 
-      {/* Modal de progresso/resultado do reprocessamento */}
-      {reprocessJobId && reprocessJobData && (
+      {/* Modal de progresso/resultado do reprocessamento (oculto durante running se usuário clicou em Fechar/Sair) */}
+      {reprocessJobId && reprocessJobData && (reprocessJobData.status !== 'running' || !reprocessProgressDismissed) && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/50" aria-hidden />
@@ -699,6 +710,14 @@ export function RagMemoriesManager() {
                   </div>
                   <div className="flex justify-center">
                     <LoadingSpinner />
+                  </div>
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2 mt-4 mb-4">
+                    Ao sair, o processo continua em background. O botão Reprocessar ficará desativado até o término.
+                  </p>
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={() => setReprocessProgressDismissed(true)}>
+                      Fechar / Sair
+                    </Button>
                   </div>
                 </>
               ) : reprocessJobData.status === 'done' ? (
