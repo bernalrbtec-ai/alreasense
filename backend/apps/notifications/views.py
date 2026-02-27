@@ -959,14 +959,36 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
                     'SMTP test ok config_id=%s tenant=%s name=%s dest=%s',
                     config_id, tenant_name, config_name, test_email
                 )
-            else:
-                logger.warning(
-                    'SMTP test failed config_id=%s tenant=%s name=%s dest=%s error=%s',
-                    config_id, tenant_name, config_name, test_email, message
+                response_serializer = self.get_serializer(smtp_config)
+                return Response({
+                    'success': True,
+                    'message': message,
+                    'smtp_config': response_serializer.data
+                }, status=status.HTTP_200_OK)
+            # test_connection pode devolver (False, "Signature version not supported") se a exceção for tratada dentro do modelo
+            if 'Signature version not supported' in message or 'BadSignature' in message:
+                logger.error(
+                    'SMTP test password unreadable (returned in message) config_id=%s tenant=%s name=%s raw=%s',
+                    config_id, tenant_name, config_name, message
                 )
+                user_message = (
+                    'Não foi possível ler a senha desta configuração (chave de criptografia diferente). '
+                    'Edite a configuração SMTP, informe a senha da conta novamente e salve.'
+                )
+                response_serializer = self.get_serializer(smtp_config)
+                return Response({
+                    'success': False,
+                    'message': user_message,
+                    'error_code': 'password_unreadable',
+                    'smtp_config': response_serializer.data
+                }, status=status.HTTP_200_OK)
+            logger.warning(
+                'SMTP test failed config_id=%s tenant=%s name=%s dest=%s error=%s',
+                config_id, tenant_name, config_name, test_email, message
+            )
             response_serializer = self.get_serializer(smtp_config)
             return Response({
-                'success': success,
+                'success': False,
                 'message': message,
                 'smtp_config': response_serializer.data
             }, status=status.HTTP_200_OK)

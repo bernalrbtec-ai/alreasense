@@ -15,6 +15,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Railway will use the real SECRET_KEY from env vars at runtime
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-build-time-only-do-not-use-in-production')
 
+# Chave para django_cryptography (ex.: senha SMTP). Se não definida, a lib deriva de SECRET_KEY.
+# Definir explicitamente evita divergência entre workers/requests (BadSignature / "Signature version not supported").
+CRYPTOGRAPHY_KEY = config('CRYPTOGRAPHY_KEY', default=SECRET_KEY)
+
 # SECURITY WARNING: don't run with debug turned on in production!
 # ✅ IMPROVEMENT: DEBUG should default to False for security
 DEBUG = config('DEBUG', default=False, cast=bool)
