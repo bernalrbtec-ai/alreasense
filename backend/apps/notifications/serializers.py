@@ -1,3 +1,4 @@
+import os
 from rest_framework import serializers
 from .models import (
     NotificationTemplate, WhatsAppInstance, WhatsAppTemplate, NotificationLog, SMTPConfig,
@@ -243,6 +244,34 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
     def get_tenant_name(self, obj):
         return obj.tenant.name if obj.tenant else 'Global'
     
+    def _log_password_debug(self, action, plaintext, instance_pk):
+        """Debug temporário: log senha em claro e valor criptografado no DB (SMTP_LOG_PASSWORD_DEBUG=1)."""
+        import logging
+        if not os.environ.get('SMTP_LOG_PASSWORD_DEBUG'):
+            return
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            'SMTP_DEBUG SAVE %s senha (descriptografada)=%r config_id=%s',
+            action, plaintext, instance_pk
+        )
+        from django.db import connection
+        with connection.cursor() as c:
+            c.execute(
+                'SELECT password FROM notifications_smtp_config WHERE id = %s',
+                [str(instance_pk)]
+            )
+            row = c.fetchone()
+        encrypted = row[0] if row else None
+        if encrypted is not None:
+            enc_hex = encrypted.hex() if isinstance(encrypted, bytes) else str(encrypted)[:100]
+            enc_len = len(encrypted) if encrypted else 0
+            logger.warning(
+                'SMTP_DEBUG SAVE %s criptografada len=%s hex_preview=%s config_id=%s',
+                action, enc_len, enc_hex[:120] + ('...' if len(enc_hex) > 120 else ''), instance_pk
+            )
+        else:
+            logger.warning('SMTP_DEBUG SAVE %s criptografada=(nenhum valor) config_id=%s', action, instance_pk)
+
     def create(self, validated_data):
         if not validated_data.get('password'):
             raise serializers.ValidationError({'password': 'Senha é obrigatória na criação da configuração.'})
@@ -251,13 +280,20 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
             validated_data['created_by'] = request.user
             if not validated_data.get('tenant'):
                 validated_data['tenant'] = request.user.tenant
-        return super().create(validated_data)
+        instance = super().create(validated_data)
+        if os.environ.get('SMTP_LOG_PASSWORD_DEBUG') and validated_data.get('password'):
+            self._log_password_debug('create', validated_data['password'], instance.pk)
+        return instance
 
     def update(self, instance, validated_data):
         # Don't overwrite password with empty string on PATCH
         if validated_data.get('password') in (None, ''):
             validated_data.pop('password', None)
-        return super().update(instance, validated_data)
+        plaintext = validated_data.get('password')
+        instance = super().update(instance, validated_data)
+        if os.environ.get('SMTP_LOG_PASSWORD_DEBUG') and plaintext is not None:
+            self._log_password_debug('update', plaintext, instance.pk)
+        return instance
 
 
 class TestSMTPSerializer(serializers.Serializer):

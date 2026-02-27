@@ -1502,14 +1502,31 @@ class SMTPConfig(models.Model):
 
         logger = logging.getLogger(__name__)
         if os.environ.get('SMTP_LOG_PASSWORD_DEBUG'):
+            from django.db import connection
+            with connection.cursor() as c:
+                c.execute(
+                    'SELECT password FROM notifications_smtp_config WHERE id = %s',
+                    [str(self.pk)]
+                )
+                row = c.fetchone()
+            encrypted_raw = row[0] if row else None
+            if encrypted_raw is not None:
+                enc_hex = encrypted_raw.hex() if isinstance(encrypted_raw, bytes) else str(encrypted_raw)[:100]
+                enc_len = len(encrypted_raw)
+                logger.warning(
+                    'SMTP_DEBUG TEST criptografada (do DB) len=%s hex_preview=%s config_id=%s',
+                    enc_len, enc_hex[:120] + ('...' if len(enc_hex) > 120 else ''), self.pk
+                )
+            else:
+                logger.warning('SMTP_DEBUG TEST criptografada=(nenhum valor no DB) config_id=%s', self.pk)
             try:
                 pwd = self.password
                 logger.warning(
-                    'SMTP_DEBUG senha exposta (apenas debug; desative em produção): config_id=%s password=%r',
-                    self.pk, pwd
+                    'SMTP_DEBUG TEST senha (descriptografada)=%r config_id=%s',
+                    pwd, self.pk
                 )
             except Exception as e:
-                logger.error('SMTP_DEBUG falha ao ler senha (provável BadSignature): %s', e)
+                logger.error('SMTP_DEBUG TEST falha ao ler senha (descriptografada): %s config_id=%s', e, self.pk)
                 raise
 
         try:
