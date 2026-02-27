@@ -1,4 +1,5 @@
 import logging
+from django.core.signing import BadSignature
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -927,12 +928,15 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        
-        # REGRA: Cada cliente vê APENAS seus dados
         if not user.tenant:
             return SMTPConfig.objects.none()
-        
-        return SMTPConfig.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+        # Evita carregar/descriptografar password na listagem e no retrieve (evita BadSignature
+        # quando SECRET_KEY difere do ambiente em que a senha foi criptografada).
+        return (
+            SMTPConfig.objects.filter(tenant=user.tenant)
+            .select_related('tenant', 'created_by')
+            .defer('password')
+        )
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -948,18 +952,22 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
         
         try:
             success, message = smtp_config.test_connection(test_email)
-            
-            # Refresh the object to get updated test status
-            smtp_config.refresh_from_db()
-            
+            smtp_config.refresh_from_db(update_fields=['last_test', 'last_test_status', 'last_test_error'])
             response_serializer = self.get_serializer(smtp_config)
-            
             return Response({
                 'success': success,
                 'message': message,
                 'smtp_config': response_serializer.data
             }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
-        
+        except BadSignature:
+            # Re-serializa o config sem acessar a senha para o frontend atualizar o card
+            safe_config = SMTPConfig.objects.filter(pk=smtp_config.pk).defer('password').first()
+            response_serializer = self.get_serializer(safe_config) if safe_config else None
+            return Response({
+                'success': False,
+                'message': 'Não foi possível ler a senha (chave de criptografia alterada). Edite a configuração e salve a senha novamente.',
+                'smtp_config': response_serializer.data if response_serializer else None,
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             return Response({
                 'success': False,
@@ -978,8 +986,7 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
         ).update(is_default=False)
         
         smtp_config.is_default = True
-        smtp_config.save()
-        
+        smtp_config.save(update_fields=['is_default'])
         serializer = self.get_serializer(smtp_config)
         return Response(serializer.data)
 
