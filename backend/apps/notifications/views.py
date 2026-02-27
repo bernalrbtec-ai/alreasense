@@ -940,6 +940,17 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        config_id = str(instance.pk)
+        tenant_name = getattr(instance.tenant, 'name', None) or 'global'
+        config_name = getattr(instance, 'name', '') or config_id
+        password_updated = 'password' in (serializer.validated_data or {})
+        logger.info(
+            'SMTP config updated config_id=%s tenant=%s name=%s password_updated=%s',
+            config_id, tenant_name, config_name, password_updated
+        )
     
     @action(detail=True, methods=['post'])
     def test(self, request, pk=None):
