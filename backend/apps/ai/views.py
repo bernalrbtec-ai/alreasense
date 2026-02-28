@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import time
+from collections import defaultdict
 from datetime import datetime, time as dt_time
 import uuid
 import requests
@@ -2070,8 +2071,8 @@ def conversation_summary_consolidate(request):
                 {"error": "Não é possível consolidar resumos sem contato (contact_phone vazio)."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        consolidate_approved_summaries_for_contact(tenant.id, contact_phone_normalized, summary_ids=summary_ids)
-        return Response({"ok": True, "message": "Resumos consolidados com sucesso."})
+        _, summaries_count = consolidate_approved_summaries_for_contact(tenant.id, contact_phone_normalized, summary_ids=summary_ids)
+        return Response({"ok": True, "message": "Resumos consolidados com sucesso.", "summaries_count": summaries_count})
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except RuntimeError as e:
@@ -2080,6 +2081,79 @@ def conversation_summary_consolidate(request):
     except Exception as e:
         logger.exception("Consolidação falhou: %s", e)
         return Response({"error": "Erro ao consolidar. Tente novamente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_consolidate_by_contact(request):
+    """Consolida todos os resumos aprovados de um contato. Body: { \"contact_phone\": \"5511999999999\" }."""
+    tenant = request.user.tenant
+    data = request.data or {}
+    contact_phone_raw = (data.get("contact_phone") or "").strip()
+    if not contact_phone_raw:
+        return Response(
+            {"error": "Informe o telefone do contato."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    contact_phone_normalized = normalize_contact_phone_for_rag(contact_phone_raw)
+    if not contact_phone_normalized:
+        return Response(
+            {"error": "Informe um telefone válido."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        _, summaries_count = consolidate_approved_summaries_for_contact(tenant.id, contact_phone_normalized, summary_ids=None)
+        return Response({
+            "ok": True,
+            "message": "Resumos consolidados com sucesso.",
+            "summaries_count": summaries_count,
+        })
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except RuntimeError as e:
+        logger.exception("Consolidação por contato falhou: %s", e)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.exception("Consolidação por contato falhou: %s", e)
+        return Response({"error": "Erro ao consolidar. Tente novamente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_consolidate_all(request):
+    """Agrupa por contato e consolida cada um que tiver 2+ aprovados. Retorna contacts_consolidated e contacts_failed."""
+    tenant = request.user.tenant
+    all_approved = list(
+        ConversationSummary.objects.filter(
+            tenant_id=tenant.id,
+            status=ConversationSummary.STATUS_APPROVED,
+        ).order_by("-created_at")
+    )
+    by_contact = defaultdict(list)
+    for s in all_approved:
+        norm = normalize_contact_phone_for_rag(s.contact_phone or "")
+        if norm:
+            by_contact[norm].append(s)
+    contacts_consolidated = 0
+    contacts_failed = 0
+    errors = []
+    for contact_phone_normalized, summaries in by_contact.items():
+        if len(summaries) < 2:
+            continue
+        try:
+            consolidate_approved_summaries_for_contact(tenant.id, contact_phone_normalized, summary_ids=None)[0]
+            contacts_consolidated += 1
+        except Exception as e:
+            contacts_failed += 1
+            logger.warning("Consolidate-all: falha para contact_phone=%s: %s", contact_phone_normalized, e)
+            errors.append({"contact_phone": contact_phone_normalized, "error": str(e)})
+    return Response({
+        "ok": True,
+        "contacts_consolidated": contacts_consolidated,
+        "contacts_failed": contacts_failed,
+        "errors": errors[:20],
+        "message": f"{contacts_consolidated} contato(s) consolidado(s)." + (f" {contacts_failed} falha(s)." if contacts_failed else ""),
+    })
 
 
 @api_view(["PATCH"])

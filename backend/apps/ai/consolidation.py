@@ -59,6 +59,7 @@ def consolidate_approved_summaries_for_contact(tenant_id, contact_phone_normaliz
       (3) cria ou atualiza ConsolidationRecord.
     - contact_phone_normalized: já normalizado com normalize_contact_phone_for_rag.
     - Gera consolidated_id novo na criação; reutiliza no refresh.
+    - Returns: (consolidated_id, summaries_count).
     """
     if not contact_phone_normalized:
         raise ValueError("contact_phone não pode ser vazio para consolidação")
@@ -150,7 +151,7 @@ def consolidate_approved_summaries_for_contact(tenant_id, contact_phone_normaliz
                 existing.save()
             else:
                 raise
-    return consolidated_id
+    return consolidated_id, len(ids_list)
 
 
 def refresh_consolidation_for_contact(tenant_id, contact_phone):

@@ -101,6 +101,10 @@ export function RagMemoriesManager() {
   const [selectedSummaryIds, setSelectedSummaryIds] = useState<number[]>([])
   const [consolidateModalOpen, setConsolidateModalOpen] = useState(false)
   const [consolidateSubmitting, setConsolidateSubmitting] = useState(false)
+  const [consolidateByContactModalOpen, setConsolidateByContactModalOpen] = useState(false)
+  const [consolidateByContactSubmitting, setConsolidateByContactSubmitting] = useState(false)
+  const [consolidateAllModalOpen, setConsolidateAllModalOpen] = useState(false)
+  const [consolidateAllSubmitting, setConsolidateAllSubmitting] = useState(false)
 
   const [autoApproveOpen, setAutoApproveOpen] = useState(false)
   const [autoApproveConfig, setAutoApproveConfig] = useState<{
@@ -359,8 +363,9 @@ export function RagMemoriesManager() {
     if (selectedSummaryIds.length < 2) return
     setConsolidateSubmitting(true)
     try {
-      await api.post('ai/summaries/consolidate/', { summary_ids: selectedSummaryIds })
-      toast.success('Resumos consolidados em uma única memória para o contato.')
+      const { data } = await api.post<{ ok: boolean; message: string; summaries_count?: number }>('ai/summaries/consolidate/', { summary_ids: selectedSummaryIds })
+      const n = data.summaries_count ?? selectedSummaryIds.length
+      toast.success(`${n} resumo(s) consolidado(s) em uma memória para o contato.`)
       setConsolidateModalOpen(false)
       setSelectedSummaryIds([])
       fetchList(offset)
@@ -369,6 +374,45 @@ export function RagMemoriesManager() {
       toast.error(msg)
     } finally {
       setConsolidateSubmitting(false)
+    }
+  }
+
+  const handleConsolidateByContactConfirm = async () => {
+    const phone = contactPhone.trim()
+    if (!phone) return
+    setConsolidateByContactSubmitting(true)
+    try {
+      const { data } = await api.post<{ ok: boolean; message: string; summaries_count?: number }>('ai/summaries/consolidate-by-contact/', { contact_phone: phone })
+      const n = data.summaries_count ?? 0
+      toast.success(n ? `${n} resumo(s) consolidado(s) em uma memória para este contato.` : 'Resumos consolidados com sucesso.')
+      setConsolidateByContactModalOpen(false)
+      fetchList(offset)
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Erro ao consolidar.'
+      toast.error(msg)
+    } finally {
+      setConsolidateByContactSubmitting(false)
+    }
+  }
+
+  const handleConsolidateAllConfirm = async () => {
+    setConsolidateAllSubmitting(true)
+    try {
+      const { data } = await api.post<{ ok: boolean; contacts_consolidated: number; contacts_failed: number; message: string }>('ai/summaries/consolidate-all/')
+      const ok = data.contacts_consolidated ?? 0
+      const fail = data.contacts_failed ?? 0
+      if (fail > 0) {
+        toast.success(`${ok} contato(s) consolidado(s). ${fail} falha(s).`)
+      } else {
+        toast.success(ok ? `${ok} contato(s) consolidado(s).` : 'Nenhum contato com 2+ aprovados para consolidar.')
+      }
+      setConsolidateAllModalOpen(false)
+      fetchList(offset)
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Erro ao consolidar todos.'
+      toast.error(msg)
+    } finally {
+      setConsolidateAllSubmitting(false)
     }
   }
 
@@ -548,6 +592,25 @@ export function RagMemoriesManager() {
               >
                 <Layers className="h-4 w-4 mr-1" />
                 Consolidar ({selectedSummaryIds.length})
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConsolidateByContactModalOpen(true)}
+                disabled={!contactPhone.trim()}
+                title={!contactPhone.trim() ? 'Informe o telefone do contato no filtro' : 'Consolidar todos os aprovados deste contato'}
+              >
+                <Layers className="h-4 w-4 mr-1" />
+                Consolidar este contato
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConsolidateAllModalOpen(true)}
+                title="Consolidar todos os contatos com 2+ aprovados"
+              >
+                <Layers className="h-4 w-4 mr-1" />
+                Consolidar todos
               </Button>
               <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
                 <RefreshCw className="h-4 w-4 mr-1" />
@@ -871,6 +934,58 @@ export function RagMemoriesManager() {
                 </Button>
                 <Button onClick={handleConsolidateConfirm} disabled={consolidateSubmitting}>
                   {consolidateSubmitting ? 'Consolidando…' : 'Consolidar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Consolidar este contato */}
+      {consolidateByContactModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateByContactSubmitting && setConsolidateByContactModalOpen(false)} aria-hidden />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar este contato</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Todos os resumos <strong>aprovados</strong> do contato com telefone &quot;{contactPhone.trim()}&quot; serão unidos em uma única memória RAG.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                É necessário pelo menos 2 resumos aprovados para este contato. Os resumos individuais serão removidos do RAG e substituídos por um único documento (mais recente no topo).
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => !consolidateByContactSubmitting && setConsolidateByContactModalOpen(false)} disabled={consolidateByContactSubmitting}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleConsolidateByContactConfirm} disabled={consolidateByContactSubmitting}>
+                  {consolidateByContactSubmitting ? 'Consolidando…' : 'Consolidar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Consolidar todos */}
+      {consolidateAllModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateAllSubmitting && setConsolidateAllModalOpen(false)} aria-hidden />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar todos</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Serão consolidados <strong>todos os contatos</strong> que tiverem 2 ou mais resumos aprovados. Cada contato terá uma única memória RAG.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                A operação pode levar alguns segundos se houver muitos contatos. Contatos com 0 ou 1 aprovado serão ignorados.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => !consolidateAllSubmitting && setConsolidateAllModalOpen(false)} disabled={consolidateAllSubmitting}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleConsolidateAllConfirm} disabled={consolidateAllSubmitting}>
+                  {consolidateAllSubmitting ? 'Consolidando…' : 'Consolidar todos'}
                 </Button>
               </div>
             </div>

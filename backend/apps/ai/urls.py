@@ -29,5 +29,7 @@ urlpatterns = [
     path('summaries/reprocess/<uuid:job_id>/status/', views.conversation_summary_reprocess_status, name='conversation-summary-reprocess-status'),
     path('summaries/auto-approve-config/', views.conversation_summary_auto_approve_config, name='conversation-summary-auto-approve-config'),
     path('summaries/consolidate/', views.conversation_summary_consolidate, name='conversation-summary-consolidate'),
+    path('summaries/consolidate-by-contact/', views.conversation_summary_consolidate_by_contact, name='conversation-summary-consolidate-by-contact'),
+    path('summaries/consolidate-all/', views.conversation_summary_consolidate_all, name='conversation-summary-consolidate-all'),
     path('summaries/<int:pk>/', views.conversation_summary_detail, name='conversation-summary-detail'),
 ]
