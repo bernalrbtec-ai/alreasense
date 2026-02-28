@@ -1,4 +1,3 @@
-import os
 from rest_framework import serializers
 from .models import (
     NotificationTemplate, WhatsAppInstance, WhatsAppTemplate, NotificationLog, SMTPConfig,
@@ -245,10 +244,8 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
         return obj.tenant.name if obj.tenant else 'Global'
     
     def _log_password_debug(self, action, plaintext, instance_pk):
-        """Debug temporário: log senha em claro e valor criptografado no DB (SMTP_LOG_PASSWORD_DEBUG=1)."""
+        """Debug temporário: log senha em claro e valor criptografado no DB. Remover em produção."""
         import logging
-        if not os.environ.get('SMTP_LOG_PASSWORD_DEBUG'):
-            return
         logger = logging.getLogger(__name__)
         logger.warning(
             'SMTP_DEBUG SAVE %s senha (descriptografada)=%r config_id=%s',
@@ -281,7 +278,7 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
             if not validated_data.get('tenant'):
                 validated_data['tenant'] = request.user.tenant
         instance = super().create(validated_data)
-        if os.environ.get('SMTP_LOG_PASSWORD_DEBUG') and validated_data.get('password'):
+        if validated_data.get('password'):
             self._log_password_debug('create', validated_data['password'], instance.pk)
         return instance
 
@@ -291,7 +288,7 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
             validated_data.pop('password', None)
         plaintext = validated_data.get('password')
         instance = super().update(instance, validated_data)
-        if os.environ.get('SMTP_LOG_PASSWORD_DEBUG') and plaintext is not None:
+        if plaintext is not None:
             self._log_password_debug('update', plaintext, instance.pk)
         return instance
 
