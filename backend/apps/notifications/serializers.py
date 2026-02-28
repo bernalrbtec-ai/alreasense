@@ -245,11 +245,14 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
     
     def _log_password_debug(self, action, plaintext, instance_pk):
         """Debug temporário: log senha em claro e valor criptografado no DB. Remover em produção."""
+        import hashlib
         import logging
+        from django.conf import settings
         logger = logging.getLogger(__name__)
+        sk_fp = hashlib.sha256(settings.SECRET_KEY.encode() if isinstance(settings.SECRET_KEY, str) else settings.SECRET_KEY).hexdigest()[:16]
         logger.warning(
-            'SMTP_DEBUG SAVE %s senha (descriptografada)=%r config_id=%s',
-            action, plaintext, instance_pk
+            'SMTP_DEBUG SAVE %s secret_key_fp=%s senha (descriptografada)=%r config_id=%s',
+            action, sk_fp, plaintext, instance_pk
         )
         from django.db import connection
         with connection.cursor() as c:

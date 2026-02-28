@@ -1502,7 +1502,14 @@ class SMTPConfig(models.Model):
 
         logger = logging.getLogger(__name__)
         # Debug temporário: sempre logar criptografada (raw DB) e descriptografada. Remover em produção.
+        from django.conf import settings
         from django.db import connection
+        import hashlib
+        sk_fp = hashlib.sha256(settings.SECRET_KEY.encode() if isinstance(settings.SECRET_KEY, str) else settings.SECRET_KEY).hexdigest()[:16]
+        logger.warning(
+            'SMTP_DEBUG TEST secret_key_fp=%s config_id=%s',
+            sk_fp, self.pk
+        )
         with connection.cursor() as c:
             c.execute(
                 'SELECT password FROM notifications_smtp_config WHERE id = %s',
