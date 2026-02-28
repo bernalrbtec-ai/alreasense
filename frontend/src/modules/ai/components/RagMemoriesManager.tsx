@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
@@ -22,6 +22,7 @@ export interface ConversationSummaryItem {
   status_display?: string
   is_auto_approved?: boolean
   is_auto_rejected?: boolean
+  is_consolidated?: boolean
   reviewed_at: string | null
   reviewed_by_id: number | null
   created_at: string
@@ -54,6 +55,33 @@ function formatConfidence(value: unknown): string {
   const n = typeof value === 'number' ? value : Number(value)
   if (!Number.isNaN(n) && n >= 0 && n <= 1) return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   return String(value)
+}
+
+/** Agrupa resumos por contato; cada grupo ordenado por conversa mais recente primeiro. */
+function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey: string; contactLabel: string; contactPhone: string; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] {
+  const byContact = new Map<string, ConversationSummaryItem[]>()
+  for (const item of items) {
+    const key = (item.contact_phone || '').trim() || `no-phone-${item.id}`
+    if (!byContact.has(key)) byContact.set(key, [])
+    byContact.get(key)!.push(item)
+  }
+  const groups: { contactKey: string; contactLabel: string; contactPhone: string; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] = []
+  for (const [contactKey, summaries] of byContact) {
+    const sorted = [...summaries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    const mostRecent = sorted[0]
+    const dateStr = (mostRecent.metadata?.closed_at as string) || mostRecent.created_at
+    const d = dateStr ? new Date(dateStr) : null
+    const mostRecentAt = d ? d.toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
+    const contactLabel = mostRecent.contact_name || mostRecent.contact_phone || 'Sem nome'
+    const hasConsolidation = summaries.some((s) => s.is_consolidated)
+    groups.push({ contactKey, contactLabel, contactPhone: mostRecent.contact_phone || '', hasConsolidation, mostRecentAt, summaries: sorted })
+  }
+  groups.sort((a, b) => {
+    const tA = new Date(a.summaries[0]?.created_at ?? 0).getTime()
+    const tB = new Date(b.summaries[0]?.created_at ?? 0).getTime()
+    return tB - tA
+  })
+  return groups
 }
 
 export function RagMemoriesManager() {
@@ -579,20 +607,6 @@ export function RagMemoriesManager() {
           </div>
           <div className="flex flex-col gap-1 ml-4 shrink-0">
             <div className="flex gap-2">
-              <Button variant="default" size="sm" onClick={handleSearch}>
-                <Search className="h-4 w-4 mr-1" />
-                Buscar
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConsolidateModalOpen(true)}
-                disabled={selectedSummaryIds.length < 2}
-                title={selectedSummaryIds.length < 2 ? 'Selecione pelo menos 2 resumos aprovados do mesmo contato' : 'Consolidar selecionados em uma memória por contato'}
-              >
-                <Layers className="h-4 w-4 mr-1" />
-                Consolidar ({selectedSummaryIds.length})
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -615,6 +629,10 @@ export function RagMemoriesManager() {
               <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Reprocessar
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSearch}>
+                <Search className="h-4 w-4 mr-1" />
+                Buscar
               </Button>
             </div>
             {reprocessJobId && reprocessJobData?.status === 'running' && reprocessProgressDismissed && (
@@ -700,78 +718,109 @@ export function RagMemoriesManager() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {items.map((item) => (
-                    <tr key={item.id}>
-                      <td className="px-3 py-2">
-                        {item.status === 'approved' ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedSummaryIds.includes(item.id)}
-                            onChange={() => toggleSummarySelection(item.id, true)}
-                            title="Incluir na consolidação (mesmo contato)"
-                          />
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-sm">
-                        <div className="font-medium text-gray-900">{item.contact_name || item.contact_phone || '—'}</div>
-                        <div className="text-gray-500">{item.contact_phone}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">
-                          {(item.metadata?.closed_at as string) || item.created_at
-                            ? new Date((item.metadata?.closed_at as string) || item.created_at).toLocaleString('pt-BR')
-                            : '—'}
-                        </div>
-                        {item.contact_tags && item.contact_tags.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {item.contact_tags.map((tag) => (
-                              <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-xs text-gray-400 mt-1">—</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate" title={item.content}>
-                        {item.content ? `${item.content.slice(0, 120)}${item.content.length > 120 ? '…' : ''}` : '—'}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          item.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          item.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
-                        }`} title={item.is_auto_rejected ? (item.metadata?.auto_rejected_reason as string) || 'Reprovado automaticamente' : undefined}>
-                          {item.status_display ?? (item.status === 'pending' ? 'Pendente' : item.status === 'approved' ? 'Aprovado' : 'Reprovado')}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-gray-500">
-                        {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString('pt-BR') : '—'}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
-                        {formatSatisfaction(item.metadata?.satisfaction)}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
-                        {formatConfidence(item.metadata?.confidence)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="flex justify-end gap-1">
-                          {item.status !== 'approved' && (
-                            <Button variant="outline" size="sm" onClick={() => handleApprove(item)} title="Aprovar">
-                              <Check className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {item.status !== 'rejected' && (
-                            <Button variant="outline" size="sm" onClick={() => handleReject(item)} title="Reprovar">
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button variant="outline" size="sm" onClick={() => openEditModal(item)} title="Editar">
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
+                  {groupSummariesByContact(items).map((group) => (
+                    <Fragment key={group.contactKey}>
+                      <tr className="bg-gray-50 border-t border-gray-200 first:border-t-0">
+                        <td colSpan={8} className="px-3 py-2 text-sm font-medium text-gray-700">
+                          Contato {group.contactLabel} às {group.mostRecentAt}
+                        </td>
+                      </tr>
+                      {group.hasConsolidation && (
+                        <tr key={`c-${group.contactKey}`} className="bg-blue-50/50">
+                          <td className="px-3 py-1.5" />
+                          <td colSpan={7} className="px-3 py-1.5 text-sm text-blue-700">
+                            <div className="flex items-center gap-1.5">
+                              <Layers className="h-4 w-4 shrink-0" />
+                              Conversa consolidada
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr key={`s-${group.contactKey}`} className="bg-gray-100/50">
+                        <td colSpan={8} className="px-3 py-1 text-xs font-medium text-gray-500">
+                          Todas as conversas desse contato
+                        </td>
+                      </tr>
+                      {group.summaries.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-3 py-2">
+                            {item.status === 'approved' ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedSummaryIds.includes(item.id)}
+                                onChange={() => toggleSummarySelection(item.id, true)}
+                                title="Incluir na consolidação (mesmo contato)"
+                              />
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-sm">
+                            <div className="flex items-center gap-1.5">
+                              {item.is_consolidated && (
+                                <span className="inline-flex shrink-0 text-blue-600" title="Incluído na memória consolidada do contato">
+                                  <Layers className="h-4 w-4" />
+                                </span>
+                              )}
+                              <div>
+                                <div className="text-gray-500">{item.contact_phone || '—'}</div>
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {(item.metadata?.closed_at as string) || item.created_at
+                                    ? new Date((item.metadata?.closed_at as string) || item.created_at).toLocaleString('pt-BR')
+                                    : '—'}
+                                </div>
+                                {item.contact_tags && item.contact_tags.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {item.contact_tags.map((tag) => (
+                                      <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                        {tag}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate" title={item.content}>
+                            {item.content ? `${item.content.slice(0, 120)}${item.content.length > 120 ? '…' : ''}` : '—'}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              item.status === 'approved' ? 'bg-green-100 text-green-800' :
+                              item.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                            }`} title={item.is_auto_rejected ? (item.metadata?.auto_rejected_reason as string) || 'Reprovado automaticamente' : undefined}>
+                              {item.status_display ?? (item.status === 'pending' ? 'Pendente' : item.status === 'approved' ? 'Aprovado' : 'Reprovado')}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500">
+                            {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString('pt-BR') : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
+                            {formatSatisfaction(item.metadata?.satisfaction)}
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
+                            {formatConfidence(item.metadata?.confidence)}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <div className="flex justify-end gap-1">
+                              {item.status !== 'approved' && (
+                                <Button variant="outline" size="sm" onClick={() => handleApprove(item)} title="Aprovar">
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                              )}
+                              {item.status !== 'rejected' && (
+                                <Button variant="outline" size="sm" onClick={() => handleReject(item)} title="Reprovar">
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button variant="outline" size="sm" onClick={() => openEditModal(item)} title="Editar">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

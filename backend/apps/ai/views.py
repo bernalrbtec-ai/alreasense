@@ -1948,7 +1948,7 @@ from apps.ai.summary_rag import rag_upsert_for_summary, rag_remove_for_summary
 from apps.ai.consolidation import consolidate_approved_summaries_for_contact, refresh_consolidation_for_contact
 
 
-def _serialize_conversation_summary(item, contact_tags=None):
+def _serialize_conversation_summary(item, contact_tags=None, is_consolidated=False):
     meta = item.metadata or {}
     status_val = item.status
     is_auto_approved = meta.get("auto_approved") is True
@@ -1974,6 +1974,7 @@ def _serialize_conversation_summary(item, contact_tags=None):
         "status_display": status_display,
         "is_auto_approved": is_auto_approved,
         "is_auto_rejected": is_auto_rejected,
+        "is_consolidated": is_consolidated,
         "reviewed_at": timezone.localtime(item.reviewed_at).isoformat() if item.reviewed_at else None,
         "reviewed_by_id": item.reviewed_by_id,
         "created_at": timezone.localtime(item.created_at).isoformat(),
@@ -2022,6 +2023,11 @@ def conversation_summary_list(request):
     pagination = LimitOffsetPagination()
     pagination.default_limit = 20
     results = pagination.paginate_queryset(queryset, request)
+    # IDs de resumos que estão em alguma consolidação (memória por contato)
+    consolidated_summary_ids = set()
+    for rec in ConsolidationRecord.objects.filter(tenant=tenant).values_list("summary_ids", flat=True):
+        if isinstance(rec, list):
+            consolidated_summary_ids.update(rec)
     # Resolver tags do contato por telefone (para exibir em vez do UUID na UI)
     contact_tags_by_phone = {}
     normalize_phone_for_search = None
@@ -2042,7 +2048,7 @@ def conversation_summary_list(request):
         if item.contact_phone and normalize_phone_for_search:
             key = normalize_phone_for_search(item.contact_phone)
             tags = contact_tags_by_phone.get(key) or contact_tags_by_phone.get(item.contact_phone) or []
-        data.append(_serialize_conversation_summary(item, contact_tags=tags))
+        data.append(_serialize_conversation_summary(item, contact_tags=tags, is_consolidated=(item.id in consolidated_summary_ids)))
     return pagination.get_paginated_response(data)
 
 
