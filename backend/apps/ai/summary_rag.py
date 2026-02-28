@@ -63,10 +63,12 @@ def rag_upsert_for_summary(summary):
             pass
 
 
-def rag_remove_for_summary(summary):
-    """Sinaliza remoção do resumo no pgvector (n8n). Requer N8N_RAG_REMOVE_WEBHOOK_URL."""
+def rag_remove_for_summary(summary, raise_on_failure=False):
+    """Sinaliza remoção do resumo no pgvector (n8n). Requer N8N_RAG_REMOVE_WEBHOOK_URL. Se raise_on_failure=True, levanta em caso de URL vazia ou falha na requisição."""
     url = getattr(settings, "N8N_RAG_REMOVE_WEBHOOK_URL", "") or ""
     if not url:
+        if raise_on_failure:
+            raise ValueError("N8N_RAG_REMOVE_WEBHOOK_URL não configurado; não é possível remover resumo do RAG.")
         logger.info("[RAG] N8N_RAG_REMOVE_WEBHOOK_URL não configurado, skip remove.")
         return
     payload = {
@@ -79,4 +81,49 @@ def rag_remove_for_summary(summary):
         resp.raise_for_status()
         logger.info("[RAG] Remove ok para conversation_id=%s", summary.conversation_id)
     except Exception as e:
+        if raise_on_failure:
+            raise
         logger.warning("[RAG] Erro ao chamar rag-remove para conversation_id=%s: %s", summary.conversation_id, e)
+
+
+def rag_upsert_consolidated(tenant_id, consolidated_id, contact_phone, content, metadata=None):
+    """Envia documento consolidado (um RAG por contato) para o pgvector via n8n. Levanta se URL não configurada."""
+    url = getattr(settings, "N8N_RAG_WEBHOOK_URL", "") or ""
+    if not url:
+        raise ValueError("N8N_RAG_WEBHOOK_URL não configurado; não é possível enviar consolidado ao RAG.")
+    payload = {
+        "tenant_id": str(tenant_id),
+        "source": "consolidated_summary",
+        "content": content,
+        "metadata": {
+            "contact_phone": contact_phone,
+            "conversation_id": str(consolidated_id),
+            **(_metadata_for_payload(metadata or {})),
+        },
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
+        resp.raise_for_status()
+        logger.info("[RAG] Upsert consolidado ok para consolidated_id=%s contact_phone=%s", consolidated_id, contact_phone)
+    except Exception as e:
+        logger.warning("[RAG] Erro ao chamar rag-upsert consolidado consolidated_id=%s: %s", consolidated_id, e)
+        raise
+
+
+def rag_remove_consolidated(tenant_id, consolidated_id):
+    """Sinaliza remoção do documento consolidado no pgvector (n8n). Levanta se URL não configurada."""
+    url = getattr(settings, "N8N_RAG_REMOVE_WEBHOOK_URL", "") or ""
+    if not url:
+        raise ValueError("N8N_RAG_REMOVE_WEBHOOK_URL não configurado; não é possível remover consolidado do RAG.")
+    payload = {
+        "tenant_id": str(tenant_id),
+        "source": "consolidated_summary",
+        "conversation_id": str(consolidated_id),
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=RAG_WEBHOOK_TIMEOUT)
+        resp.raise_for_status()
+        logger.info("[RAG] Remove consolidado ok para consolidated_id=%s", consolidated_id)
+    except Exception as e:
+        logger.warning("[RAG] Erro ao chamar rag-remove consolidado consolidated_id=%s: %s", consolidated_id, e)
+        raise

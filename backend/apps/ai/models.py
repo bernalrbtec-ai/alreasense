@@ -114,6 +114,37 @@ class ConversationSummary(models.Model):
         return f"Summary {self.conversation_id} ({self.status})"
 
 
+class ConsolidationRecord(models.Model):
+    """
+    Um RAG por contato. Registro de resumos consolidados (job diário ou manual).
+    Um registro por (tenant, contact_phone). summary_ids = lista de PKs de ConversationSummary.
+    Refresh = UPDATE summary_ids + re-upsert no RAG com mesmo consolidated_id.
+    """
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="consolidation_records")
+    contact_phone = models.CharField(max_length=64, default="")
+    consolidated_id = models.UUIDField(unique=False)  # unique per (tenant, contact_phone) via constraint
+    summary_ids = models.JSONField(default=list, blank=True)  # list of ConversationSummary.id
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_consolidation_record"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "consolidated_id"],
+                name="uniq_ai_consolidation_record_tenant_consolidated",
+            ),
+            models.UniqueConstraint(
+                fields=["tenant", "contact_phone"],
+                name="uniq_ai_consolidation_record_tenant_contact",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Consolidation {self.contact_phone} ({self.tenant_id})"
+
+
 class AiTriageResult(models.Model):
     """Resultado de triagem vindo do N8N/LLM."""
 

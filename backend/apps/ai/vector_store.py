@@ -218,6 +218,12 @@ def search_memory_for_contact(
     """
     Busca memória restrita ao contato: mesmo tenant + mesmo contact_phone,
     apenas conversas dos últimos within_days (padrão 1 ano). Hierarquia tenant → contato → histórico.
+
+    Nota: Os documentos RAG de resumos (conversation_summary e consolidated_summary) são
+    enviados ao n8n (N8N_RAG_WEBHOOK_URL). Se a Bia consultar memória via n8n, o fluxo
+    de busca por contato no n8n deve incluir documentos com source='consolidated_summary'
+    e metadata.contact_phone igual ao contato normalizado, para que a memória consolidada
+    (um RAG por contato) seja retornada.
     """
     if not query_embedding or not contact_phone:
         return []

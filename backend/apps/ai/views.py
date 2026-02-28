@@ -28,6 +28,7 @@ from apps.ai.models import (
     TenantSecretaryProfile,
     AiTranscriptionDailyMetric,
     ConversationSummary,
+    ConsolidationRecord,
 )
 from apps.tenancy.models import Tenant
 from apps.connections.webhook_cache import get_redis_client
@@ -1943,6 +1944,7 @@ def rebuild_transcription_metrics_endpoint(request):
 # ----- Conversation summaries (Gestão RAG) -----
 
 from apps.ai.summary_rag import rag_upsert_for_summary, rag_remove_for_summary
+from apps.ai.consolidation import consolidate_approved_summaries_for_contact, refresh_consolidation_for_contact
 
 
 def _serialize_conversation_summary(item, contact_tags=None):
@@ -2043,6 +2045,43 @@ def conversation_summary_list(request):
     return pagination.get_paginated_response(data)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def conversation_summary_consolidate(request):
+    """Consolida resumos aprovados do mesmo contato em uma única memória RAG. Body: { \"summary_ids\": [1, 2, ...] }."""
+    tenant = request.user.tenant
+    data = request.data or {}
+    summary_ids = data.get("summary_ids")
+    if not isinstance(summary_ids, list) or len(summary_ids) < 2:
+        return Response(
+            {"error": "Envie summary_ids com pelo menos 2 IDs de resumos aprovados do mesmo contato."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        first_summary = ConversationSummary.objects.filter(tenant=tenant, id=summary_ids[0]).first()
+        if not first_summary:
+            return Response(
+                {"error": "Resumo não encontrado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        contact_phone_normalized = normalize_contact_phone_for_rag(first_summary.contact_phone or "")
+        if not contact_phone_normalized:
+            return Response(
+                {"error": "Não é possível consolidar resumos sem contato (contact_phone vazio)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        consolidate_approved_summaries_for_contact(tenant.id, contact_phone_normalized, summary_ids=summary_ids)
+        return Response({"ok": True, "message": "Resumos consolidados com sucesso."})
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except RuntimeError as e:
+        logger.exception("Consolidação falhou: %s", e)
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.exception("Consolidação falhou: %s", e)
+        return Response({"error": "Erro ao consolidar. Tente novamente."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def conversation_summary_detail(request, pk):
@@ -2057,6 +2096,7 @@ def conversation_summary_detail(request, pk):
     action = (data.get("action") or "").strip().lower()
     new_content = data.get("content")
     was_approved = summary.status == ConversationSummary.STATUS_APPROVED
+    contact_normalized = normalize_contact_phone_for_rag(summary.contact_phone or "")
 
     if action == "approve":
         summary.status = ConversationSummary.STATUS_APPROVED
@@ -2067,17 +2107,22 @@ def conversation_summary_detail(request, pk):
         meta.pop("auto_approved", None)
         summary.metadata = meta
         summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at", "metadata"])
-        rag_upsert_for_summary(summary)
+        if ConsolidationRecord.objects.filter(tenant=tenant, contact_phone=contact_normalized).exists():
+            refresh_consolidation_for_contact(tenant.id, summary.contact_phone)
+        else:
+            rag_upsert_for_summary(summary)
         return Response(_serialize_conversation_summary(summary))
 
     if action == "reject":
-        if was_approved:
-            rag_remove_for_summary(summary)
         summary.status = ConversationSummary.STATUS_REJECTED
         summary.reviewed_at = timezone.now()
         summary.reviewed_by = request.user
         summary.updated_at = timezone.now()
         summary.save(update_fields=["status", "reviewed_at", "reviewed_by", "updated_at"])
+        if ConsolidationRecord.objects.filter(tenant=tenant, contact_phone=contact_normalized).exists():
+            refresh_consolidation_for_contact(tenant.id, summary.contact_phone)
+        elif was_approved:
+            rag_remove_for_summary(summary)
         return Response(_serialize_conversation_summary(summary))
 
     if action == "edit" and new_content is not None:
@@ -2091,7 +2136,10 @@ def conversation_summary_detail(request, pk):
         summary.metadata = meta
         summary.save(update_fields=["content", "updated_at", "metadata"])
         if summary.status == ConversationSummary.STATUS_APPROVED:
-            rag_upsert_for_summary(summary)
+            if ConsolidationRecord.objects.filter(tenant=tenant, contact_phone=contact_normalized).exists():
+                refresh_consolidation_for_contact(tenant.id, summary.contact_phone)
+            else:
+                rag_upsert_for_summary(summary)
         return Response(_serialize_conversation_summary(summary))
 
     return Response({"error": "Ação inválida. Use action: approve | reject | edit (com content para edit)."}, status=status.HTTP_400_BAD_REQUEST)

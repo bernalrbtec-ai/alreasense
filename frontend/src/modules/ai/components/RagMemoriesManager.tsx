@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save } from 'lucide-react'
+import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
@@ -97,6 +97,10 @@ export function RagMemoriesManager() {
   const [editItem, setEditItem] = useState<ConversationSummaryItem | null>(null)
   const [editContent, setEditContent] = useState('')
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  const [selectedSummaryIds, setSelectedSummaryIds] = useState<number[]>([])
+  const [consolidateModalOpen, setConsolidateModalOpen] = useState(false)
+  const [consolidateSubmitting, setConsolidateSubmitting] = useState(false)
 
   const [autoApproveOpen, setAutoApproveOpen] = useState(false)
   const [autoApproveConfig, setAutoApproveConfig] = useState<{
@@ -344,6 +348,30 @@ export function RagMemoriesManager() {
     fetchList(0)
   }
 
+  const toggleSummarySelection = (id: number, approved: boolean) => {
+    if (!approved) return
+    setSelectedSummaryIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }
+
+  const handleConsolidateConfirm = async () => {
+    if (selectedSummaryIds.length < 2) return
+    setConsolidateSubmitting(true)
+    try {
+      await api.post('ai/summaries/consolidate/', { summary_ids: selectedSummaryIds })
+      toast.success('Resumos consolidados em uma única memória para o contato.')
+      setConsolidateModalOpen(false)
+      setSelectedSummaryIds([])
+      fetchList(offset)
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || 'Erro ao consolidar.'
+      toast.error(msg)
+    } finally {
+      setConsolidateSubmitting(false)
+    }
+  }
+
   const criterionOrder = ['min_words', 'max_words', 'min_messages', 'has_subject', 'no_placeholders', 'sentiment_not_negative', 'satisfaction_min', 'confidence_min']
   const rejectCriterionOrder = ['reject_confidence_below', 'reject_no_subject', 'reject_negative_sentiment', 'reject_min_words_below']
 
@@ -511,6 +539,16 @@ export function RagMemoriesManager() {
                 <Search className="h-4 w-4 mr-1" />
                 Buscar
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConsolidateModalOpen(true)}
+                disabled={selectedSummaryIds.length < 2}
+                title={selectedSummaryIds.length < 2 ? 'Selecione pelo menos 2 resumos aprovados do mesmo contato' : 'Consolidar selecionados em uma memória por contato'}
+              >
+                <Layers className="h-4 w-4 mr-1" />
+                Consolidar ({selectedSummaryIds.length})
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Reprocessar
@@ -588,6 +626,7 @@ export function RagMemoriesManager() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -600,6 +639,18 @@ export function RagMemoriesManager() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {items.map((item) => (
                     <tr key={item.id}>
+                      <td className="px-3 py-2">
+                        {item.status === 'approved' ? (
+                          <input
+                            type="checkbox"
+                            checked={selectedSummaryIds.includes(item.id)}
+                            onChange={() => toggleSummarySelection(item.id, true)}
+                            title="Incluir na consolidação (mesmo contato)"
+                          />
+                        ) : (
+                          <span className="text-gray-300">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-sm">
                         <div className="font-medium text-gray-900">{item.contact_name || item.contact_phone || '—'}</div>
                         <div className="text-gray-500">{item.contact_phone}</div>
@@ -800,13 +851,46 @@ export function RagMemoriesManager() {
         </div>
       )}
 
+      {/* Modal Consolidar */}
+      {consolidateModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateSubmitting && setConsolidateModalOpen(false)} aria-hidden />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar memória</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Os {selectedSummaryIds.length} resumos selecionados serão unidos em uma única memória RAG para o contato.
+                Apenas resumos <strong>aprovados do mesmo contato</strong> podem ser consolidados.
+              </p>
+              <p className="text-sm text-gray-500 mb-6">
+                Os resumos individuais serão removidos do RAG e substituídos por um único documento com todos os atendimentos (mais recente no topo).
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => !consolidateSubmitting && setConsolidateModalOpen(false)} disabled={consolidateSubmitting}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleConsolidateConfirm} disabled={consolidateSubmitting}>
+                  {consolidateSubmitting ? 'Consolidando…' : 'Consolidar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal Editar */}
-      {editModalOpen && (
+      {editModalOpen && editItem && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="fixed inset-0 bg-black/50" onClick={() => !editSubmitting && setEditModalOpen(false)} aria-hidden />
             <div className="relative bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-3">Editar resumo</h3>
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3 mb-4 text-sm text-gray-700 space-y-1">
+                <div><span className="font-medium">Contato:</span> {editItem.contact_name || editItem.contact_phone || '—'}</div>
+                <div><span className="font-medium">Data da conversa:</span> {(editItem.metadata?.closed_at as string) || editItem.created_at ? new Date((editItem.metadata?.closed_at as string) || editItem.created_at).toLocaleString('pt-BR') : '—'}</div>
+                <div><span className="font-medium">Departamento:</span> {(editItem.metadata?.department_name as string) || '—'}</div>
+                <div><span className="font-medium">Assunto:</span> {(editItem.metadata?.subject as string) || '—'}</div>
+              </div>
               <div className="space-y-2 mb-6">
                 <Label className="text-sm">Conteúdo</Label>
                 <textarea
