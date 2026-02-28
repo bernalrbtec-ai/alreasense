@@ -955,7 +955,18 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def test(self, request, pk=None):
         """Test SMTP configuration by sending a test email."""
-        smtp_config = self.get_object()
+        # Carregar com password na mesma query (sem defer) para evitar bytea em formato diferente no deferred load
+        user = request.user
+        if not user.tenant:
+            return Response({'detail': 'Sem tenant.'}, status=status.HTTP_403_FORBIDDEN)
+        try:
+            smtp_config = (
+                SMTPConfig.objects.filter(tenant=user.tenant)
+                .select_related('tenant', 'created_by')
+                .get(pk=pk)
+            )
+        except SMTPConfig.DoesNotExist:
+            return Response({'detail': 'Não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         serializer = TestSMTPSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         test_email = serializer.validated_data['test_email']
