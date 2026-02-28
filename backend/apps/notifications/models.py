@@ -1489,7 +1489,18 @@ class SMTPConfig(models.Model):
     def __str__(self):
         tenant_name = self.tenant.name if self.tenant else 'Global'
         return f"{self.name} ({self.host}) - {tenant_name}"
-    
+
+    def get_smtp_host_resolved(self):
+        """Retorna o host para conexão SMTP, preferindo IPv6 em ambientes IPv6-only (ex.: Railway)."""
+        import socket
+        try:
+            infos = socket.getaddrinfo(self.host, self.port, socket.AF_INET6, socket.SOCK_STREAM)
+            if infos:
+                return infos[0][4][0]
+        except (socket.gaierror, socket.error, OSError):
+            pass
+        return self.host
+
     def test_connection(self, test_email):
         """Test SMTP connection by sending a test email."""
         from django.core.mail import send_mail, EmailMessage
@@ -1539,6 +1550,7 @@ class SMTPConfig(models.Model):
         try:
             # Set socket timeout to avoid hanging
             socket.setdefaulttimeout(30)
+            smtp_host = self.get_smtp_host_resolved()
             
             # Disable SSL verification if needed
             ssl_context = None
@@ -1550,7 +1562,7 @@ class SMTPConfig(models.Model):
             # Create email connection with these settings
             connection = get_connection(
                 backend='django.core.mail.backends.smtp.EmailBackend',
-                host=self.host,
+                host=smtp_host,
                 port=self.port,
                 username=self.username,
                 password=self.password,

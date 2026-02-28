@@ -2337,7 +2337,7 @@ def _reprocess_send_report(tenant_id, notify_phone, notify_email, total, approve
             if smtp:
                 conn = get_connection(
                     backend="django.core.mail.backends.smtp.EmailBackend",
-                    host=smtp.host,
+                    host=smtp.get_smtp_host_resolved(),
                     port=smtp.port,
                     username=smtp.username,
                     password=smtp.password,
