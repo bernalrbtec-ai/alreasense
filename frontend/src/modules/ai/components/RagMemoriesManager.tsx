@@ -52,12 +52,12 @@ function parseSatisfactionValue(value: unknown): number | null {
   return Math.round(n)
 }
 
-/** Média da satisfação (1-5) de uma lista de itens; null se nenhum válido. Formato pt-BR 1 decimal. */
-function averageSatisfactionDisplay(summaries: ConversationSummaryItem[]): string {
+/** Média da satisfação (1-5) de uma lista de itens; null se nenhum válido. Valor inteiro para estrelas. */
+function averageSatisfactionValue(summaries: ConversationSummaryItem[]): number | null {
   const values = summaries.map((s) => parseSatisfactionValue(s.metadata?.satisfaction)).filter((n): n is number => n !== null)
-  if (values.length === 0) return '—'
+  if (values.length === 0) return null
   const avg = values.reduce((a, b) => a + b, 0) / values.length
-  return avg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  return Math.round(avg)
 }
 
 /** Renderiza 5 estrelas para satisfação 1-5; "—" se inválido. */
@@ -750,46 +750,53 @@ export function RagMemoriesManager() {
             <p className="text-sm text-gray-600 mb-2">Total: {count}</p>
             <div className="overflow-x-auto border border-gray-200 rounded-lg">
               <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
-                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {groupSummariesByContact(items).map((group) => {
-                    const isCollapsed = collapsedContactKeys.has(group.contactKey)
-                    const mediaSatisfacao = averageSatisfactionDisplay(group.summaries)
-                    return (
-                    <Fragment key={group.contactKey}>
-                      <tr className="bg-gray-50 border-t border-gray-200 first:border-t-0">
-                        <td className="px-3 py-2 w-10 align-middle">
-                          <button
-                            type="button"
-                            tabIndex={0}
-                            onClick={() => toggleContactCollapsed(group.contactKey)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleContactCollapsed(group.contactKey) } }}
-                            className="inline-flex p-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
-                            aria-expanded={!isCollapsed}
-                            aria-label={isCollapsed ? 'Expandir detalhes do contato' : 'Retrair detalhes do contato'}
-                          >
-                            {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600" /> : <ChevronDown className="h-4 w-4 text-gray-600" />}
-                          </button>
-                        </td>
-                        <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-700">
-                          <div className="flex items-center justify-between gap-4 min-w-0">
-                            <span className="truncate" title={`Contato ${group.contactLabel} às ${group.mostRecentAt}`}>
-                              Contato {group.contactLabel} às {group.mostRecentAt}
-                            </span>
-                            <span className="text-gray-600 font-normal shrink-0">Média da Satisfação: {mediaSatisfacao}</span>
-                          </div>
-                        </td>
-                      </tr>
+                {(() => {
+                  const groups = groupSummariesByContact(items)
+                  const anyExpanded = groups.some((g) => !collapsedContactKeys.has(g.contactKey))
+                  return (
+                    <>
+                      {anyExpanded && (
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
+                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
+                            <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                          </tr>
+                        </thead>
+                      )}
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {groups.map((group) => {
+                          const isCollapsed = collapsedContactKeys.has(group.contactKey)
+                          return (
+                            <Fragment key={group.contactKey}>
+                              <tr className="bg-gray-50 border-t border-gray-200 first:border-t-0">
+                                <td className="px-3 py-2 w-10 align-middle">
+                                  <button
+                                    type="button"
+                                    tabIndex={0}
+                                    onClick={() => toggleContactCollapsed(group.contactKey)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleContactCollapsed(group.contactKey) } }}
+                                    className="inline-flex p-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                                    aria-expanded={!isCollapsed}
+                                    aria-label={isCollapsed ? 'Expandir detalhes do contato' : 'Retrair detalhes do contato'}
+                                  >
+                                    {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600" /> : <ChevronDown className="h-4 w-4 text-gray-600" />}
+                                  </button>
+                                </td>
+                                <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-700">
+                                  <div className="flex items-center gap-3 flex-wrap min-w-0">
+                                    <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800 truncate max-w-[200px]" title={group.contactLabel}>
+                                      {group.contactLabel}
+                                    </span>
+                                    <span className="text-gray-600 font-normal">Último resumo {group.mostRecentAt}</span>
+                                    <SatisfactionStars value={averageSatisfactionValue(group.summaries)} />
+                                  </div>
+                                </td>
+                              </tr>
                       {!isCollapsed && group.hasConsolidation && (() => {
                         const consolidatedText = consolidatedContentByContact[group.contactPhone] ?? consolidatedContentByContact[group.contactKey] ?? ''
                         return (
@@ -926,9 +933,13 @@ export function RagMemoriesManager() {
                         </>
                       )}
                     </Fragment>
-                    )
-                  })}
-                </tbody>
+                            )
+                          })}
+                        </tbody>
+                    </>
+                  )
+                }
+              })()}
               </table>
             </div>
             <div className="flex items-center justify-between mt-3">
