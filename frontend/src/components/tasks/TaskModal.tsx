@@ -323,10 +323,10 @@ export default function TaskModal({
   const selectedContacts = contacts.filter(c => formData.related_contact_ids.includes(c.id))
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white rounded-lg shadow-xl ${showHistory && task ? 'max-w-5xl' : 'max-w-2xl'} w-full max-h-[90vh] overflow-hidden flex flex-col`}>
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl ${showHistory && task ? 'max-w-5xl' : 'max-w-2xl'} w-full max-h-[90vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
+        <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-white dark:bg-gray-800 z-10">
           <div className="flex items-center gap-3">
             <h2 className="text-xl font-bold">
               {task ? 'Editar Tarefa' : 'Nova Tarefa'}
@@ -343,7 +343,7 @@ export default function TaskModal({
               </Button>
             )}
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -351,20 +351,20 @@ export default function TaskModal({
         {/* Content Container */}
         <div className="flex flex-1 overflow-hidden">
           {/* Form Section */}
-          <div className={`${showHistory && task ? 'w-2/3 border-r' : 'w-full'} overflow-y-auto`}>
+          <div className={`${showHistory && task ? 'w-2/3 border-r border-border' : 'w-full'} overflow-y-auto`}>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {/* Título */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Título *
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               placeholder="Ex: Ligar cliente sobre proposta"
               required
             />
@@ -372,14 +372,14 @@ export default function TaskModal({
 
           {/* Descrição */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Descrição
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               placeholder="Detalhes da tarefa..."
             />
           </div>
@@ -387,13 +387,13 @@ export default function TaskModal({
           {/* Departamento e Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Departamento *
               </label>
               <select
                 value={formData.department}
                 onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 required
               >
                 <option value="">Selecione...</option>
@@ -404,13 +404,13 @@ export default function TaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Status
               </label>
               <select
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               >
                 <option value="pending">Pendente</option>
                 <option value="in_progress">Em Andamento</option>
@@ -423,13 +423,13 @@ export default function TaskModal({
           {/* Prioridade e Atribuída Para */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Prioridade
               </label>
               <select
                 value={formData.priority}
                 onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               >
                 <option value="low">Baixa</option>
                 <option value="medium">Média</option>
@@ -439,13 +439,13 @@ export default function TaskModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Atribuída Para
               </label>
               <select
                 value={formData.assigned_to}
                 onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               >
                 <option value="">Ninguém (tarefa geral)</option>
                 {users.map(user => (
@@ -461,7 +461,7 @@ export default function TaskModal({
 
           {/* Data/Hora Agendada */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               <input
                 type="checkbox"
                 checked={formData.has_due_date}
@@ -487,7 +487,7 @@ export default function TaskModal({
                     setFormData({ ...formData, has_due_date: checked })
                   }
                 }}
-                className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="rounded border-border bg-background disabled:opacity-50 disabled:cursor-not-allowed"
               />
               <span className={formData.status === 'completed' ? 'text-gray-500' : ''}>
                 Agendar para data/hora específica
@@ -528,7 +528,7 @@ export default function TaskModal({
                       
                       setFormData({ ...formData, due_date: selectedDate })
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                   />
                 </div>
                 <div>
@@ -584,7 +584,7 @@ export default function TaskModal({
                       
                       setFormData({ ...formData, due_time: selectedTime })
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                   />
                 </div>
               </div>
@@ -593,7 +593,7 @@ export default function TaskModal({
 
           {/* Contatos Relacionados */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Contatos Relacionados (opcional)
             </label>
             
@@ -607,13 +607,13 @@ export default function TaskModal({
                   searchContacts(e.target.value)
                 }}
                 placeholder="Buscar contato..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               />
               {loadingContacts && (
                 <div className="text-xs text-gray-500 mt-1">Buscando...</div>
               )}
               {searchContact && contacts.length > 0 && (
-                <div className="mt-1 border border-gray-200 rounded-md max-h-40 overflow-y-auto">
+                <div className="mt-1 border border-border rounded-md max-h-40 overflow-y-auto">
                   {contacts
                     .filter(c => !formData.related_contact_ids.includes(c.id))
                     .map(contact => (
@@ -621,7 +621,7 @@ export default function TaskModal({
                         key={contact.id}
                         type="button"
                         onClick={() => addContact(contact)}
-                        className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                        className="w-full text-left px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-border last:border-b-0"
                       >
                         <div className="font-medium">{contact.name}</div>
                         <div className="text-xs text-gray-500">{contact.phone}</div>
@@ -655,12 +655,12 @@ export default function TaskModal({
             {/* ✅ NOVO: Opção para notificar contatos relacionados */}
             {formData.related_contact_ids.length > 0 && formData.has_due_date && (
               <div className="mt-3">
-                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
                   <input
                     type="checkbox"
                     checked={formData.notify_contacts}
                     onChange={(e) => setFormData({ ...formData, notify_contacts: e.target.checked })}
-                    className="rounded border-gray-300"
+                    className="rounded border-border bg-background"
                   />
                   <span>Notificar contatos relacionados via WhatsApp</span>
                 </label>
@@ -685,7 +685,7 @@ export default function TaskModal({
 
           {/* History Panel */}
           {showHistory && task && (
-            <div className="w-1/3 bg-gray-50 overflow-y-auto border-l">
+            <div className="w-1/3 bg-gray-50 dark:bg-gray-700/50 overflow-y-auto border-l border-border">
               <div className="p-4 space-y-4">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Clock className="h-5 w-5" />
@@ -693,8 +693,8 @@ export default function TaskModal({
                 </h3>
 
                 {/* Task Creation Info */}
-                <div className="bg-white rounded-lg p-3 border border-gray-200">
-                  <div className="text-sm font-medium text-gray-700 mb-2">Criação</div>
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-border">
+                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Criação</div>
                   <div className="text-xs text-gray-600 space-y-1">
                     <div>
                       <span className="font-medium">Data:</span>{' '}
@@ -723,17 +723,17 @@ export default function TaskModal({
                 {/* Task History Timeline */}
                 {loadingHistory ? (
                   <div className="text-center py-8 text-gray-500">
-                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mx-auto"></div>
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 dark:border-gray-500 mx-auto"></div>
                     <p className="mt-2 text-xs">Carregando histórico...</p>
                   </div>
                 ) : taskHistory.length > 0 ? (
                   <div className="space-y-3">
-                    <div className="text-sm font-medium text-gray-700">Alterações</div>
+                    <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Alterações</div>
                     <div className="space-y-2">
                       {taskHistory.map((historyItem, index) => (
-                        <div key={historyItem.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                        <div key={historyItem.id} className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-border">
                           <div className="flex items-start justify-between mb-2">
-                            <div className="text-xs font-medium text-gray-700">
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-300">
                               {getChangeTypeDisplay(historyItem.change_type)}
                             </div>
                             <div className="text-xs text-gray-500">

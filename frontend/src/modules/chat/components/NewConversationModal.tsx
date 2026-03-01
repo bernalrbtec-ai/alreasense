@@ -369,14 +369,14 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const showPhoneOption = isPhone && isValidPhone && contacts.length === 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-xl font-bold">Nova Conversa</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X className="h-6 w-6" />
           </button>
@@ -384,12 +384,12 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
 
         {/* ✅ MULTI-INSTÂNCIA: Seletor de instância (só quando > 1) */}
         {instances.length > 1 && (
-          <div className="px-4 pt-4 pb-2 border-b">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Enviar por</label>
+          <div className="px-4 pt-4 pb-2 border-b border-border">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enviar por</label>
             <select
               value={selectedInstanceId ?? ''}
               onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+              className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background text-sm"
             >
               {instances.map((inst) => (
                 <option key={inst.id} value={inst.id}>
@@ -401,9 +401,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         )}
 
         {/* Search Input */}
-        <div className="p-4 border-b">
+        <div className="p-4 border-b border-border">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               placeholder="Buscar por nome ou telefone..."
@@ -414,7 +414,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                   setPhoneInput(e.target.value);
                 }
               }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+              className="w-full pl-10 pr-4 py-2 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               autoFocus
             />
             {isSearching && (

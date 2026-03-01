@@ -332,10 +332,10 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
   
   return (
     <>
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-          <div className="flex justify-between items-center p-4 border-b">
+          <div className="flex justify-between items-center p-4 border-b border-border">
           <div>
               <h2 className="text-xl font-bold">Importar Contatos</h2>
             <div className="flex items-center gap-2 mt-2">
@@ -343,13 +343,13 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div
                   key={s}
                     className={`h-2 w-10 rounded ${
-                    s === step ? 'bg-blue-600' : s < step ? 'bg-green-500' : 'bg-gray-200'
+                    s === step ? 'bg-blue-600' : s < step ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-600'
                   }`}
                 />
               ))}
             </div>
           </div>
-          <button onClick={resetAndClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={resetAndClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -362,7 +362,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
               <div
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
+                  className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
                   <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
@@ -373,16 +373,16 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   onChange={handleFileSelect}
                   className="hidden"
                 />
-                  <p className="text-base font-medium mb-1">
+                  <p className="text-base font-medium mb-1 text-gray-900 dark:text-gray-100">
                   Clique para selecionar ou arraste o arquivo aqui
                 </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                   CSV ou VCF (vCard), máximo 10 MB
                 </p>
               </div>
               
               {file && (
-                  <Card className="p-3 bg-gray-50">
+                  <Card className="p-3 bg-gray-50 dark:bg-gray-700/50">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         <FileText className="h-6 w-6 text-blue-600" />
@@ -435,7 +435,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     Contatos duplicados
                 </label>
                   <div className="grid grid-cols-2 gap-2">
-                    <label className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <label className="flex items-center gap-2 p-2 border border-border rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm">
                     <input
                       type="radio"
                       checked={!config.update_existing}
@@ -443,11 +443,11 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     />
                     <div>
                         <p className="font-medium">Pular</p>
-                        <p className="text-xs text-gray-500">Ignorar existentes</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Ignorar existentes</p>
                     </div>
                   </label>
                   
-                    <label className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer text-sm">
+                    <label className="flex items-center gap-2 p-2 border border-border rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-sm">
                     <input
                       type="radio"
                       checked={config.update_existing}
@@ -455,7 +455,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     />
                     <div>
                         <p className="font-medium">Atualizar</p>
-                        <p className="text-xs text-gray-500">Sobrescrever dados</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Sobrescrever dados</p>
                     </div>
                   </label>
                 </div>
@@ -583,7 +583,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
               </div>
               
                 {previewData.source !== 'vcf' && (
-                <div className="bg-gray-50 p-3 rounded text-sm">
+                <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded text-sm">
                   <p className="font-medium mb-2">Mapeamento de Colunas</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {Object.entries(previewData.column_mapping || {}).map(([csvCol, dbField]) => (
@@ -601,7 +601,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
               
                 <div className="overflow-x-auto max-h-64 overflow-y-auto border rounded">
                   <table className="min-w-full divide-y divide-gray-200 text-xs">
-                  <thead className="bg-gray-50 sticky top-0">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                     <tr>
                         {(previewData.source === 'vcf' ? (previewData.headers || ['name', 'phone', 'email', 'city', 'state', 'notes']) : Object.keys(previewData.column_mapping || {})).map((header: string) => (
                           <th key={header} className="px-3 py-2 text-left font-medium text-gray-700">
@@ -610,11 +610,11 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                       ))}
                     </tr>
                   </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
                       {previewData.sample_rows.slice(0, 10).map((row, idx) => (
-                        <tr key={idx} className="hover:bg-gray-50">
+                        <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                           {(previewData.source === 'vcf' ? (previewData.headers || ['name', 'phone', 'email', 'city', 'state', 'notes']) : Object.keys(previewData.column_mapping || {})).map((header: string, colIdx: number) => (
-                            <td key={colIdx} className="px-3 py-2 text-gray-900">
+                            <td key={colIdx} className="px-3 py-2 text-gray-900 dark:text-gray-100">
                               {row[header] ?? '-'}
                           </td>
                         ))}
@@ -626,7 +626,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
               
                 {/* Avisos */}
                 {previewData.validation_warnings && previewData.validation_warnings.length > 0 && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                  <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded p-3">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                       <div className="text-xs">
@@ -779,20 +779,20 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
       
       {/* MODAL DE CONSENTIMENTO LGPD */}
       {showConsentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/60 dark:bg-black/70 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
-                  <AlertCircle className="h-8 w-8 text-yellow-600" />
+                  <AlertCircle className="h-8 w-8 text-yellow-600 dark:text-yellow-500" />
                   <div>
                     <h3 className="text-xl font-bold">Consentimento LGPD</h3>
-                    <p className="text-sm text-gray-500">Lei Geral de Proteção de Dados</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Lei Geral de Proteção de Dados</p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setShowConsentModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <X className="h-6 w-6" />
                 </button>

@@ -391,23 +391,23 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <div className="flex justify-between items-center p-4 border-b border-border sticky top-0 bg-white dark:bg-gray-800 z-10">
           <div>
             <h2 className="text-xl font-bold">
               {editingCampaign ? 'Editar Campanha' : 'Nova Campanha'}
             </h2>
-            <p className="text-sm text-gray-500">Passo {step} de 6</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Passo {step} de 6</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <X className="h-6 w-6" />
           </button>
         </div>
 
         {/* Progress Steps */}
-        <div className="px-4 py-3 border-b bg-gray-50">
+        <div className="px-4 py-3 border-b border-border bg-gray-50 dark:bg-gray-700/50">
           <div className="flex items-center justify-between">
             {steps.map((s, idx) => {
               const Icon = s.icon
@@ -423,17 +423,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           ? 'bg-green-500 text-white'
                           : isActive
                           ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-500'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400'
                       }`}
                     >
                       {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                     </div>
-                    <span className={`text-xs mt-1 ${isActive ? 'font-medium text-blue-600' : 'text-gray-500'}`}>
+                    <span className={`text-xs mt-1 ${isActive ? 'font-medium text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
                       {s.label}
                     </span>
                   </div>
                   {idx < steps.length - 1 && (
-                    <div className={`flex-1 h-0.5 ${isCompleted ? 'bg-green-500' : 'bg-gray-200'}`} />
+                    <div className={`flex-1 h-0.5 ${isCompleted ? 'bg-green-500' : 'bg-gray-200 dark:bg-gray-600'}`} />
                   )}
                 </div>
               )
@@ -602,7 +602,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       
                       <div className="border rounded-lg max-h-80 overflow-y-auto">
                         <table className="w-full text-sm">
-                          <thead className="bg-gray-50 sticky top-0">
+                          <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                             <tr>
                               <th className="w-12 p-2 text-left">
                                 <input
@@ -628,7 +628,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           </thead>
                           <tbody>
                             {tagContacts.map((contact, idx) => (
-                                <tr key={contact.id} className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+                                <tr key={contact.id} className={`border-t border-border hover:bg-gray-50 dark:hover:bg-gray-700 ${idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-700/50'}`}>
                                   <td className="p-2">
                                     <input
                                       type="checkbox"
@@ -688,7 +688,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       </div>
                     ) : (
                       contacts.map((contact) => (
-                      <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                      <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer">
                         <input
                           type="checkbox"
                           checked={formData.contact_ids.includes(contact.id)}
@@ -909,7 +909,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       </div>
 
                       {/* Input Area (só visual) */}
-                      <div className="bg-white px-3 py-2 flex items-center gap-2 border-t border-gray-200">
+                      <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center gap-2 border-t border-border">
                         <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center gap-2">
                           <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -1120,7 +1120,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 </p>
               </div>
 
-              <Card className="p-4 bg-gray-50">
+              <Card className="p-4 bg-gray-50 dark:bg-gray-700/50">
                 <h4 className="font-medium mb-2">⚙️ Resumo das Configurações</h4>
                 <ul className="text-sm text-gray-700 space-y-1">
                   <li>• Intervalo entre mensagens: {formData.interval_min}-{formData.interval_max} segundos</li>
@@ -1225,7 +1225,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         </div>
 
         {/* Footer - Navigation */}
-        <div className="flex justify-between items-center p-4 border-t bg-gray-50 sticky bottom-0">
+        <div className="flex justify-between items-center p-4 border-t border-border bg-gray-50 dark:bg-gray-700/50 sticky bottom-0">
           <Button
             variant="outline"
             onClick={handleBack}

@@ -112,22 +112,22 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md border border-gray-200">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl w-full max-w-md border border-border">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-brand-100 flex items-center justify-center">
-              <Lock className="h-5 w-5 text-brand-600" />
+            <div className="h-10 w-10 rounded-full bg-brand-100 dark:bg-gray-700 flex items-center justify-center">
+              <Lock className="h-5 w-5 text-brand-600 dark:text-brand-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Alterar Senha</h2>
-              <p className="text-sm text-gray-500">Mantenha sua conta segura</p>
+              <h2 className="text-xl font-bold">Alterar Senha</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Mantenha sua conta segura</p>
             </div>
           </div>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X className="h-6 w-6" />
           </button>
@@ -189,7 +189,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 )}
               </button>
             </div>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               A senha deve ter pelo menos 8 caracteres
             </p>
           </div>

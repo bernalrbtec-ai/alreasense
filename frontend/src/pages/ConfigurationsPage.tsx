@@ -2112,13 +2112,13 @@ export default function ConfigurationsPage() {
       {/* Modal Templates WhatsApp (Meta) - aberto ao clicar no ícone Meta da instância */}
       {showMetaTemplatesListModal && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4"
           onClick={() => { setShowMetaTemplatesListModal(false); setMetaTemplatesModalInstanceId(null) }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="meta-templates-modal-title"
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
               <h3 id="meta-templates-modal-title" className="text-lg font-medium text-gray-900 dark:text-gray-100">Templates WhatsApp (Meta)</h3>
               <button
@@ -2628,13 +2628,13 @@ export default function ConfigurationsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
-                            <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                            <pre className="rounded-lg border border-border bg-background text-foreground p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
                               {item.request_payload_masked ? JSON.stringify(item.request_payload_masked, null, 2) : 'Sem request.'}
                             </pre>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
-                            <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                            <pre className="rounded-lg border border-border bg-background text-foreground p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
                               {item.response_payload_masked ? JSON.stringify(item.response_payload_masked, null, 2) : 'Sem response.'}
                             </pre>
                           </div>
@@ -2966,12 +2966,12 @@ export default function ConfigurationsPage() {
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <div
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity"
               onClick={() => setIsModelsGatewayModalOpen(false)}
             />
 
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
                   Gateways e Webhooks
                 </h3>
@@ -3147,11 +3147,11 @@ export default function ConfigurationsPage() {
       {isInstanceModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseInstanceModal} />
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={handleCloseInstanceModal} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <form onSubmit={(e) => { e.preventDefault(); editingInstance ? handleUpdateInstance() : handleCreateInstance(); }}>
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                   <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
                     {editingInstance ? 'Editar Instância WhatsApp' : 'Nova Instância WhatsApp'}
                   </h3>
@@ -3298,11 +3298,11 @@ export default function ConfigurationsPage() {
       {isSmtpModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500/80 backdrop-blur-sm transition-opacity" onClick={handleCloseSmtpModal} />
-            <div className="relative transform overflow-hidden rounded-xl bg-white text-left shadow-2xl ring-1 ring-black/5 transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 backdrop-blur-sm transition-opacity" onClick={handleCloseSmtpModal} />
+            <div className="relative transform overflow-hidden rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-2xl ring-1 ring-black/5 transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <form onSubmit={(e) => { e.preventDefault(); handleSaveSmtpConfig(); }}>
                 {/* Header */}
-                <div className="border-b border-gray-100 bg-gradient-to-b from-gray-50/80 to-white px-5 pt-5 pb-4 sm:px-6">
+                <div className="border-b border-gray-100 dark:border-gray-700 bg-gradient-to-b from-gray-50/80 to-white dark:from-gray-700/80 dark:to-gray-800 px-5 pt-5 pb-4 sm:px-6">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-600">
                       <Mail className="h-5 w-5" />
@@ -3330,13 +3330,13 @@ export default function ConfigurationsPage() {
                       required
                       value={smtpFormData.name}
                       onChange={(e) => setSmtpFormData({ ...smtpFormData, name: e.target.value })}
-                      className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                      className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                       placeholder="Ex: Gmail SMTP"
                     />
                   </div>
 
                   {/* Servidor */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                  <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Servidor</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4">
                       <div className="sm:col-span-2">
@@ -3347,7 +3347,7 @@ export default function ConfigurationsPage() {
                           required
                           value={smtpFormData.host}
                           onChange={(e) => setSmtpFormData({ ...smtpFormData, host: e.target.value })}
-                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                           placeholder="smtp.gmail.com"
                         />
                       </div>
@@ -3359,7 +3359,7 @@ export default function ConfigurationsPage() {
                           required
                           value={smtpFormData.port}
                           onChange={(e) => setSmtpFormData({ ...smtpFormData, port: parseInt(e.target.value, 10) || 587 })}
-                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                           placeholder="587"
                         />
                       </div>
@@ -3367,7 +3367,7 @@ export default function ConfigurationsPage() {
                   </div>
 
                   {/* Autenticação */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                  <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Autenticação</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -3378,7 +3378,7 @@ export default function ConfigurationsPage() {
                           required
                           value={smtpFormData.username}
                           onChange={(e) => setSmtpFormData({ ...smtpFormData, username: e.target.value })}
-                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                           placeholder="seu@email.com"
                         />
                       </div>
@@ -3387,20 +3387,20 @@ export default function ConfigurationsPage() {
                           Senha {editingSmtp && <span className="font-normal text-gray-500">(em branco = manter)</span>}
                           {!editingSmtp && <span className="text-red-500"> *</span>}
                         </label>
-                        <div className="flex rounded-lg border border-gray-200 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
+                        <div className="flex rounded-lg border border-border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
                           <input
                             type={showSmtpPassword ? 'text' : 'password'}
                             id="smtp_password"
                             required={!editingSmtp}
                             value={smtpFormData.password}
                             onChange={(e) => setSmtpFormData({ ...smtpFormData, password: e.target.value })}
-                            className="flex-1 min-w-0 px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none border-0 bg-transparent"
+                            className="flex-1 min-w-0 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none border-0 bg-transparent"
                             placeholder={editingSmtp ? '••••••••' : 'Senha da conta'}
                           />
                           <button
                             type="button"
                             onClick={() => setShowSmtpPassword(!showSmtpPassword)}
-                            className="px-3 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition"
+                            className="px-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                             title={showSmtpPassword ? 'Ocultar senha' : 'Mostrar senha'}
                           >
                             {showSmtpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -3411,7 +3411,7 @@ export default function ConfigurationsPage() {
                   </div>
 
                   {/* Remetente */}
-                  <div className="rounded-lg border border-gray-100 bg-gray-50/50 p-4 space-y-4">
+                  <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Remetente</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -3422,7 +3422,7 @@ export default function ConfigurationsPage() {
                           required
                           value={smtpFormData.from_email}
                           onChange={(e) => setSmtpFormData({ ...smtpFormData, from_email: e.target.value })}
-                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                           placeholder="noreply@suaempresa.com"
                         />
                       </div>
@@ -3434,7 +3434,7 @@ export default function ConfigurationsPage() {
                           required
                           value={smtpFormData.from_name}
                           onChange={(e) => setSmtpFormData({ ...smtpFormData, from_name: e.target.value })}
-                          className="block w-full rounded-lg border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
+                          className="block w-full rounded-lg border border-border bg-background text-foreground px-3.5 py-2.5 text-sm placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition"
                           placeholder="Sua Empresa"
                         />
                       </div>
@@ -3497,7 +3497,7 @@ export default function ConfigurationsPage() {
                 </div>
 
                 {/* Footer */}
-                <div className="border-t border-gray-100 bg-gray-50/50 px-5 py-4 sm:px-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 px-5 py-4 sm:px-6 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                   <Button type="button" variant="outline" onClick={handleCloseSmtpModal} className="w-full sm:w-auto">
                     Cancelar
                   </Button>
@@ -3516,9 +3516,9 @@ export default function ConfigurationsPage() {
       {smtpTestModalOpen && smtpTestConfig && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseSmtpTestModal} />
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={handleCloseSmtpTestModal} />
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
+              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <div className="flex items-center mb-4">
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <TestTube className="h-6 w-6 text-blue-600" />
@@ -3568,10 +3568,10 @@ export default function ConfigurationsPage() {
       {isAudioTestModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseAudioTestModal} />
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={handleCloseAudioTestModal} />
 
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <div className="flex items-center mb-4">
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <TestTube className="h-6 w-6 text-blue-600" />
@@ -3654,10 +3654,10 @@ export default function ConfigurationsPage() {
       {qrCodeInstance && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setQrCodeInstance(null)} />
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={() => setQrCodeInstance(null)} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
+              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
                   QR Code - {qrCodeInstance.friendly_name}
                 </h3>
@@ -3690,13 +3690,13 @@ export default function ConfigurationsPage() {
       {testInstance && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => {
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={() => {
               setTestInstance(null)
               setTestPhoneNumber('')
             }} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
+              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <div className="flex items-center mb-4">
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <Send className="h-6 w-6 text-blue-600" />
@@ -4387,8 +4387,8 @@ export default function ConfigurationsPage() {
 
       {/* Modal Template META (criar/editar) */}
       {isMetaTemplateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-2">
                 {editingMetaTemplate ? 'Editar Template WhatsApp (Meta)' : 'Novo Template WhatsApp (Meta)'}

@@ -674,7 +674,7 @@ export default function ContactsPage() {
       {availableCustomFields.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Filtrar por Campo Customizado
             </label>
             <select
@@ -696,7 +696,7 @@ export default function ContactsPage() {
           </div>
           {selectedCustomField && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Valor do campo
               </label>
               <input
@@ -911,14 +911,14 @@ export default function ContactsPage() {
 
       {/* Create/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">
                   {editingContact ? 'Editar Contato' : 'Novo Contato'}
                 </h2>
-                <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-700">
+                <button onClick={handleCloseModal} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -926,7 +926,7 @@ export default function ContactsPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Nome *
                     </label>
                     <input
@@ -934,12 +934,12 @@ export default function ContactsPage() {
                       required
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Telefone *
                     </label>
                     <input
@@ -948,48 +948,48 @@ export default function ContactsPage() {
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                       placeholder="+5511999999999"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Email
                     </label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Data de Nascimento
                     </label>
                     <input
                       type="date"
                       value={formData.birth_date}
                       onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Cidade
                     </label>
                     <input
                       type="text"
                       value={formData.city}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Estado
                     </label>
                     <input
@@ -998,12 +998,12 @@ export default function ContactsPage() {
                       value={formData.state}
                       onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                       placeholder="SP"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Quem Indicou
                     </label>
                     <input
@@ -1011,20 +1011,20 @@ export default function ContactsPage() {
                       value={formData.referred_by}
                       onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
                       placeholder="Nome de quem indicou o contato"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Observações
                   </label>
                   <textarea
                     rows={3}
                     value={formData.notes}
                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                   />
                 </div>
 
@@ -1035,7 +1035,7 @@ export default function ContactsPage() {
                   </label>
                   
                   {/* Tags Existentes */}
-                  <div className="flex flex-wrap gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50 min-h-[60px] mb-3">
+                  <div className="flex flex-wrap gap-2 p-3 border border-border rounded-lg bg-gray-50 dark:bg-gray-700/50 min-h-[60px] mb-3">
                     {tags.map((tag) => {
                       const isSelected = formData.tag_ids.includes(tag.id)
                       return (
@@ -1044,9 +1044,9 @@ export default function ContactsPage() {
                           className={`group relative inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                             isSelected
                               ? 'bg-blue-600 text-white border-2 border-blue-600'
-                              : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-blue-400'
+                              : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-2 border-border hover:border-blue-400'
                           }`}
-                          style={{ backgroundColor: isSelected ? tag.color : 'white', borderColor: tag.color }}
+                          style={{ borderColor: tag.color, ...(isSelected ? { backgroundColor: tag.color } : {}) }}
                         >
                           <button
                             type="button"
@@ -1087,21 +1087,21 @@ export default function ContactsPage() {
                   </div>
                   
                   {/* Criar Nova Tag */}
-                  <div className="border border-gray-300 rounded-lg p-3 bg-blue-50">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Criar Nova Tag</h4>
+                  <div className="border border-border rounded-lg p-3 bg-blue-50 dark:bg-blue-900/30">
+                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Criar Nova Tag</h4>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Nome da tag"
                         value={newTagName}
                         onChange={(e) => setNewTagName(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                        className="flex-1 rounded-md border border-border bg-background text-foreground px-3 py-2 text-sm focus:ring-2 focus:ring-ring"
                       />
                       <input
                         type="color"
                         value={newTagColor}
                         onChange={(e) => setNewTagColor(e.target.value)}
-                        className="w-12 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                        className="w-12 h-10 rounded-md border border-border bg-background cursor-pointer"
                         title="Cor da tag"
                       />
                       <Button
@@ -1120,7 +1120,7 @@ export default function ContactsPage() {
                   </p>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4 border-t">
+                <div className="flex justify-end gap-2 pt-4 border-t border-border">
                   <Button type="button" variant="outline" onClick={handleCloseModal}>
                     Cancelar
                   </Button>

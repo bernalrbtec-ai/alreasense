@@ -219,14 +219,14 @@ export default function ContactModal({
   if (!isOpen) return null
 
   return (
-    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 ${overlayClassName ?? ''}`.trim()}>
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className={`fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4 ${overlayClassName ?? ''}`.trim()}>
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold">
               {contact?.id ? 'Editar Contato' : 'Novo Contato'}
             </h2>
-            <button onClick={handleClose} className="text-gray-500 hover:text-gray-700">
+            <button onClick={handleClose} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -235,7 +235,7 @@ export default function ContactModal({
             {/* ✅ NOVO: Foto de perfil (apenas ao editar) */}
             {contact?.id && contact?.profile_pic_url && (
               <div className="flex items-center gap-4 pb-4 border-b">
-                <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gray-200 overflow-hidden">
+                <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
                   <img
                     src={getMediaProxyUrl(contact.profile_pic_url) || ''}
                     alt={contact.name}
@@ -256,15 +256,15 @@ export default function ContactModal({
                   />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-600">Foto de perfil do WhatsApp</p>
-                  <p className="text-xs text-gray-500">Atualizada automaticamente quando há mudança no WhatsApp</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Foto de perfil do WhatsApp</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">Atualizada automaticamente quando há mudança no WhatsApp</p>
                 </div>
               </div>
             )}
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nome *
                 </label>
                 <input
@@ -272,12 +272,12 @@ export default function ContactModal({
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Telefone *
                 </label>
                 <input
@@ -286,48 +286,48 @@ export default function ContactModal({
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   placeholder="+5511999999999"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Data de Nascimento
                 </label>
                 <input
                   type="date"
                   value={formData.birth_date}
                   onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Cidade
                 </label>
                 <input
                   type="text"
                   value={formData.city}
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Estado
                 </label>
                 <input
@@ -336,12 +336,12 @@ export default function ContactModal({
                   value={formData.state}
                   onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                   placeholder="SP"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Quem Indicou
                 </label>
                 <input
@@ -349,31 +349,31 @@ export default function ContactModal({
                   value={formData.referred_by}
                   onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
                   placeholder="Nome de quem indicou o contato"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Observações
               </label>
               <textarea
                 rows={3}
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
               />
             </div>
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Tags
               </label>
               
               {/* Tags Existentes */}
-              <div className="flex flex-wrap gap-2 p-3 border border-gray-300 rounded-lg bg-gray-50 min-h-[60px] mb-3">
+              <div className="flex flex-wrap gap-2 p-3 border border-border rounded-lg bg-gray-50 dark:bg-gray-700/50 min-h-[60px] mb-3">
                 {tags.map((tag) => {
                   const isSelected = formData.tag_ids.includes(tag.id)
                   return (
@@ -382,9 +382,9 @@ export default function ContactModal({
                       className={`group relative inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
                         isSelected
                           ? 'bg-blue-600 text-white border-2 border-blue-600'
-                          : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-blue-400'
+                          : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-2 border-border hover:border-blue-400'
                       }`}
-                      style={{ backgroundColor: isSelected ? tag.color : 'white', borderColor: tag.color }}
+                      style={{ borderColor: tag.color, ...(isSelected ? { backgroundColor: tag.color } : {}) }}
                       onClick={() => {
                         if (isSelected) {
                           setFormData({
@@ -404,26 +404,26 @@ export default function ContactModal({
                   )
                 })}
                 {tags.length === 0 && (
-                  <p className="text-sm text-gray-500">Nenhuma tag cadastrada</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma tag cadastrada</p>
                 )}
               </div>
               
               {/* Criar Nova Tag */}
-              <div className="border border-gray-300 rounded-lg p-3 bg-blue-50">
-                <h4 className="text-sm font-medium text-gray-700 mb-2">Criar Nova Tag</h4>
+              <div className="border border-border rounded-lg p-3 bg-blue-50 dark:bg-blue-900/30">
+                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Criar Nova Tag</h4>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     placeholder="Nome da tag"
                     value={newTagName}
                     onChange={(e) => setNewTagName(e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    className="flex-1 rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                   />
                   <input
                     type="color"
                     value={newTagColor}
                     onChange={(e) => setNewTagColor(e.target.value)}
-                    className="w-12 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                    className="w-12 h-10 rounded-md border border-border bg-background cursor-pointer"
                     title="Cor da tag"
                   />
                   <Button
@@ -437,12 +437,12 @@ export default function ContactModal({
                 </div>
               </div>
               
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Clique nas tags para selecionar/remover • Crie novas tags conforme necessário
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            <div className="flex justify-end gap-2 pt-4 border-t border-border">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
                 Cancelar
               </Button>
