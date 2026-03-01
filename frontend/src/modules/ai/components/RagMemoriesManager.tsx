@@ -78,14 +78,14 @@ function SatisfactionStars({ value }: { value: unknown }) {
 }
 
 /** Agrupa resumos por contato; cada grupo ordenado por conversa mais recente primeiro. */
-function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey: string; contactLabel: string; contactPhone: string; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] {
+function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey: string; contactLabel: string; contactPhone: string; contactTags: string[]; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] {
   const byContact = new Map<string, ConversationSummaryItem[]>()
   for (const item of items) {
     const key = (item.contact_phone || '').trim() || `no-phone-${item.id}`
     if (!byContact.has(key)) byContact.set(key, [])
     byContact.get(key)!.push(item)
   }
-  const groups: { contactKey: string; contactLabel: string; contactPhone: string; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] = []
+  const groups: { contactKey: string; contactLabel: string; contactPhone: string; contactTags: string[]; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] = []
   for (const [contactKey, summaries] of byContact) {
     const sorted = [...summaries].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     const mostRecent = sorted[0]
@@ -93,8 +93,9 @@ function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey
     const d = dateStr ? new Date(dateStr) : null
     const mostRecentAt = d ? d.toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
     const contactLabel = mostRecent.contact_name || mostRecent.contact_phone || 'Sem nome'
+    const contactTags = Array.isArray(mostRecent.contact_tags) ? mostRecent.contact_tags : []
     const hasConsolidation = summaries.some((s) => s.is_consolidated)
-    groups.push({ contactKey, contactLabel, contactPhone: mostRecent.contact_phone || '', hasConsolidation, mostRecentAt, summaries: sorted })
+    groups.push({ contactKey, contactLabel, contactPhone: mostRecent.contact_phone || '', contactTags, hasConsolidation, mostRecentAt, summaries: sorted })
   }
   groups.sort((a, b) => {
     const tA = new Date(a.summaries[0]?.created_at ?? 0).getTime()
@@ -320,6 +321,12 @@ export function RagMemoriesManager() {
   useEffect(() => {
     fetchList(offset)
   }, [fetchList, offset])
+
+  // Iniciar todos os contatos retraídos; expandir só ao clicar
+  useEffect(() => {
+    const groups = groupSummariesByContact(items)
+    setCollapsedContactKeys(new Set(groups.map((g) => g.contactKey)))
+  }, [items])
 
   const handleSearch = () => {
     setOffset(0)
@@ -792,6 +799,15 @@ export function RagMemoriesManager() {
                                     <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800 truncate max-w-[200px]" title={group.contactLabel}>
                                       {group.contactLabel}
                                     </span>
+                                    {group.contactTags.length > 0 && (
+                                      <span className="flex flex-wrap gap-1">
+                                        {group.contactTags.map((tag) => (
+                                          <span key={tag} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                            {tag}
+                                          </span>
+                                        ))}
+                                      </span>
+                                    )}
                                     <span className="text-gray-600 font-normal">Último resumo {group.mostRecentAt}</span>
                                     <SatisfactionStars value={averageSatisfactionValue(group.summaries)} />
                                   </div>
