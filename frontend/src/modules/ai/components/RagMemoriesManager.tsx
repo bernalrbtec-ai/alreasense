@@ -759,22 +759,8 @@ export function RagMemoriesManager() {
               <table className="min-w-full divide-y divide-gray-200">
                 {(() => {
                   const groups = groupSummariesByContact(items)
-                  const anyExpanded = groups.some((g) => !collapsedContactKeys.has(g.contactKey))
                   return (
                     <>
-                      {anyExpanded && (
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
-                            <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
-                            <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                          </tr>
-                        </thead>
-                      )}
                       <tbody className="bg-white divide-y divide-gray-200">
                         {groups.map((group) => {
                           const isCollapsed = collapsedContactKeys.has(group.contactKey)
@@ -865,6 +851,15 @@ export function RagMemoriesManager() {
                       })()}
                       {!isCollapsed && (
                         <>
+                      <tr key={`h-${group.contactKey}`} className="bg-gray-50">
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</td>
+                        <td className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</td>
+                      </tr>
                       <tr key={`s-${group.contactKey}`} className="bg-gray-100/50">
                         <td colSpan={7} className="px-3 py-1 text-xs font-medium text-gray-500">
                           Todas as conversas desse contato
@@ -884,30 +879,16 @@ export function RagMemoriesManager() {
                               <span className="text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-sm">
+                          <td className="px-3 py-2 text-sm text-gray-600">
                             <div className="flex items-center gap-1.5">
                               {item.is_consolidated && (
                                 <span className="inline-flex shrink-0 text-blue-600" title="Incluído na memória consolidada do contato">
                                   <Layers className="h-4 w-4" />
                                 </span>
                               )}
-                              <div>
-                                <div className="text-gray-500">{item.contact_phone || '—'}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">
-                                  {(item.metadata?.closed_at as string) || item.created_at
-                                    ? new Date((item.metadata?.closed_at as string) || item.created_at).toLocaleString('pt-BR')
-                                    : '—'}
-                                </div>
-                                {item.contact_tags && item.contact_tags.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {item.contact_tags.map((tag) => (
-                                      <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                                        {tag}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
+                              {(item.metadata?.closed_at as string) || item.created_at
+                                ? new Date((item.metadata?.closed_at as string) || item.created_at).toLocaleString('pt-BR')
+                                : '—'}
                             </div>
                           </td>
                           <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate" title={item.content}>
