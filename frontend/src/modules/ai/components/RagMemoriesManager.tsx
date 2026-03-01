@@ -938,8 +938,7 @@ export function RagMemoriesManager() {
                         </tbody>
                     </>
                   )
-                }
-              })()}
+                })()}
               </table>
             </div>
             <div className="flex items-center justify-between mt-3">
