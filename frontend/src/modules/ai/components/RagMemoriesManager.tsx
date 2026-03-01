@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers, Expand } from 'lucide-react'
+import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers, Expand, Star } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
@@ -44,18 +44,37 @@ const STATUS_OPTIONS: { value: '' | 'pending' | 'approved' | 'rejected'; label: 
   { value: 'rejected', label: 'Reprovado' },
 ]
 
-function formatSatisfaction(value: unknown): string {
-  if (value == null || value === '') return '—'
+/** Valor 1-5 válido para satisfação (para média e estrelas). */
+function parseSatisfactionValue(value: unknown): number | null {
+  if (value == null || value === '') return null
   const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isNaN(n) && n >= 1 && n <= 5) return String(Math.round(n))
-  return String(value)
+  if (Number.isNaN(n) || n < 1 || n > 5) return null
+  return Math.round(n)
 }
 
-function formatConfidence(value: unknown): string {
-  if (value == null || value === '') return '—'
-  const n = typeof value === 'number' ? value : Number(value)
-  if (!Number.isNaN(n) && n >= 0 && n <= 1) return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return String(value)
+/** Média da satisfação (1-5) de uma lista de itens; null se nenhum válido. Formato pt-BR 1 decimal. */
+function averageSatisfactionDisplay(summaries: ConversationSummaryItem[]): string {
+  const values = summaries.map((s) => parseSatisfactionValue(s.metadata?.satisfaction)).filter((n): n is number => n !== null)
+  if (values.length === 0) return '—'
+  const avg = values.reduce((a, b) => a + b, 0) / values.length
+  return avg.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
+/** Renderiza 5 estrelas para satisfação 1-5; "—" se inválido. */
+function SatisfactionStars({ value }: { value: unknown }) {
+  const n = parseSatisfactionValue(value)
+  if (n === null) return <span className="text-gray-400">—</span>
+  return (
+    <span className="inline-flex items-center gap-0.5" title={`Satisfação: ${n}`} aria-label={`Satisfação: ${n} de 5`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          className={`h-4 w-4 shrink-0 ${i <= n ? 'fill-amber-400 text-amber-500' : 'text-gray-300'}`}
+          strokeWidth={i <= n ? 0 : 1.5}
+        />
+      ))}
+    </span>
+  )
 }
 
 /** Agrupa resumos por contato; cada grupo ordenado por conversa mais recente primeiro. */
@@ -136,6 +155,16 @@ export function RagMemoriesManager() {
   const [consolidateAllModalOpen, setConsolidateAllModalOpen] = useState(false)
   const [consolidateAllSubmitting, setConsolidateAllSubmitting] = useState(false)
   const [consolidatedFullModalContent, setConsolidatedFullModalContent] = useState<string | null>(null)
+  const [collapsedContactKeys, setCollapsedContactKeys] = useState<Set<string>>(new Set())
+
+  const toggleContactCollapsed = useCallback((contactKey: string) => {
+    setCollapsedContactKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(contactKey)) next.delete(contactKey)
+      else next.add(contactKey)
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     if (consolidatedFullModalContent === null) return
@@ -616,7 +645,7 @@ export function RagMemoriesManager() {
       <Card className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-medium text-gray-900">RAG e Lembranças</h3>
+            <h3 className="text-lg font-medium text-gray-900">Contexto</h3>
             <p className="text-sm text-gray-600 mt-1">
               Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
             </p>
@@ -729,19 +758,39 @@ export function RagMemoriesManager() {
                     <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
                     <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
-                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Confiança</th>
                     <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {groupSummariesByContact(items).map((group) => (
+                  {groupSummariesByContact(items).map((group) => {
+                    const isCollapsed = collapsedContactKeys.has(group.contactKey)
+                    const mediaSatisfacao = averageSatisfactionDisplay(group.summaries)
+                    return (
                     <Fragment key={group.contactKey}>
                       <tr className="bg-gray-50 border-t border-gray-200 first:border-t-0">
-                        <td colSpan={8} className="px-3 py-2 text-sm font-medium text-gray-700">
-                          Contato {group.contactLabel} às {group.mostRecentAt}
+                        <td className="px-3 py-2 w-10 align-middle">
+                          <button
+                            type="button"
+                            tabIndex={0}
+                            onClick={() => toggleContactCollapsed(group.contactKey)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleContactCollapsed(group.contactKey) } }}
+                            className="inline-flex p-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                            aria-expanded={!isCollapsed}
+                            aria-label={isCollapsed ? 'Expandir detalhes do contato' : 'Retrair detalhes do contato'}
+                          >
+                            {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600" /> : <ChevronDown className="h-4 w-4 text-gray-600" />}
+                          </button>
+                        </td>
+                        <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-700">
+                          <div className="flex items-center justify-between gap-4 min-w-0">
+                            <span className="truncate" title={`Contato ${group.contactLabel} às ${group.mostRecentAt}`}>
+                              Contato {group.contactLabel} às {group.mostRecentAt}
+                            </span>
+                            <span className="text-gray-600 font-normal shrink-0">Média da Satisfação: {mediaSatisfacao}</span>
+                          </div>
                         </td>
                       </tr>
-                      {group.hasConsolidation && (() => {
+                      {!isCollapsed && group.hasConsolidation && (() => {
                         const consolidatedText = consolidatedContentByContact[group.contactPhone] ?? consolidatedContentByContact[group.contactKey] ?? ''
                         return (
                           <tr
@@ -787,13 +836,14 @@ export function RagMemoriesManager() {
                             </td>
                             <td className="px-3 py-2 text-xs text-gray-500 align-top" role="gridcell">—</td>
                             <td className="px-3 py-2 text-xs align-top" role="gridcell">—</td>
-                            <td className="px-3 py-2 text-xs align-top" role="gridcell">—</td>
                             <td className="px-3 py-2 align-top" role="gridcell" />
                           </tr>
                         )
                       })()}
+                      {!isCollapsed && (
+                        <>
                       <tr key={`s-${group.contactKey}`} className="bg-gray-100/50">
-                        <td colSpan={8} className="px-3 py-1 text-xs font-medium text-gray-500">
+                        <td colSpan={7} className="px-3 py-1 text-xs font-medium text-gray-500">
                           Todas as conversas desse contato
                         </td>
                       </tr>
@@ -852,10 +902,7 @@ export function RagMemoriesManager() {
                             {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString('pt-BR') : '—'}
                           </td>
                           <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
-                            {formatSatisfaction(item.metadata?.satisfaction)}
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
-                            {formatConfidence(item.metadata?.confidence)}
+                            <SatisfactionStars value={item.metadata?.satisfaction} />
                           </td>
                           <td className="px-3 py-2 text-right">
                             <div className="flex justify-end gap-1">
@@ -876,8 +923,11 @@ export function RagMemoriesManager() {
                           </td>
                         </tr>
                       ))}
+                        </>
+                      )}
                     </Fragment>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

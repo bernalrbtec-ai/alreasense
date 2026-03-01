@@ -2429,7 +2429,7 @@ export default function ConfigurationsPage() {
               className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
             >
               <FileText className="h-4 w-4" />
-              RAG e Lembranças
+              Contexto
             </button>
             <button
               type="button"
