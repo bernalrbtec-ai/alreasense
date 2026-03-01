@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers } from 'lucide-react'
+import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers, Expand } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
@@ -34,6 +34,7 @@ interface PaginatedResponse {
   next: string | null
   previous: string | null
   results: ConversationSummaryItem[]
+  consolidated_content_by_contact?: Record<string, string>
 }
 
 const STATUS_OPTIONS: { value: '' | 'pending' | 'approved' | 'rejected'; label: string }[] = [
@@ -86,6 +87,7 @@ function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey
 
 export function RagMemoriesManager() {
   const [items, setItems] = useState<ConversationSummaryItem[]>([])
+  const [consolidatedContentByContact, setConsolidatedContentByContact] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [count, setCount] = useState(0)
   const [nextUrl, setNextUrl] = useState<string | null>(null)
@@ -133,6 +135,16 @@ export function RagMemoriesManager() {
   const [consolidateByContactSubmitting, setConsolidateByContactSubmitting] = useState(false)
   const [consolidateAllModalOpen, setConsolidateAllModalOpen] = useState(false)
   const [consolidateAllSubmitting, setConsolidateAllSubmitting] = useState(false)
+  const [consolidatedFullModalContent, setConsolidatedFullModalContent] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (consolidatedFullModalContent === null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setConsolidatedFullModalContent(null)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [consolidatedFullModalContent])
 
   const [autoApproveOpen, setAutoApproveOpen] = useState(false)
   const [autoApproveConfig, setAutoApproveConfig] = useState<{
@@ -250,7 +262,8 @@ export function RagMemoriesManager() {
       if (fromDate) params.from_date = fromDate
       if (toDate) params.to_date = toDate
       const { data } = await api.get<PaginatedResponse>('ai/summaries/', { params })
-      setItems(data.results)
+      setItems(data.results ?? [])
+      setConsolidatedContentByContact(data.consolidated_content_by_contact ?? {})
       setCount(data.count)
       setNextUrl(data.next)
       setPrevUrl(data.previous)
@@ -258,7 +271,10 @@ export function RagMemoriesManager() {
       showErrorToast('carregar', 'Resumos', e)
       if (clearOnError) {
         setItems([])
+        setConsolidatedContentByContact({})
         setCount(0)
+        setNextUrl(null)
+        setPrevUrl(null)
       }
     } finally {
       setLoading(false)
@@ -707,14 +723,14 @@ export function RagMemoriesManager() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Confiança</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</th>
+                    <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Confiança</th>
+                    <th scope="col" className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -725,17 +741,57 @@ export function RagMemoriesManager() {
                           Contato {group.contactLabel} às {group.mostRecentAt}
                         </td>
                       </tr>
-                      {group.hasConsolidation && (
-                        <tr key={`c-${group.contactKey}`} className="bg-blue-50/50">
-                          <td className="px-3 py-1.5" />
-                          <td colSpan={7} className="px-3 py-1.5 text-sm text-blue-700">
-                            <div className="flex items-center gap-1.5">
-                              <Layers className="h-4 w-4 shrink-0" />
-                              Conversa consolidada
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                      {group.hasConsolidation && (() => {
+                        const consolidatedText = consolidatedContentByContact[group.contactPhone] ?? consolidatedContentByContact[group.contactKey] ?? ''
+                        return (
+                          <tr
+                            key={`c-${group.contactKey}`}
+                            className="bg-blue-50/50"
+                            role="row"
+                            aria-label={`Conversa consolidada do contato ${group.contactLabel}, somente leitura`}
+                          >
+                            <td className="px-3 py-2 align-top" role="gridcell">
+                              <span className="inline-flex text-blue-600" title="Memória consolidada (somente leitura)">
+                                <Layers className="h-4 w-4" />
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-blue-700 align-top" role="gridcell">
+                              <div className="flex items-center gap-1.5">
+                                <Layers className="h-4 w-4 shrink-0" />
+                                Conversa consolidada
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-700 align-top max-w-md whitespace-pre-wrap" role="gridcell" title={consolidatedText ? (consolidatedText.length > 2000 ? `${consolidatedText.slice(0, 2000)}…` : consolidatedText) : undefined}>
+                              {consolidatedText ? (
+                                <>
+                                  {consolidatedText.length > 400
+                                    ? `${consolidatedText.slice(0, 400)}…`
+                                    : consolidatedText}
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-1.5 h-7 text-blue-600 hover:text-blue-800"
+                                    onClick={() => setConsolidatedFullModalContent(consolidatedText)}
+                                    aria-label="Ver texto completo da conversa consolidada"
+                                  >
+                                    <Expand className="h-3.5 w-3.5 mr-1 inline" />
+                                    Ver completo
+                                  </Button>
+                                </>
+                              ) : '—'}
+                            </td>
+                            <td className="px-3 py-2 align-top" role="gridcell">
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                Consolidado
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-500 align-top" role="gridcell">—</td>
+                            <td className="px-3 py-2 text-xs align-top" role="gridcell">—</td>
+                            <td className="px-3 py-2 text-xs align-top" role="gridcell">—</td>
+                            <td className="px-3 py-2 align-top" role="gridcell" />
+                          </tr>
+                        )
+                      })()}
                       <tr key={`s-${group.contactKey}`} className="bg-gray-100/50">
                         <td colSpan={8} className="px-3 py-1 text-xs font-medium text-gray-500">
                           Todas as conversas desse contato
@@ -1035,6 +1091,30 @@ export function RagMemoriesManager() {
                 </Button>
                 <Button onClick={handleConsolidateAllConfirm} disabled={consolidateAllSubmitting}>
                   {consolidateAllSubmitting ? 'Consolidando…' : 'Consolidar todos'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ver completo (conversa consolidada) */}
+      {consolidatedFullModalContent !== null && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="consolidated-full-modal-title">
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/50" onClick={() => setConsolidatedFullModalContent(null)} aria-hidden />
+            <div className="relative bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col p-6">
+              <h2 id="consolidated-full-modal-title" className="text-lg font-medium text-gray-900 mb-3">
+                Conversa consolidada (completo)
+              </h2>
+              <div className="flex-1 min-h-0 overflow-y-auto rounded border border-gray-200 bg-gray-50/50 p-4">
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
+                  {consolidatedFullModalContent}
+                </pre>
+              </div>
+              <div className="flex justify-end mt-4 pt-3 border-t border-gray-200">
+                <Button variant="outline" onClick={() => setConsolidatedFullModalContent(null)}>
+                  Fechar
                 </Button>
               </div>
             </div>

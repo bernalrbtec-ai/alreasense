@@ -128,6 +128,7 @@ def consolidate_approved_summaries_for_contact(tenant_id, contact_phone_normaliz
 
     if record:
         record.summary_ids = ids_list
+        record.content = content
         record.save()
     else:
         try:
@@ -136,6 +137,7 @@ def consolidate_approved_summaries_for_contact(tenant_id, contact_phone_normaliz
                 contact_phone=contact_phone_normalized,
                 consolidated_id=consolidated_id,
                 summary_ids=ids_list,
+                content=content,
             )
         except IntegrityError:
             existing = ConsolidationRecord.objects.filter(
@@ -148,6 +150,7 @@ def consolidate_approved_summaries_for_contact(tenant_id, contact_phone_normaliz
                 except Exception as e:
                     logger.warning("Consolidação: falha ao remover consolidado duplicado %s: %s", consolidated_id, e)
                 existing.summary_ids = ids_list
+                existing.content = content
                 existing.save()
             else:
                 raise
@@ -208,6 +211,7 @@ def refresh_consolidation_for_contact(tenant_id, contact_phone):
             metadata={},
         )
         record.summary_ids = ids_list
+        record.content = content
         record.save()
     except Exception as e:
         logger.exception("Refresh consolidação: falha ao re-upsert consolidado contact_phone=%s: %s", normalized, e)

@@ -1945,7 +1945,12 @@ def rebuild_transcription_metrics_endpoint(request):
 # ----- Conversation summaries (Gestão RAG) -----
 
 from apps.ai.summary_rag import rag_upsert_for_summary, rag_remove_for_summary
-from apps.ai.consolidation import consolidate_approved_summaries_for_contact, refresh_consolidation_for_contact
+from apps.ai.consolidation import (
+    build_consolidated_content,
+    consolidate_approved_summaries_for_contact,
+    refresh_consolidation_for_contact,
+)
+from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 
 
 def _serialize_conversation_summary(item, contact_tags=None, is_consolidated=False):
@@ -2049,7 +2054,68 @@ def conversation_summary_list(request):
             key = normalize_phone_for_search(item.contact_phone)
             tags = contact_tags_by_phone.get(key) or contact_tags_by_phone.get(item.contact_phone) or []
         data.append(_serialize_conversation_summary(item, contact_tags=tags, is_consolidated=(item.id in consolidated_summary_ids)))
-    return pagination.get_paginated_response(data)
+
+    # Texto consolidado por contato (para exibir na mesma tela, só leitura)
+    consolidated_content_by_contact = {}
+    if results:
+        contact_phones_in_page = {item.contact_phone for item in results if item.contact_phone}
+        try:
+            normalized_in_page = {normalize_contact_phone_for_rag(p) for p in contact_phones_in_page}
+        except Exception as e:
+            logger.warning(
+                "Erro ao normalizar contact_phone para consolidação: %s", e
+            )
+            normalized_in_page = set()
+        for rec in ConsolidationRecord.objects.filter(tenant=tenant).filter(
+            contact_phone__in=normalized_in_page
+        ):
+            content = (getattr(rec, "content", None) or "").strip()
+            summaries = []
+            if not content:
+                summary_ids_raw = rec.summary_ids
+                summary_ids = summary_ids_raw if isinstance(summary_ids_raw, list) else []
+                if not summary_ids:
+                    continue
+                ids_ints = []
+                for sid in summary_ids:
+                    try:
+                        ids_ints.append(int(sid))
+                    except (TypeError, ValueError):
+                        continue
+                if not ids_ints:
+                    continue
+                summaries = list(
+                    ConversationSummary.objects.filter(
+                        tenant=tenant,
+                        id__in=ids_ints,
+                        status=ConversationSummary.STATUS_APPROVED,
+                    ).order_by("-created_at")
+                )
+                if not summaries:
+                    continue
+                content = build_consolidated_content(summaries)
+            if not content:
+                continue
+            if summaries:
+                for s in summaries:
+                    key_phone = (s.contact_phone or rec.contact_phone or "").strip()
+                    if key_phone:
+                        consolidated_content_by_contact[key_phone] = content
+            else:
+                for p in contact_phones_in_page:
+                    try:
+                        if normalize_contact_phone_for_rag(p) == rec.contact_phone:
+                            consolidated_content_by_contact[p] = content
+                    except Exception as e:
+                        logger.debug(
+                            "Normalização ao preencher consolidated_content para %s: %s", p, e
+                        )
+            if rec.contact_phone and rec.contact_phone not in consolidated_content_by_contact:
+                consolidated_content_by_contact[rec.contact_phone] = content
+
+    response = pagination.get_paginated_response(data)
+    response.data["consolidated_content_by_contact"] = consolidated_content_by_contact
+    return response
 
 
 @api_view(["POST"])

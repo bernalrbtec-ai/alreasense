@@ -124,6 +124,7 @@ class ConsolidationRecord(models.Model):
     contact_phone = models.CharField(max_length=64, default="")
     consolidated_id = models.UUIDField(unique=False)  # unique per (tenant, contact_phone) via constraint
     summary_ids = models.JSONField(default=list, blank=True)  # list of ConversationSummary.id
+    content = models.TextField(blank=True, default="")  # cache do texto consolidado para exibição na UI
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
