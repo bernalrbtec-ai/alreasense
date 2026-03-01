@@ -781,21 +781,25 @@ export function RagMemoriesManager() {
                                   </button>
                                 </td>
                                 <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-700">
-                                  <div className="flex items-center gap-3 flex-wrap min-w-0">
-                                    <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800 truncate max-w-[200px]" title={group.contactLabel}>
-                                      {group.contactLabel}
-                                    </span>
-                                    {group.contactTags.length > 0 && (
-                                      <span className="flex flex-wrap gap-1">
-                                        {group.contactTags.map((tag) => (
-                                          <span key={tag} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
-                                            {tag}
-                                          </span>
-                                        ))}
+                                  <div className="flex items-center justify-between gap-3 flex-wrap min-w-0">
+                                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800 truncate max-w-[200px]" title={group.contactLabel}>
+                                        {group.contactLabel}
                                       </span>
-                                    )}
-                                    <span className="text-gray-600 font-normal">Último resumo {group.mostRecentAt}</span>
-                                    <SatisfactionStars value={averageSatisfactionValue(group.summaries)} />
+                                      {group.contactTags.length > 0 && (
+                                        <span className="flex flex-wrap gap-1">
+                                          {group.contactTags.map((tag) => (
+                                            <span key={tag} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                              {tag}
+                                            </span>
+                                          ))}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="text-gray-600 font-normal">Último resumo {group.mostRecentAt}</span>
+                                      <SatisfactionStars value={averageSatisfactionValue(group.summaries)} />
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
