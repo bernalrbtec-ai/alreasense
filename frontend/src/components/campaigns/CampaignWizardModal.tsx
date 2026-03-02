@@ -485,7 +485,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Deixe vazio para criar como rascunho
                 </p>
               </div>
@@ -499,7 +499,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
               
               <div className="grid grid-cols-2 gap-4">
                 <label className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                  formData.audience_type === 'tag' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  formData.audience_type === 'tag' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                 }`}>
                   <input
                     type="radio"
@@ -508,11 +508,11 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     className="mr-2"
                   />
                   <span className="font-medium">Filtrar por Tag 🏷️</span>
-                  <p className="text-xs text-gray-500 mt-1">Enviar para todos os contatos com uma tag específica</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Enviar para todos os contatos com uma tag específica</p>
                 </label>
 
                 <label className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                  formData.audience_type === 'contacts' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+                  formData.audience_type === 'contacts' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                 }`}>
                   <input
                     type="radio"
@@ -535,7 +535,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     className="mr-2"
                   />
                   <span className="font-medium">Selecionar Avulsos</span>
-                  <p className="text-xs text-gray-500 mt-1">Escolher contatos manualmente</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Escolher contatos manualmente</p>
                 </label>
               </div>
 
@@ -576,7 +576,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   {formData.tag_id && (
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
-                        <p className="text-sm font-medium text-gray-700">
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
                           Contatos com esta tag ({formData.contact_ids.length}/{tags.find(t => t.id === formData.tag_id)?.contact_count || 0} selecionados)
                         </p>
                         <div className="flex gap-2">
@@ -593,7 +593,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <button
                             type="button"
                             onClick={() => setFormData({ ...formData, contact_ids: [] })}
-                            className="text-xs text-gray-600 hover:text-gray-800"
+                            className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                           >
                             Desmarcar Todos
                           </button>
@@ -622,8 +622,8 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                                   className="rounded"
                                 />
                               </th>
-                              <th className="p-2 text-left font-medium text-gray-700">Nome</th>
-                              <th className="p-2 text-left font-medium text-gray-700">Telefone</th>
+                              <th className="p-2 text-left font-medium text-gray-700 dark:text-gray-300">Nome</th>
+                              <th className="p-2 text-left font-medium text-gray-700 dark:text-gray-300">Telefone</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -648,13 +648,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                                     />
                                   </td>
                                   <td className="p-2">{contact.name}</td>
-                                  <td className="p-2 text-gray-600">{contact.phone}</td>
+                                  <td className="p-2 text-gray-600 dark:text-gray-400">{contact.phone}</td>
                                 </tr>
                               ))}
                           </tbody>
                         </table>
                         {tagContacts.length === 0 && (
-                          <div className="p-8 text-center text-gray-500">
+                          <div className="p-8 text-center text-gray-500 dark:text-gray-400">
                             Nenhum contato encontrado com esta tag
                           </div>
                         )}
@@ -710,7 +710,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     )}
                   </div>
                   {contacts.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       Mostrando {contacts.length} contatos
                   </p>
                   )}
@@ -804,7 +804,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                             className="w-full px-2 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 transition-colors"
                             rows={4}
                           />
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             {message.content.length} caracteres • Arraste variáveis aqui
                           </p>
                         </div>
@@ -884,12 +884,12 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                             <div key={idx} className="mb-3 flex justify-end">
                               <div className="max-w-[85%]">
                                 <div className="bg-[#dcf8c6] rounded-lg rounded-tr-none px-3 py-2 shadow-sm relative">
-                                  <p className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+                                  <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
                                     {previewText}
                                   </p>
                                   <div className="flex items-center justify-end mt-1 gap-1">
-                                    <span className="text-xs text-gray-500">
-                                      {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+<span className="text-xs text-gray-500 dark:text-gray-400">
+                                    {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                                     </span>
                                     <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
                                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -902,7 +902,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                         })}
                         
                         {formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).length === 0 && (
-                          <div className="text-center text-gray-500 text-sm mt-20">
+                          <div className="text-center text-gray-500 dark:text-gray-400 text-sm mt-20">
                             Digite uma mensagem para ver o preview
                           </div>
                         )}
@@ -910,11 +910,11 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
                       {/* Input Area (só visual) */}
                       <div className="bg-white dark:bg-gray-800 px-3 py-2 flex items-center gap-2 border-t border-border">
-                        <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center gap-2">
-                          <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                        <div className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full px-4 py-2 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-gray-500 dark:text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                           </svg>
-                          <span className="text-sm text-gray-500">Digite uma mensagem</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Digite uma mensagem</span>
                         </div>
                         <div className="w-8 h-8 bg-teal-600 rounded-full flex items-center justify-center">
                           <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
@@ -926,7 +926,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   </div>
                   
                   {/* Legenda */}
-                  <p className="text-xs text-gray-500 text-center mt-3">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 text-center mt-3">
                     Preview atualiza em tempo real
                   </p>
                 </div>
@@ -956,7 +956,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-colors ${
                         formData.instance_ids.includes(instance.id)
                           ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
                       }`}
                     >
                       <input
@@ -972,18 +972,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       />
                       <div className="flex-1">
                         <p className="font-medium">{instance.friendly_name}</p>
-                        <p className="text-xs text-gray-500">{instance.phone_number}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">{instance.phone_number}</p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
                         <div className={`px-2 py-1 rounded text-xs font-medium ${
                           instance.connection_state === 'connected'
                             ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
+                            : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
                         }`}>
                           {instance.connection_state}
                         </div>
                         <div className="text-right">
-                          <p className="text-xs text-gray-500">Health Score</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">Health Score</p>
                           <p className={`font-bold ${
                             instance.health_score >= 80 ? 'text-green-600' :
                             instance.health_score >= 50 ? 'text-yellow-600' :
@@ -1004,7 +1004,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 </label>
                 <div className="grid grid-cols-1 gap-3">
                   <label className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
-                    formData.rotation_mode === 'round_robin' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    formData.rotation_mode === 'round_robin' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-600'
                   }`}>
                     <input
                       type="radio"
@@ -1013,13 +1013,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       className="mr-2"
                     />
                     <span className="font-medium">Round Robin (Rodízio Simples)</span>
-                    <p className="text-xs text-gray-600 mt-1 ml-6">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6">
                       Alterna entre instâncias de forma sequencial e igualitária
                     </p>
                   </label>
 
                   <label className={`p-4 border-2 rounded-lg cursor-not-allowed transition-colors opacity-50 ${
-                    formData.rotation_mode === 'balanced' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    formData.rotation_mode === 'balanced' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-600'
                   }`}>
                     <input
                       type="radio"
@@ -1029,13 +1029,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       disabled
                     />
                     <span className="font-medium">Balanceado <span className="text-xs text-orange-600">(Em breve)</span></span>
-                    <p className="text-xs text-gray-600 mt-1 ml-6">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6">
                       Distribui com base na quantidade de mensagens enviadas por cada instância
                     </p>
                   </label>
 
                   <label className={`p-4 border-2 rounded-lg cursor-not-allowed transition-colors opacity-50 ${
-                    formData.rotation_mode === 'intelligent' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    formData.rotation_mode === 'intelligent' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : 'border-gray-200 dark:border-gray-600'
                   }`}>
                     <input
                       type="radio"
@@ -1045,7 +1045,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       disabled
                     />
                     <span className="font-medium">Inteligente <span className="text-xs text-orange-600">(Em breve)</span></span>
-                    <p className="text-xs text-gray-600 mt-1 ml-6">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 ml-6">
                       Prioriza instâncias com melhor health score e taxa de entrega
                     </p>
                   </label>
@@ -1098,7 +1098,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   min="1"
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Quantidade máxima de mensagens que cada instância pode enviar por dia
                 </p>
               </div>
@@ -1115,14 +1115,14 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   max="100"
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   A campanha será pausada automaticamente se o health de uma instância cair abaixo deste valor
                 </p>
               </div>
 
               <Card className="p-4 bg-gray-50 dark:bg-gray-700/50">
                 <h4 className="font-medium mb-2">⚙️ Resumo das Configurações</h4>
-                <ul className="text-sm text-gray-700 space-y-1">
+                <ul className="text-sm text-gray-700 dark:text-gray-300 space-y-1">
                   <li>• Intervalo entre mensagens: {formData.interval_min}-{formData.interval_max} segundos</li>
                   <li>• Limite diário: {formData.daily_limit_per_instance} mensagens/instância</li>
                   <li>• Pausar com health abaixo de: {formData.pause_on_health_below}%</li>
@@ -1140,18 +1140,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <h4 className="font-medium mb-3">📋 Informações da Campanha</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Nome:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Nome:</span>
                     <span className="font-medium">{formData.name}</span>
                   </div>
                   {formData.description && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Descrição:</span>
+                      <span className="text-gray-600 dark:text-gray-400">Descrição:</span>
                       <span className="font-medium">{formData.description}</span>
                     </div>
                   )}
                   {formData.scheduled_at && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Agendada para:</span>
+                      <span className="text-gray-600 dark:text-gray-400">Agendada para:</span>
                       <span className="font-medium">{new Date(formData.scheduled_at).toLocaleString('pt-BR')}</span>
                     </div>
                   )}
@@ -1162,18 +1162,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <h4 className="font-medium mb-3">👥 Público</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Total de contatos:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Total de contatos:</span>
                     <span className="font-bold text-blue-600">{getSelectedContactsCount()}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Tipo:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Tipo:</span>
                     <span className="font-medium">
                       {formData.audience_type === 'tag' ? 'Filtrado por Tag' : 'Contatos Avulsos'}
                     </span>
                   </div>
                   {formData.audience_type === 'tag' && formData.tag_id && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Tag selecionada:</span>
+                      <span className="text-gray-600 dark:text-gray-400">Tag selecionada:</span>
                       <span className="font-medium">
                         🏷️ {tags.find(t => t.id === formData.tag_id)?.name}
                       </span>
@@ -1186,7 +1186,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <h4 className="font-medium mb-3">💬 Mensagens</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Templates criados:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Templates criados:</span>
                     <span className="font-medium">{formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).length}</span>
                   </div>
                 </div>
@@ -1196,11 +1196,11 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <h4 className="font-medium mb-3">⚡ Instâncias e Rotação</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Instâncias selecionadas:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Instâncias selecionadas:</span>
                     <span className="font-medium">{formData.instance_ids.length}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Modo de rotação:</span>
+                    <span className="text-gray-600 dark:text-gray-400">Modo de rotação:</span>
                     <span className="font-medium">
                       {formData.rotation_mode === 'round_robin' ? 'Round Robin' :
                        formData.rotation_mode === 'balanced' ? 'Balanceado' : 'Inteligente'}
@@ -1209,12 +1209,12 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 </div>
               </Card>
 
-              <Card className="p-4 bg-green-50 border-green-200">
+              <Card className="p-4 bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700">
                 <div className="flex items-start gap-2">
                   <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-green-900">Tudo pronto!</p>
-                    <p className="text-sm text-green-700 mt-1">
+                    <p className="font-medium text-green-900 dark:text-green-100">Tudo pronto!</p>
+                    <p className="text-sm text-green-700 dark:text-green-300 mt-1">
                       Sua campanha será criada e {formData.scheduled_at ? 'executada automaticamente no horário agendado' : 'salva como rascunho'}
                     </p>
                   </div>
@@ -1235,7 +1235,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
             Voltar
           </Button>
 
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             Passo {step} de 6
           </div>
 

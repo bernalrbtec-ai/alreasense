@@ -155,9 +155,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
               >
                 {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>
@@ -183,9 +183,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 onClick={() => setShowNewPassword(!showNewPassword)}
               >
                 {showNewPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>
@@ -214,9 +214,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>

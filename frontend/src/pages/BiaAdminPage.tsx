@@ -621,7 +621,7 @@ export default function BiaAdminPage() {
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">BIA – Configuração e Homologação</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">BIA – Configuração e Homologação</h1>
           <p className="text-sm text-gray-600 mt-1">
             Configure o prompt e o modelo na aba Configuração. Use Homologação para testar com conversa real.
           </p>
