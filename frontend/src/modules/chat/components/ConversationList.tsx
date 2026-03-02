@@ -568,16 +568,21 @@ export function ConversationList() {
               {canSpy && (
                 <button
                   type="button"
-                  className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-                  title="Abrir em modo espião (não marca como lida)"
+                  className={`flex-shrink-0 p-1.5 rounded-full transition-colors ${
+                    activeConversation?.id === conversationItem.id && openInSpyMode
+                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/40'
+                      : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                  }`}
+                  title={activeConversation?.id === conversationItem.id && openInSpyMode ? 'Modo espião ativo (clique na conversa para assumir)' : 'Abrir em modo espião (não marca como lida)'}
                   onClick={(e) => {
                     e.stopPropagation();
                     setActiveConversation(conversationItem);
                     setOpenInSpyMode(true);
                   }}
-                  aria-label="Abrir em modo espião"
+                  aria-label={activeConversation?.id === conversationItem.id && openInSpyMode ? 'Modo espião ativo' : 'Abrir em modo espião'}
+                  aria-pressed={activeConversation?.id === conversationItem.id && openInSpyMode}
                 >
-                  <Eye className="w-4 h-4" />
+                  <Eye className="w-4 h-4" aria-hidden />
                 </button>
               )}
             </div>

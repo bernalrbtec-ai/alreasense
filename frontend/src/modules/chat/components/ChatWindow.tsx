@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -865,6 +865,18 @@ export function ChatWindow() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Indicador Modo Espião (quando conversa aberta em spy) */}
+          {openInSpyMode && (
+            <span
+              role="status"
+              aria-live="polite"
+              className="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-xs font-medium"
+              title="Visualização sem marcar como lida"
+            >
+              <Eye className="w-4 h-4 flex-shrink-0" aria-hidden />
+              Modo espião
+            </span>
+          )}
           {/* Botão Histórico (apenas se contato existir) */}
           {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
           {existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
