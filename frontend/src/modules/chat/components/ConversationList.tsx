@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente otimizado com memoização
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Plus, User, Eye } from 'lucide-react';
+import { Search, Plus, User, Eye, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { shallow } from 'zustand/shallow';
@@ -31,7 +31,9 @@ export function ConversationList() {
     setActiveConversation, 
     setOpenInSpyMode,
     openInSpyMode,
-    activeDepartment 
+    activeDepartment,
+    waitingForResponseMode,
+    setWaitingForResponseMode,
   } = useChatStore(
     (state) => ({
       conversations: state.conversations,
@@ -41,9 +43,12 @@ export function ConversationList() {
       setOpenInSpyMode: state.setOpenInSpyMode,
       openInSpyMode: state.openInSpyMode,
       activeDepartment: state.activeDepartment,
+      waitingForResponseMode: state.waitingForResponseMode,
+      setWaitingForResponseMode: state.setWaitingForResponseMode,
     }),
     shallow // ✅ Comparação shallow para evitar re-renders quando objetos não mudaram
   );
+  const [refreshTick, setRefreshTick] = useState(0);
   const { isAdmin, isGerente } = usePermissions();
   const canSpy = isAdmin || isGerente;
   const [loading, setLoading] = useState(false);
@@ -59,6 +64,13 @@ export function ConversationList() {
     
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // ✅ Modo Aguardando Resposta: atualizar tempo de espera a cada 1 min
+  useEffect(() => {
+    if (!waitingForResponseMode) return;
+    const interval = setInterval(() => setRefreshTick((t) => t + 1), 60_000);
+    return () => clearInterval(interval);
+  }, [waitingForResponseMode]);
 
   // 🔄 MELHORIA: Buscar conversas apenas na primeira carga (evita sobrescrever WebSocket)
   // WebSocket adicionará novas conversas automaticamente ao Zustand Store via useTenantSocket
@@ -346,9 +358,24 @@ export function ConversationList() {
         searchTerm: debouncedSearchTerm || 'Nenhum'
       });
     }
-    
-    return filtered;
-  }, [conversations, debouncedSearchTerm, activeDepartment]); // ✅ Usar debouncedSearchTerm
+
+    // Modo normal: mesma ordem do store (last_message_at desc)
+    if (!waitingForResponseMode) return filtered;
+
+    // Modo Aguardando Resposta: só última mensagem do cliente, ordenar da mais atrasada (topo)
+    const waitingList = filtered.filter((c) => c.last_message?.direction === 'incoming');
+    const activeId = activeConversation?.id != null ? String(activeConversation.id) : null;
+    const needsPin =
+      activeId &&
+      filtered.some((c) => String(c.id) === activeId) &&
+      !waitingList.some((c) => String(c.id) === activeId);
+    const sortedWaiting = [...waitingList].sort((a, b) => {
+      const tA = new Date(a.last_message_at).getTime() || 0;
+      const tB = new Date(b.last_message_at).getTime() || 0;
+      return tA - tB || String(a.id).localeCompare(String(b.id));
+    });
+    return needsPin && activeConversation ? [activeConversation, ...sortedWaiting] : sortedWaiting;
+  }, [conversations, debouncedSearchTerm, activeDepartment, waitingForResponseMode, activeConversation?.id]);
 
   // ✅ PERFORMANCE: Memoizar função de formatação
   const formatTime = useCallback((dateString: string | undefined) => {
@@ -359,6 +386,26 @@ export function ConversationList() {
       return '';
     }
   }, []);
+
+  // Tempo de espera (modo Aguardando Resposta): "Zzz : Xh Ymin" ou "Zzz : Xmin"
+  const formatWaitingTime = useCallback((dateString: string | undefined) => {
+    if (!dateString) return '';
+    try {
+      const diffMs = Date.now() - new Date(dateString).getTime();
+      if (Number.isNaN(diffMs) || diffMs < 0) return 'Zzz : 0min';
+      const totalMins = Math.floor(diffMs / 60_000);
+      const hours = Math.floor(totalMins / 60);
+      const mins = totalMins % 60;
+      if (hours === 0) return `Zzz : ${mins}min`;
+      return mins === 0 ? `Zzz : ${hours}h` : `Zzz : ${hours}h ${mins}min`;
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const waitingCount = waitingForResponseMode
+    ? filteredConversations.filter((c) => c.last_message?.direction === 'incoming').length
+    : 0;
 
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
@@ -390,6 +437,35 @@ export function ConversationList() {
         </button>
       </div>
 
+      {/* Toggle Aguardando Resposta */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-2 sm:px-3 pb-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={waitingForResponseMode}
+          aria-label="Filtrar por conversas aguardando resposta"
+          title="Mostrar só conversas em que o cliente respondeu por último, ordenadas pela mais antiga no topo"
+          onClick={() => setWaitingForResponseMode(!waitingForResponseMode)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setWaitingForResponseMode(!waitingForResponseMode);
+            }
+          }}
+          className={`min-h-[44px] min-w-[44px] flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            waitingForResponseMode
+              ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+          }`}
+        >
+          <Clock className="w-4 h-4 flex-shrink-0" aria-hidden />
+          <span>Aguardando Resposta</span>
+          {waitingForResponseMode && (
+            <span className="text-xs opacity-90">({waitingCount} aguardando)</span>
+          )}
+        </button>
+      </div>
+
       {/* Conversations */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
@@ -408,10 +484,28 @@ export function ConversationList() {
                 <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
               </svg>
             </div>
-            <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhuma conversa</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
-              Inicie uma nova conversa para começar!
-            </p>
+            {waitingForResponseMode ? (
+              <>
+                <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhuma conversa aguardando resposta</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs mb-4">
+                  Desative o filtro para ver todas as conversas.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setWaitingForResponseMode(false)}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Desative o filtro
+                </button>
+              </>
+            ) : (
+              <>
+                <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhuma conversa</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
+                  Inicie uma nova conversa para começar!
+                </p>
+              </>
+            )}
           </div>
         ) : (
           filteredConversations.map((conversationItem, index) => (
@@ -497,8 +591,15 @@ export function ConversationList() {
                       : getDisplayName(conversationItem)
                     }
                   </h3>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">
-                    {formatTime(conversationItem.last_message_at)}
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0 flex items-center gap-1">
+                    {waitingForResponseMode ? (
+                      <>
+                        <Clock className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+                        {formatWaitingTime(conversationItem.last_message_at)}
+                      </>
+                    ) : (
+                      formatTime(conversationItem.last_message_at)
+                    )}
                   </span>
                 </div>
 

@@ -61,6 +61,10 @@ interface ChatState {
   openInSpyMode: boolean;
   setOpenInSpyMode: (v: boolean) => void;
 
+  // Modo Aguardando Resposta: filtra conversas cuja última mensagem é do cliente, ordena pela mais atrasada
+  waitingForResponseMode: boolean;
+  setWaitingForResponseMode: (v: boolean) => void;
+
   connectionStatus: 'connecting' | 'connected' | 'disconnected';
   setConnectionStatus: (status: 'connecting' | 'connected' | 'disconnected') => void;
 
@@ -189,6 +193,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   connectionStatus: 'disconnected',
   instanceStatusAlert: null,
   openInSpyMode: false,
+  waitingForResponseMode: false,
 
   // Departamentos
   setDepartments: (departments) => set({ departments }),
@@ -653,6 +658,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   // Estado do chat
   setTyping: (typing, user) => set({ typing, typingUser: user || null }),
   setOpenInSpyMode: (v) => set({ openInSpyMode: v }),
+  setWaitingForResponseMode: (v) => set({ waitingForResponseMode: v }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   // Reply (responder mensagem)
@@ -674,6 +680,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     connectionStatus: 'disconnected',
     replyToMessage: null,
     instanceStatusAlert: null,
-    openInSpyMode: false
+    openInSpyMode: false,
+    waitingForResponseMode: false
   })
 }));
