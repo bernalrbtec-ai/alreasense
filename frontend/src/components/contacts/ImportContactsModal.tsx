@@ -365,7 +365,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
                 onClick={() => fileInputRef.current?.click()}
               >
-                  <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
+                  <Upload className="mx-auto h-10 w-10 text-gray-400 dark:text-gray-500 mb-3" />
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -388,7 +388,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                         <FileText className="h-6 w-6 text-blue-600" />
                       <div>
                           <p className="font-medium text-sm">{file.name}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                           {(file.size / 1024).toFixed(1)} KB
                         </p>
                       </div>
@@ -533,10 +533,10 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     className="mt-1"
                   />
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           Contatos autorizaram receber mensagens
                     </p>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                           ⚠️ Necessário para enviar campanhas
                     </p>
                   </div>
@@ -573,7 +573,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Preview dos Dados</h3>
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
                     {previewData.source === 'vcf'
                       ? (previewData.total_with_phone != null && previewData.total_with_phone !== previewData.total_rows_detected
                           ? `${previewData.total_rows_detected} contatos no arquivo; ${previewData.total_with_phone} com telefone (necessário para importar)`
@@ -588,10 +588,10 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {Object.entries(previewData.column_mapping || {}).map(([csvCol, dbField]) => (
                     <div key={csvCol} className="flex items-center gap-2">
-                        <span className="text-gray-600">{csvCol}</span>
+                        <span className="text-gray-600 dark:text-gray-400">{csvCol}</span>
                       <span>→</span>
                         <span className="font-medium">
-                          {dbField || <span className="text-gray-400">ignorado</span>}
+                          {dbField || <span className="text-gray-400 dark:text-gray-500">ignorado</span>}
                       </span>
                     </div>
                   ))}
@@ -600,11 +600,11 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 )}
               
                 <div className="overflow-x-auto max-h-64 overflow-y-auto border rounded">
-                  <table className="min-w-full divide-y divide-gray-200 text-xs">
+                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600 text-xs">
                   <thead className="bg-gray-50 dark:bg-gray-700/50 sticky top-0">
                     <tr>
                         {(previewData.source === 'vcf' ? (previewData.headers || ['name', 'phone', 'email', 'city', 'state', 'notes']) : Object.keys(previewData.column_mapping || {})).map((header: string) => (
-                          <th key={header} className="px-3 py-2 text-left font-medium text-gray-700">
+                          <th key={header} className="px-3 py-2 text-left font-medium text-gray-700 dark:text-gray-300">
                           {header}
                         </th>
                       ))}
@@ -660,24 +660,24 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 
                 {importId ? (
                   <>
-                    <div className="w-full bg-gray-200 rounded-full h-3 mb-4 max-w-md mx-auto">
+                    <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 mb-4 max-w-md mx-auto">
                       <div
                         className="bg-blue-600 h-3 rounded-full transition-all"
                     style={{ width: `${progress.percentage}%` }}
                   />
                 </div>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
                       {progress.current} de {progress.total} contatos processados ({progress.percentage}%)
                 </p>
                     <div className="flex justify-center gap-4 mt-4 text-xs">
                       <span className="text-green-600">✓ Criados: {progress.created}</span>
                       <span className="text-blue-600">↻ Atualizados: {progress.updated}</span>
-                      <span className="text-gray-600">⊘ Ignorados: {progress.skipped}</span>
+                      <span className="text-gray-600 dark:text-gray-400">⊘ Ignorados: {progress.skipped}</span>
                       <span className="text-red-600">✗ Erros: {progress.errors}</span>
               </div>
                   </>
                 ) : (
-                  <p className="text-sm text-gray-600">Aguarde enquanto processamos os contatos...</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Aguarde enquanto processamos os contatos...</p>
                 )}
             </div>
           )}
@@ -704,7 +704,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                         <h3 className="text-lg font-semibold text-yellow-600 mb-2">
                           Importação Concluída com Avisos
                         </h3>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
                           Alguns contatos não puderam ser importados, mas a maioria foi processada com sucesso.
                         </p>
                       </>
@@ -731,19 +731,19 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 {/* Estatísticas */}
                 <div className="grid grid-cols-2 gap-3">
                   <Card className="p-3">
-                    <p className="text-xs text-gray-500">Criados</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Criados</p>
                     <p className="text-2xl font-bold text-green-600">{Number(importResult.created_count ?? importResult.created) || 0}</p>
                 </Card>
                   <Card className="p-3">
-                    <p className="text-xs text-gray-500">Atualizados</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Atualizados</p>
                     <p className="text-2xl font-bold text-blue-600">{Number(importResult.updated_count ?? importResult.updated) || 0}</p>
                 </Card>
                   <Card className="p-3">
-                    <p className="text-xs text-gray-500">Ignorados</p>
-                    <p className="text-2xl font-bold text-gray-600">{Number(importResult.skipped_count ?? importResult.skipped) || 0}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Ignorados</p>
+                    <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{Number(importResult.skipped_count ?? importResult.skipped) || 0}</p>
                 </Card>
                   <Card className="p-3">
-                    <p className="text-xs text-gray-500">Erros</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Erros</p>
                     <p className="text-2xl font-bold text-red-600">{Number(importResult.error_count) || 0}</p>
                 </Card>
               </div>
@@ -808,7 +808,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 </div>
                 
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900">✅ Formas válidas de obter consentimento:</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">✅ Formas válidas de obter consentimento:</h4>
                   <ul className="list-disc list-inside space-y-2 text-gray-700 ml-2">
                     <li>Checkbox em formulário online (com texto claro sobre o uso)</li>
                     <li>Termo de aceite assinado fisicamente</li>
@@ -819,7 +819,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 </div>
                 
                 <div className="space-y-3">
-                  <h4 className="font-semibold text-gray-900">❌ NÃO é consentimento válido:</h4>
+                  <h4 className="font-semibold text-gray-900 dark:text-gray-100">❌ NÃO é consentimento válido:</h4>
                   <ul className="list-disc list-inside space-y-2 text-gray-700 ml-2">
                     <li>Comprar listas de contatos</li>
                     <li>Adicionar números que você "encontrou"</li>

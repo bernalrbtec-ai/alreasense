@@ -98,7 +98,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
                   const parent = target.parentElement;
                   if (parent) {
                     parent.innerHTML = `
-                      <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+                      <div class="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium text-lg">
                         ${contact.name.charAt(0).toUpperCase()}
                       </div>
                     `;
