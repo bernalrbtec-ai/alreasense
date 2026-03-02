@@ -26,7 +26,7 @@ const getMediaProxyUrl = (externalUrl: string) => {
 const noopTyping = () => {};
 
 export function ChatWindow() {
-  const { activeConversation, setActiveConversation, openInSpyMode } = useChatStore();
+  const { activeConversation, setActiveConversation, openInSpyMode, replyToMessage, clearReply } = useChatStore();
   const { user } = useAuthStore();
   // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
   const permissions = usePermissions();
@@ -58,7 +58,7 @@ export function ChatWindow() {
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
   
-  // Escape: apenas deixa de exibir a conversa na tela (volta à lista). NÃO fecha a conversa (sem API, sem mudar status).
+  // Escape: se houver reply ativo, cancela o reply; senão deixa de exibir a conversa (volta à lista). NÃO fecha a conversa (sem API).
   useEffect(() => {
     if (!activeConversation) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -67,11 +67,15 @@ export function ChatWindow() {
       if (target instanceof HTMLElement && target.closest('[role="dialog"], [role="menu"]')) return;
       if (target instanceof HTMLElement && target.closest('[data-chat-conversation-list]')) return;
       e.preventDefault();
+      if (replyToMessage) {
+        clearReply();
+        return;
+      }
       setActiveConversation(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeConversation, setActiveConversation]);
+  }, [activeConversation, setActiveConversation, replyToMessage, clearReply]);
 
   // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name) - DEPOIS de hooks
   useEffect(() => {

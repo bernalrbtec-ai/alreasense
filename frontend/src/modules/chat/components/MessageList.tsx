@@ -354,6 +354,7 @@ export function MessageList() {
   console.log('🔍 [MessageList] Capturando outras funções do store...');
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
   const setMessages = useChatStore((state) => state.setMessages);
+  const setReplyToMessage = useChatStore((state) => state.setReplyToMessage);
   const typing = useChatStore((state) => state.typing);
   const typingUser = useChatStore((state) => state.typingUser);
   const getMessagesArray = useChatStore((state) => state.getMessagesArray);
@@ -1094,6 +1095,13 @@ export function MessageList() {
                     : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
                   }
                 `}
+                onClick={(e) => {
+                  if (isSystemNotification) return;
+                  const target = e.target as HTMLElement;
+                  if (target.closest('a, button, [role="button"]')) return;
+                  if (target.closest('.message-attachments')) return;
+                  setReplyToMessage(messageItem);
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setContextMenu({
