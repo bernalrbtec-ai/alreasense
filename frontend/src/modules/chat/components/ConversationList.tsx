@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente otimizado com memoização
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Plus, User } from 'lucide-react';
+import { Search, Plus, User, Eye } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { shallow } from 'zustand/shallow';
@@ -14,6 +14,7 @@ import { upsertConversation } from '../store/conversationUpdater';
 import { getDisplayName } from '../utils/phoneFormatter';
 import { NewConversationModal } from './NewConversationModal';
 import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/hooks/usePermissions';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -28,6 +29,8 @@ export function ConversationList() {
     setConversations, 
     activeConversation, 
     setActiveConversation, 
+    setOpenInSpyMode,
+    openInSpyMode,
     activeDepartment 
   } = useChatStore(
     (state) => ({
@@ -35,10 +38,14 @@ export function ConversationList() {
       setConversations: state.setConversations,
       activeConversation: state.activeConversation,
       setActiveConversation: state.setActiveConversation,
+      setOpenInSpyMode: state.setOpenInSpyMode,
+      openInSpyMode: state.openInSpyMode,
       activeDepartment: state.activeDepartment,
     }),
     shallow // ✅ Comparação shallow para evitar re-renders quando objetos não mudaram
   );
+  const { isAdmin, isGerente } = usePermissions();
+  const canSpy = isAdmin || isGerente;
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
@@ -408,23 +415,40 @@ export function ConversationList() {
           </div>
         ) : (
           filteredConversations.map((conversationItem, index) => (
-            <button
+            <div
               key={conversationItem.id}
+              role="button"
+              tabIndex={0}
               onClick={() => {
-                // ✅ FIX: Verificar se é a mesma conversa antes de definir
-                // Se já é a conversa ativa, não fazer nada (evita desselecionar)
-                if (activeConversation?.id === conversationItem.id) {
-                  console.log('🔕 [LIST] Conversa já está ativa, mantendo selecionada:', conversationItem.id);
+                const isSame = activeConversation?.id === conversationItem.id;
+                if (isSame && openInSpyMode) {
+                  setOpenInSpyMode(false);
                   return;
                 }
-                console.log('✅ [LIST] Selecionando conversa:', conversationItem.id);
+                if (isSame && !openInSpyMode) {
+                  return;
+                }
                 setActiveConversation(conversationItem);
+                setOpenInSpyMode(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  const isSame = activeConversation?.id === conversationItem.id;
+                  if (isSame && openInSpyMode) {
+                    setOpenInSpyMode(false);
+                    return;
+                  }
+                  if (isSame && !openInSpyMode) return;
+                  setActiveConversation(conversationItem);
+                  setOpenInSpyMode(false);
+                }
               }}
               className={`
                 w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
                 hover:bg-[#f0f2f5] dark:hover:bg-gray-700 active:scale-[0.98] 
                 transition-all duration-150 border-b border-gray-100 dark:border-gray-700
-                animate-fade-in
+                animate-fade-in cursor-pointer
                 ${activeConversation?.id === conversationItem.id ? 'bg-[#f0f2f5] dark:bg-gray-700 shadow-sm' : ''}
               `}
               style={{ animationDelay: `${index * 30}ms` }}
@@ -539,7 +563,24 @@ export function ConversationList() {
                   )}
                 </div>
               </div>
-            </button>
+
+              {/* Modo Espião: abrir sem marcar como lida (apenas admin/gerente) */}
+              {canSpy && (
+                <button
+                  type="button"
+                  className="flex-shrink-0 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                  title="Abrir em modo espião (não marca como lida)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveConversation(conversationItem);
+                    setOpenInSpyMode(true);
+                  }}
+                  aria-label="Abrir em modo espião"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+              )}
+            </div>
           ))
         )}
       </div>

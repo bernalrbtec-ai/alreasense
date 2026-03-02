@@ -57,6 +57,10 @@ interface ChatState {
   typingUser: string | null;
   setTyping: (typing: boolean, user?: string) => void;
 
+  // Modo Espião: esta conversa ativa foi aberta em modo espião (não marca como lida)
+  openInSpyMode: boolean;
+  setOpenInSpyMode: (v: boolean) => void;
+
   connectionStatus: 'connecting' | 'connected' | 'disconnected';
   setConnectionStatus: (status: 'connecting' | 'connected' | 'disconnected') => void;
 
@@ -184,6 +188,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typingUser: null,
   connectionStatus: 'disconnected',
   instanceStatusAlert: null,
+  openInSpyMode: false,
 
   // Departamentos
   setDepartments: (departments) => set({ departments }),
@@ -197,7 +202,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.log('🔕 [STORE] Limpando conversa ativa');
       return {
         activeConversation: null,
-        messages: { byId: {}, byConversationId: {} }
+        messages: { byId: {}, byConversationId: {} },
+        openInSpyMode: false
       };
     }
     
@@ -223,7 +229,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     
     return {
       activeConversation: conversation,
-      messages: updatedMessages
+      messages: updatedMessages,
+      openInSpyMode: false
     };
   }),
   addConversation: (conversation) => set((state) => {
@@ -284,14 +291,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const convKey = normalizeConversationKey(conversationId);
     if (convKey) delete updatedMessages.byConversationId[convKey];
     // Remover mensagens do byId também (opcional - pode manter para cache)
-    
+    const wasActive = state.activeConversation?.id === conversationId;
     return {
       conversations: state.conversations.filter((conversationItem) => conversationItem.id !== conversationId),
-      // Se a conversa removida era a ativa, limpar
-      activeConversation: state.activeConversation?.id === conversationId 
-        ? null 
-        : state.activeConversation,
-      messages: updatedMessages
+      activeConversation: wasActive ? null : state.activeConversation,
+      messages: updatedMessages,
+      ...(wasActive && { openInSpyMode: false })
     };
   }),
 
@@ -647,6 +652,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // Estado do chat
   setTyping: (typing, user) => set({ typing, typingUser: user || null }),
+  setOpenInSpyMode: (v) => set({ openInSpyMode: v }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
   // Reply (responder mensagem)
@@ -667,6 +673,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     typingUser: null,
     connectionStatus: 'disconnected',
     replyToMessage: null,
-    instanceStatusAlert: null
+    instanceStatusAlert: null,
+    openInSpyMode: false
   })
 }));

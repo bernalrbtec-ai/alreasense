@@ -22,8 +22,11 @@ const getMediaProxyUrl = (externalUrl: string) => {
   return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
 };
 
+// No-op estável para modo espião (evita re-renders do MessageInput quando sendTyping não é usado)
+const noopTyping = () => {};
+
 export function ChatWindow() {
-  const { activeConversation, setActiveConversation } = useChatStore();
+  const { activeConversation, setActiveConversation, openInSpyMode } = useChatStore();
   const { user } = useAuthStore();
   // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
   const permissions = usePermissions();
@@ -132,9 +135,13 @@ export function ChatWindow() {
     checkContactExists();
   }, [activeConversation?.id, activeConversation?.contact_phone, activeConversation?.conversation_type]);
 
-  // 📖 Marcar mensagens como lidas quando abre a conversa
+  // 📖 Marcar mensagens como lidas quando abre a conversa (não em modo espião)
   useEffect(() => {
     if (!activeConversation) return;
+    if (openInSpyMode) {
+      console.log('👁️ [MARK READ] Modo espião ativo - não agendando mark_as_read');
+      return;
+    }
     
     let isCancelled = false;
     
@@ -146,9 +153,9 @@ export function ChatWindow() {
       }
       
       // ✅ CORREÇÃO 2: Verificar novamente no momento da marcação
-      const { activeConversation: current } = useChatStore.getState();
-      if (current?.id !== activeConversation.id) {
-        console.log('⏸️ [MARK READ] Marcação cancelada - conversa diferente da que foi aberta');
+      const { activeConversation: current, openInSpyMode: spy } = useChatStore.getState();
+      if (current?.id !== activeConversation.id || spy) {
+        console.log('⏸️ [MARK READ] Marcação cancelada - conversa diferente ou modo espião');
         return;
       }
       
@@ -187,7 +194,7 @@ export function ChatWindow() {
       clearTimeout(timeout);
       console.log('🔌 [MARK READ] Limpando timeout (usuário saiu da conversa)');
     };
-  }, [activeConversation?.id]);
+  }, [activeConversation?.id, openInSpyMode]);
 
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
   // ✅ MELHORIA ULTRA-REFINADA: Verificação inteligente com debounce e fallback
@@ -975,7 +982,7 @@ export function ChatWindow() {
         <MessageInput 
           sendMessage={sendMessage}
           sendMessageAsTemplate={sendMessageAsTemplate}
-          sendTyping={sendTyping}
+          sendTyping={openInSpyMode ? noopTyping : sendTyping}
           isConnected={isConnected}
             conversationId={conversationId}
             conversationType={(activeConversation?.conversation_type || conversationType) as 'individual' | 'group' | 'broadcast'}
