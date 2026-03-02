@@ -65,7 +65,6 @@ export function ChatWindow() {
       if (e.key !== 'Escape') return;
       const target = e.target as Node | null;
       if (target instanceof HTMLElement && target.closest('[role="dialog"], [role="menu"]')) return;
-      if (target instanceof HTMLElement && target.closest('[data-chat-conversation-list]')) return;
       e.preventDefault();
       if (replyToMessage) {
         clearReply();
