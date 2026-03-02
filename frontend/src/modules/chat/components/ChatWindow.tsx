@@ -58,14 +58,14 @@ export function ChatWindow() {
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
   
-  // ✅ ESC: sair da conversa ao pressionar Escape somente quando o foco está dentro do painel da conversa (incl. estado de loading)
+  // Escape: apenas deixa de exibir a conversa na tela (volta à lista). NÃO fecha a conversa (sem API, sem mudar status).
   useEffect(() => {
     if (!activeConversation) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const target = e.target as Node | null;
       if (target instanceof HTMLElement && target.closest('[role="dialog"], [role="menu"]')) return;
-      if (!chatPanelRef.current || target == null || !chatPanelRef.current.contains(target)) return;
+      if (target instanceof HTMLElement && target.closest('[data-chat-conversation-list]')) return;
       e.preventDefault();
       setActiveConversation(null);
     };

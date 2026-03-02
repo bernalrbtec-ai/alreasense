@@ -44,7 +44,9 @@ export function ChatPage() {
       {/* Content: Conversations + Chat Window - OCUPA TODO ESPAÇO */}
       <div className="flex flex-1 overflow-hidden min-h-0">
         {/* Lista de conversas - MINIMIZADA quando conversa está aberta */}
-        <div className={`
+        <div
+          data-chat-conversation-list
+          className={`
           ${activeConversation 
             ? 'hidden md:flex md:w-[280px] lg:w-[300px]' 
             : 'flex w-full md:w-[340px] lg:w-[360px]'
