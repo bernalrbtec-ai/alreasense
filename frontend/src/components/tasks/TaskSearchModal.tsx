@@ -63,14 +63,14 @@ export default function TaskSearchModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-bold flex items-center gap-2">
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600 sticky top-0 bg-white dark:bg-gray-800 z-10">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-gray-900 dark:text-gray-100">
             <Search className="h-5 w-5" />
             Pesquisar e Filtrar Tarefas
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400">
             <X className="h-6 w-6" />
           </button>
         </div>
@@ -79,27 +79,27 @@ export default function TaskSearchModal({
         <div className="p-6 space-y-4">
           {/* Busca por texto */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Buscar
             </label>
             <input
               type="text"
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder="Buscar por título ou descrição..."
             />
           </div>
 
           {/* Status */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Status
             </label>
             <select
               value={filters.status}
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Todos</option>
               <option value="pending">Pendente</option>
@@ -112,13 +112,13 @@ export default function TaskSearchModal({
           {/* Departamento e Atribuída Para */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Departamento
               </label>
               <select
                 value={filters.department}
                 onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todos</option>
                 {departments.map(dept => (
@@ -128,13 +128,13 @@ export default function TaskSearchModal({
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Atribuída Para
               </label>
               <select
                 value={filters.assigned_to}
                 onChange={(e) => setFilters({ ...filters, assigned_to: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Todos</option>
                 {users.map(user => (
@@ -155,7 +155,7 @@ export default function TaskSearchModal({
                 type="checkbox"
                 checked={filters.my_tasks}
                 onChange={(e) => setFilters({ ...filters, my_tasks: e.target.checked })}
-                className="rounded border-gray-300"
+                className="rounded border-gray-300 dark:border-gray-600"
               />
               <span>Minhas tarefas atribuídas</span>
             </label>
@@ -164,7 +164,7 @@ export default function TaskSearchModal({
                 type="checkbox"
                 checked={filters.created_by_me}
                 onChange={(e) => setFilters({ ...filters, created_by_me: e.target.checked })}
-                className="rounded border-gray-300"
+                className="rounded border-gray-300 dark:border-gray-600"
               />
               <span>Tarefas que criei</span>
             </label>
@@ -173,7 +173,7 @@ export default function TaskSearchModal({
                 type="checkbox"
                 checked={filters.overdue}
                 onChange={(e) => setFilters({ ...filters, overdue: e.target.checked })}
-                className="rounded border-gray-300"
+                className="rounded border-gray-300 dark:border-gray-600"
               />
               <span>Atrasadas</span>
             </label>

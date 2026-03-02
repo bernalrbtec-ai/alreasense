@@ -52,7 +52,7 @@ interface TaskListProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-700 border-gray-200',
+  low: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600',
   medium: 'bg-blue-100 text-blue-700 border-blue-200',
   high: 'bg-orange-100 text-orange-700 border-orange-200',
   urgent: 'bg-red-100 text-red-700 border-red-200',
@@ -62,7 +62,7 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   in_progress: 'bg-blue-100 text-blue-700 border-blue-200',
   completed: 'bg-green-100 text-green-700 border-green-200',
-  cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
+  cancelled: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600',
 }
 
 export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest, refreshTrigger, hideActions = false }: TaskListProps) {
@@ -279,7 +279,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Tarefas e Agenda</h3>
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Tarefas e Agenda</h3>
         {!hideActions && (
           <div className="flex gap-2">
             <Button 
@@ -299,13 +299,13 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600">
         <button
           onClick={() => setViewMode('calendar')}
           className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
             viewMode === 'calendar'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           <Calendar className="h-4 w-4 inline mr-2" />
@@ -316,7 +316,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
           className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
             viewMode === 'list'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           <List className="h-4 w-4 inline mr-2" />
@@ -328,8 +328,8 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
       {viewMode === 'list' ? (
         <div className="space-y-2">
           {tasks.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Clock className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Clock className="h-12 w-12 mx-auto mb-2 text-gray-400 dark:text-gray-500" />
               <p>Nenhuma tarefa encontrada</p>
             </div>
           ) : (
@@ -338,10 +338,10 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                 key={task.id}
                 className={`border rounded-lg p-4 ${
                   task.is_overdue && task.status !== 'completed'
-                    ? 'border-red-300 bg-red-50'
+                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20'
                     : task.status === 'completed'
-                    ? 'border-gray-200 bg-gray-50'  // ✅ CORREÇÃO: Fundo cinza para concluídas
-                    : 'border-gray-200 bg-white'
+                    ? 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -362,21 +362,21 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                     </div>
                     <h4 className={`font-medium mb-1 ${
                       task.status === 'completed' 
-                        ? 'line-through text-gray-500' 
-                        : 'text-gray-900'
+                        ? 'line-through text-gray-500 dark:text-gray-400' 
+                        : 'text-gray-900 dark:text-gray-100'
                     }`}>
                       {task.title}
                     </h4>
                     {task.description && (
                       <p className={`text-sm mb-2 ${
                         task.status === 'completed' 
-                          ? 'line-through text-gray-400' 
-                          : 'text-gray-600'
+                          ? 'line-through text-gray-400 dark:text-gray-500' 
+                          : 'text-gray-600 dark:text-gray-400'
                       }`}>
                         {task.description}
                       </p>
                     )}
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
                       {task.due_date && (
                         <span className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
@@ -440,27 +440,27 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             >
               ←
             </button>
-            <h4 className="font-semibold text-gray-900">
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100">
               {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
             </h4>
             <button
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              className="p-2 hover:bg-gray-100 rounded transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
             >
               →
             </button>
           </div>
 
           {/* Calendário */}
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
+          <div className="border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
             {/* Dias da semana */}
-            <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
+            <div className="grid grid-cols-7 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600">
               {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => (
-                <div key={day} className="p-2 text-center text-xs font-medium text-gray-700">
+                <div key={day} className="p-2 text-center text-xs font-medium text-gray-700 dark:text-gray-300">
                   {day}
                 </div>
               ))}
@@ -484,12 +484,12 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                 return (
                   <div
                     key={idx}
-                    className={`min-h-[100px] border border-gray-100 p-1 ${
-                      isCurrentMonth ? 'bg-white' : 'bg-gray-50'
-                    } ${isCurrentDay ? 'bg-blue-50' : ''} ${
+                    className={`min-h-[100px] border border-gray-100 dark:border-gray-600 p-1 ${
+                      isCurrentMonth ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/50'
+                    } ${isCurrentDay ? 'bg-blue-50 dark:bg-blue-900/30' : ''} ${
                       isPast && isCurrentMonth ? 'opacity-50 cursor-not-allowed' : ''
                     } ${
-                      isCurrentMonth && !isPast ? 'hover:bg-gray-50 cursor-pointer' : ''
+                      isCurrentMonth && !isPast ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer' : ''
                     } transition-colors relative group`}
                     onClick={(e) => {
                       if (isCurrentMonth && !isPast) {
@@ -506,7 +506,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                         : ''
                     }
                   >
-                    <div className={`text-xs mb-1 ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} ${isCurrentDay ? 'font-bold text-blue-600' : ''}`}>
+                    <div className={`text-xs mb-1 ${isCurrentMonth ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'} ${isCurrentDay ? 'font-bold text-blue-600' : ''}`}>
                       {format(day, 'd')}
                     </div>
                     <div className="space-y-1">
@@ -517,7 +517,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                             task.is_overdue && task.status !== 'completed'
                               ? 'bg-red-100 text-red-700 border border-red-200'
                               : task.status === 'completed'
-                              ? 'bg-gray-100 text-gray-500 border border-gray-200'  // ✅ CORREÇÃO: Cinza para concluídas
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600'
                               : 'bg-blue-100 text-blue-700 border border-blue-200'
                           }`}
                           title={task.title}
@@ -533,7 +533,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                       ))}
                       {dayTasks.length > 3 && (
                         <div 
-                          className="text-xs text-gray-500 px-1 cursor-pointer"
+                          className="text-xs text-gray-500 dark:text-gray-400 px-1 cursor-pointer"
                           onClick={(e) => {
                             e.stopPropagation()
                             // Mostrar todas as tarefas do dia
@@ -547,7 +547,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                       )}
                       {isCurrentMonth && dayTasks.length === 0 && (
                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                          <Plus className="h-5 w-5 text-gray-400" />
+                          <Plus className="h-5 w-5 text-gray-400 dark:text-gray-500" />
                         </div>
                       )}
                     </div>
@@ -563,7 +563,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
       {showDayMenu && selectedDay && (
         <div
           ref={menuRef}
-          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[300px]"
+          className="fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[300px]"
           style={{
             left: `${menuPosition.x}px`,
             top: `${menuPosition.y}px`,
@@ -571,12 +571,12 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
           }}
         >
           <div className="flex items-center justify-between mb-2 pb-2 border-b">
-            <span className="text-sm font-semibold text-gray-900">
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">
               {format(selectedDay, "dd/MM/yyyy", { locale: ptBR })}
             </span>
             <button
               onClick={() => setShowDayMenu(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400"
             >
               <X className="h-4 w-4" />
             </button>
@@ -608,7 +608,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
             {getTasksForDate(selectedDay).length > 0 && (
               <>
                 <div className="border-t my-1"></div>
-                <div className="text-xs text-gray-500 px-2 py-1">
+                <div className="text-xs text-gray-500 dark:text-gray-400 px-2 py-1">
                   Tarefas do dia ({getTasksForDate(selectedDay).length})
                 </div>
                 {getTasksForDate(selectedDay).map(task => (
@@ -618,22 +618,22 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                       handleEdit(task)
                       setShowDayMenu(false)
                     }}
-                    className={`w-full text-left px-3 py-2 text-sm rounded flex items-center justify-between group ${
-                      task.can_edit 
-                        ? 'text-gray-700 hover:bg-gray-50' 
-                        : 'text-gray-400 cursor-not-allowed'
+className={`w-full text-left px-3 py-2 text-sm rounded flex items-center justify-between group ${
+                    task.can_edit 
+                        ? 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700' 
+                        : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
                     }`}
                     disabled={!task.can_edit}
                     title={!task.can_edit ? 'Você não tem permissão para editar esta tarefa' : ''}
                   >
                     <div className="flex-1 truncate">
                       <div className="font-medium truncate">{task.title}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         {task.status_display} • {task.priority_display}
                       </div>
                     </div>
                     {task.can_edit && (
-                      <Edit className="h-3 w-3 text-gray-400 group-hover:text-blue-600 ml-2 flex-shrink-0" />
+                      <Edit className="h-3 w-3 text-gray-400 dark:text-gray-500 group-hover:text-blue-600 ml-2 flex-shrink-0" />
                     )}
                   </button>
                 ))}

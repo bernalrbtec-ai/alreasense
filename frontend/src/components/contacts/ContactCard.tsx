@@ -60,10 +60,10 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
   const customFields = contact.custom_fields || {}
   const hasCustomFields = Object.keys(customFields).length > 0
   const lifecycleColors: Record<string, string> = {
-    lead: 'bg-gray-100 text-gray-700',
-    customer: 'bg-green-100 text-green-700',
-    at_risk: 'bg-yellow-100 text-yellow-700',
-    churned: 'bg-red-100 text-red-700'
+    lead: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
+    customer: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-200',
+    at_risk: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-200',
+    churned: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200'
   }
 
   const lifecycleLabels: Record<string, string> = {
@@ -85,7 +85,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-start gap-3 flex-1">
           {/* ✅ NOVO: Avatar com foto de perfil */}
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-200 overflow-hidden">
+          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
             {contact.profile_pic_url ? (
               <img
                 src={getMediaProxyUrl(contact.profile_pic_url) || ''}
@@ -106,7 +106,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+              <div className="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium text-lg">
                 {contact.name.charAt(0).toUpperCase()}
               </div>
             )}
@@ -114,7 +114,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
           
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-lg">{contact.name}</h3>
-            <p className="text-sm text-gray-500 flex items-center gap-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
               <Phone className="h-3 w-3" />
               {contact.phone}
             </p>
@@ -147,7 +147,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
               variant="outline"
               size="sm"
               onClick={() => onEditTags(contact)}
-              className="p-1 text-blue-600 hover:bg-blue-50"
+              className="p-1 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30"
               title="Editar tags"
             >
               <Tag className="h-4 w-4" />
@@ -157,7 +157,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
             variant="outline"
             size="sm"
             onClick={() => onDelete(contact.id)}
-            className="p-1 text-red-600 hover:bg-red-50"
+            className="p-1 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
             title="Excluir contato"
           >
             <Trash2 className="h-4 w-4" />
@@ -172,7 +172,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
         </span>
         
         {contact.opted_out && (
-          <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+          <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200">
             Opt-out
           </span>
         )}
@@ -194,7 +194,7 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
       )}
 
       {/* Info */}
-      <div className="space-y-2 text-sm text-gray-600">
+      <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
         {contact.email && (
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 flex-shrink-0" />
@@ -267,10 +267,10 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, 
       {/* Engagement Score */}
       <div className="mt-3 pt-3 border-t">
         <div className="flex justify-between items-center text-xs">
-          <span className="text-gray-500">Engajamento</span>
+          <span className="text-gray-500 dark:text-gray-400">Engajamento</span>
           <span className="font-semibold">{contact.engagement_score}/100</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+        <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 mt-1">
           <div 
             className={`h-2 rounded-full transition-all ${getEngagementColor(contact.engagement_score)}`}
             style={{ width: `${contact.engagement_score}%` }}

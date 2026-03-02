@@ -60,8 +60,8 @@ export default function MessagesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mensagens</h1>
-        <p className="text-gray-600">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Mensagens</h1>
+        <p className="text-gray-600 dark:text-gray-400">
           Visualize e analise todas as mensagens recebidas
         </p>
       </div>
@@ -78,7 +78,7 @@ export default function MessagesPage() {
           <form onSubmit={handleSearch} className="flex gap-4">
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   value={searchQuery}
@@ -109,7 +109,7 @@ export default function MessagesPage() {
         ) : messages.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
-              <p className="text-gray-500">Nenhuma mensagem encontrada</p>
+              <p className="text-gray-500 dark:text-gray-400">Nenhuma mensagem encontrada</p>
             </CardContent>
           </Card>
         ) : (
@@ -119,15 +119,15 @@ export default function MessagesPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-medium text-gray-900">
+                      <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                         {message.chat_id}
                       </span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
                         {formatDate(message.created_at)}
                       </span>
                     </div>
                     
-                    <p className="text-gray-700 mb-3">{message.text}</p>
+                    <p className="text-gray-700 dark:text-gray-300 mb-3">{message.text}</p>
                     
                     {message.sentiment !== null && (
                       <div className="flex items-center gap-4 text-sm">
@@ -157,7 +157,7 @@ export default function MessagesPage() {
                     )}
                     
                     {message.summary && (
-                      <div className="mt-2 p-2 bg-gray-50 rounded text-sm">
+                      <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded text-sm">
                         <strong>Resumo:</strong> {message.summary}
                       </div>
                     )}
@@ -180,7 +180,7 @@ export default function MessagesPage() {
             Anterior
           </Button>
           
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-gray-600 dark:text-gray-400">
             Página {currentPage} de {totalPages}
           </span>
           

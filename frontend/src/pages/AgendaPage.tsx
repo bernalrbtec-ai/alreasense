@@ -198,9 +198,9 @@ export default function AgendaPage() {
       case 'completed':
         return 'bg-green-100 text-green-800'
       case 'cancelled':
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
     }
   }
 
@@ -230,7 +230,7 @@ export default function AgendaPage() {
       case 'urgent':
         return 'bg-red-100 text-red-800'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
     }
   }
 
@@ -324,18 +324,18 @@ export default function AgendaPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Agenda e Tarefas</h1>
-          <p className="text-sm text-gray-500 mt-1">Gerencie seus compromissos e pendências</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Agenda e Tarefas</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Gerencie seus compromissos e pendências</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Seletor de Visualização */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
             <button
               onClick={() => setViewMode('list')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 viewMode === 'list' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               title="Lista"
             >
@@ -345,8 +345,8 @@ export default function AgendaPage() {
               onClick={() => setViewMode('month')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 viewMode === 'month' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               title="Mês"
             >
@@ -356,8 +356,8 @@ export default function AgendaPage() {
               onClick={() => setViewMode('week')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 viewMode === 'week' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               title="Semana"
             >
@@ -367,8 +367,8 @@ export default function AgendaPage() {
               onClick={() => setViewMode('day')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                 viewMode === 'day' 
-                  ? 'bg-white text-gray-900 shadow-sm' 
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm' 
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
               }`}
               title="Dia"
             >
@@ -385,35 +385,35 @@ export default function AgendaPage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Total</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Total</div>
           <div className="text-2xl font-bold">{stats.total}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Pendentes</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Pendentes</div>
           <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Em Andamento</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Em Andamento</div>
           <div className="text-2xl font-bold text-blue-600">{stats.in_progress}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Concluídas</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Concluídas</div>
           <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Canceladas</div>
-          <div className="text-2xl font-bold text-gray-600">{stats.cancelled}</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Canceladas</div>
+          <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">{stats.cancelled}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Minhas</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Minhas</div>
           <div className="text-2xl font-bold">{stats.my_assigned}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Atrasadas</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Atrasadas</div>
           <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
         </Card>
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Com Data</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Com Data</div>
           <div className="text-2xl font-bold">{stats.with_due_date}</div>
         </Card>
       </div>
@@ -425,10 +425,10 @@ export default function AgendaPage() {
           {!searchExpanded && (
             <button
               onClick={() => setSearchExpanded(true)}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title="Buscar tarefas"
             >
-              <Search className="h-5 w-5 text-gray-600" />
+              <Search className="h-5 w-5 text-gray-600 dark:text-gray-400" />
             </button>
           )}
           
@@ -436,13 +436,13 @@ export default function AgendaPage() {
           {searchExpanded && (
             <div className="flex-1 min-w-[200px] flex items-center gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   placeholder="Buscar tarefas..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   autoFocus
                 />
               </div>
@@ -451,10 +451,10 @@ export default function AgendaPage() {
                   setSearchExpanded(false)
                   setSearchTerm('')
                 }}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 title="Fechar busca"
               >
-                <XCircle className="h-5 w-5 text-gray-600" />
+                <XCircle className="h-5 w-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
           )}
@@ -462,7 +462,7 @@ export default function AgendaPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="active">Ativas (sem concluídas)</option>
             <option value="all">Todos os Status</option>
@@ -475,7 +475,7 @@ export default function AgendaPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="all">Todas</option>
             <option value="task">Tarefas</option>
@@ -485,7 +485,7 @@ export default function AgendaPage() {
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="all">Todas as Prioridades</option>
             <option value="low">Baixa</option>
@@ -499,7 +499,7 @@ export default function AgendaPage() {
               type="checkbox"
               checked={myTasks}
               onChange={(e) => setMyTasks(e.target.checked)}
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 dark:border-gray-600"
             />
             <span className="text-sm">Minhas Tarefas</span>
           </label>
@@ -509,7 +509,7 @@ export default function AgendaPage() {
               type="checkbox"
               checked={overdue}
               onChange={(e) => setOverdue(e.target.checked)}
-              className="rounded border-gray-300"
+              className="rounded border-gray-300 dark:border-gray-600"
             />
             <span className="text-sm">Atrasadas</span>
           </label>
@@ -524,8 +524,8 @@ export default function AgendaPage() {
       ) : viewMode === 'list' ? (
         filteredTasks.length === 0 ? (
           <Card className="p-12 text-center">
-            <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-500">Nenhuma tarefa encontrada</p>
+            <Calendar className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+            <p className="text-gray-500 dark:text-gray-400">Nenhuma tarefa encontrada</p>
           </Card>
         ) : (
           <div className="space-y-4">
@@ -555,10 +555,10 @@ export default function AgendaPage() {
                   </div>
                   
                   {task.description && (
-                    <p className="text-gray-600 text-sm mb-3">{task.description}</p>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm mb-3">{task.description}</p>
                   )}
 
-                  <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+                  <div className="flex flex-wrap gap-4 text-sm text-gray-500 dark:text-gray-400">
                     {task.due_date && (
                       <div className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />

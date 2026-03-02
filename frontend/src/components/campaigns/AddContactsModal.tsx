@@ -87,17 +87,17 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md mx-4"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 w-full max-w-md mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Adicionar Contatos Faltantes</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-600">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Adicionar Contatos Faltantes</h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -106,11 +106,11 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
           {!result ? (
             <>
               <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  Campanha: <span className="font-medium text-gray-900">{campaign.name}</span>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  Campanha: <span className="font-medium text-gray-900 dark:text-gray-100">{campaign.name}</span>
                 </p>
-                <p className="text-sm text-gray-600 mb-2">
-                  Contatos atuais: <span className="font-medium text-gray-900">{campaign.total_contacts}</span>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  Contatos atuais: <span className="font-medium text-gray-900 dark:text-gray-100">{campaign.total_contacts}</span>
                 </p>
               </div>
 
@@ -135,37 +135,37 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
 
               {/* Seleção de Tag */}
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Selecionar Tag
                 </label>
                 
                 {/* Busca de tags */}
                 <div className="relative mb-3">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
                   <input
                     type="text"
                     placeholder="Buscar tag..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
 
                 {/* Lista de tags */}
-                <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
+                <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg">
                   {filteredTags.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-gray-500">
+                    <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
                       Nenhuma tag encontrada
                     </div>
                   ) : (
-                    <div className="divide-y divide-gray-200">
+                    <div className="divide-y divide-gray-200 dark:divide-gray-600">
                       {filteredTags.map((tag) => (
                         <button
                           key={tag.id}
                           onClick={() => setSelectedTagId(tag.id)}
                           className={`
-                            w-full text-left p-3 hover:bg-gray-50 transition-colors
-                            ${selectedTagId === tag.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''}
+                            w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors
+                            ${selectedTagId === tag.id ? 'bg-blue-50 dark:bg-blue-900/30 border-l-4 border-l-blue-500' : ''}
                           `}
                         >
                           <div className="flex items-center gap-2">
@@ -173,8 +173,8 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
                               className="w-4 h-4 rounded-full"
                               style={{ backgroundColor: tag.color }}
                             />
-                            <span className="font-medium text-gray-900">{tag.name}</span>
-                            <span className="text-xs text-gray-500 ml-auto">
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{tag.name}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">
                               {tag.contact_count} contatos
                             </span>
                           </div>
@@ -206,10 +206,10 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             disabled={adding}
           >
             {result ? 'Fechar' : 'Cancelar'}
@@ -221,7 +221,7 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
               className={`
                 px-4 py-2 rounded-lg transition-colors flex items-center gap-2
                 ${adding || !selectedTagId
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
                 }
               `}

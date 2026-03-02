@@ -322,7 +322,7 @@ const CampaignsPage: React.FC = () => {
       case 'completed':
         return <CheckCircle className="h-4 w-4 text-purple-500" />
       default:
-        return <FileText className="h-4 w-4 text-gray-500" />
+        return <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
     }
   }
 
@@ -353,7 +353,7 @@ const CampaignsPage: React.FC = () => {
       case 'completed':
         return 'border-l-purple-500 bg-purple-50'
       default:
-        return 'border-l-gray-500 bg-gray-50'
+        return 'border-l-gray-500 dark:border-l-gray-400 bg-gray-50 dark:bg-gray-700'
     }
   }
 
@@ -403,7 +403,7 @@ const CampaignsPage: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando campanhas...</p>
+          <p className="text-gray-600 dark:text-gray-400">Carregando campanhas...</p>
         </div>
       </div>
     )
@@ -414,8 +414,8 @@ const CampaignsPage: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📱 Campanhas</h1>
-          <p className="text-gray-600">Gerencie suas campanhas de WhatsApp</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">📱 Campanhas</h1>
+          <p className="text-gray-600 dark:text-gray-400">Gerencie suas campanhas de WhatsApp</p>
         </div>
         <Button onClick={() => setShowModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -443,7 +443,7 @@ const CampaignsPage: React.FC = () => {
           </Button>
         </div>
         {showStoppedCampaigns && (
-          <div className="mt-2 text-sm text-gray-600">
+          <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             ℹ️ Mostrando campanhas que foram paradas intencionalmente
           </div>
         )}
@@ -481,11 +481,11 @@ const CampaignsPage: React.FC = () => {
       {/* Modal de Logs */}
       {showLogsModal && selectedCampaignForLogs && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-2 sm:p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex justify-between items-center p-3 sm:p-4 border-b sticky top-0 bg-white z-10">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center p-3 sm:p-4 border-b dark:border-gray-600 sticky top-0 bg-white dark:bg-gray-800 z-10">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold truncate">📊 Logs da Campanha</h2>
-                <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedCampaignForLogs.name}</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{selectedCampaignForLogs.name}</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -519,7 +519,7 @@ const CampaignsPage: React.FC = () => {
                   <Download className="h-4 w-4" />
                   <span className="hidden sm:inline">Exportar Log</span>
                 </Button>
-                <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
+                <button onClick={() => setShowLogsModal(false)} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 ml-2 flex-shrink-0">
                   <X className="h-5 w-5 sm:h-6 sm:w-6" />
                 </button>
               </div>
@@ -527,10 +527,10 @@ const CampaignsPage: React.FC = () => {
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {logs.length === 0 ? (
-                <div className="text-center py-6 sm:py-8 text-gray-500">
-                  <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600">Nenhum log encontrado</p>
-                  <p className="text-sm text-gray-500">Esta campanha ainda não possui logs</p>
+                <div className="text-center py-6 sm:py-8 text-gray-500 dark:text-gray-400">
+                  <FileText className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+                  <p className="text-gray-600 dark:text-gray-400">Nenhum log encontrado</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Esta campanha ainda não possui logs</p>
                 </div>
               ) : (
                 <div className="space-y-3 sm:space-y-4">
@@ -654,8 +654,8 @@ const CampaignsPage: React.FC = () => {
                                   <div className="flex items-center gap-2">
                                     <Send className="h-4 w-4 text-blue-500" />
                                     <div>
-                                      <div className="font-medium text-gray-900">{log.contact_name}</div>
-                                      <div className="text-sm text-gray-500">{log.contact_phone}</div>
+                                      <div className="font-medium text-gray-900 dark:text-gray-100">{log.contact_name}</div>
+                                      <div className="text-sm text-gray-500 dark:text-gray-400">{log.contact_phone}</div>
                                     </div>
                                   </div>
                                   {log.instance_name && (
@@ -669,27 +669,27 @@ const CampaignsPage: React.FC = () => {
                                 {log.message_text && (
                                   <div className="bg-blue-50 border border-blue-200 rounded p-3">
                                     <div className="text-xs text-blue-600 font-medium mb-1">💬 Mensagem:</div>
-                                    <div className="text-sm text-gray-700 whitespace-pre-wrap">{log.message_text}</div>
+                                    <div className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{log.message_text}</div>
                                   </div>
                                 )}
 
                                 {/* Timeline de Status */}
-                                <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded">
+                                <div className="grid grid-cols-3 gap-2 bg-gray-50 dark:bg-gray-700/50 p-3 rounded">
                                   <div className="text-center">
-                                    <div className="text-xs text-gray-500 mb-1">📤 Enviada em</div>
-                                    <div className="text-sm font-medium text-gray-900">
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">📤 Enviada em</div>
+                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                       {log.sent_at ? formatDate(log.sent_at) : '---'}
                                     </div>
                                   </div>
-                                  <div className="text-center border-l border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">✅ Entregue em</div>
-                                    <div className="text-sm font-medium text-gray-600">
+                                  <div className="text-center border-l border-gray-200 dark:border-gray-600">
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">✅ Entregue em</div>
+                                    <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
                                       {log.delivered_at ? formatDate(log.delivered_at) : '---'}
                                     </div>
                                   </div>
-                                  <div className="text-center border-l border-gray-200">
-                                    <div className="text-xs text-gray-500 mb-1">👁️ Visto em</div>
-                                    <div className="text-sm font-medium text-gray-600">
+                                  <div className="text-center border-l border-gray-200 dark:border-gray-600">
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">👁️ Visto em</div>
+                                    <div className="text-sm font-medium text-gray-600 dark:text-gray-400">
                                       {log.read_at ? formatDate(log.read_at) : '---'}
                                     </div>
                                   </div>
@@ -750,7 +750,7 @@ const CampaignsPage: React.FC = () => {
                               {getLogIcon(log.log_type)}
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-medium text-gray-900">
+                                  <span className="font-medium text-gray-900 dark:text-gray-100">
                                     {log.log_type_display}
                                   </span>
                                   {log.instance_name && (
@@ -759,8 +759,8 @@ const CampaignsPage: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <p className="text-gray-700 mb-2">{log.message}</p>
-                                <div className="flex items-center gap-4 text-sm text-gray-500">
+                                <p className="text-gray-700 dark:text-gray-300 mb-2">{log.message}</p>
+                                <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                                   <span className="flex items-center gap-1">
                                     <Clock className="h-3 w-3" />
                                     {formatDate(log.created_at)}
@@ -785,7 +785,7 @@ const CampaignsPage: React.FC = () => {
               )}
             </div>
 
-            <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
+            <div className="p-3 sm:p-4 border-t dark:border-gray-600 bg-gray-50 dark:bg-gray-700 flex justify-end">
               <Button onClick={() => setShowLogsModal(false)} size="sm" className="w-full sm:w-auto">
                 Fechar
               </Button>

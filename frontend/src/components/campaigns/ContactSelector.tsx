@@ -132,7 +132,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
         
         <div className="space-y-2">
           {/* Todos */}
-          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
               type="radio"
               checked={value.type === 'all'}
@@ -141,17 +141,17 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-gray-600" />
+                <Users className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 <p className="font-medium">Todos os contatos ativos</p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Todos os contatos (exceto opted-out)
               </p>
             </div>
           </label>
           
           {/* Por Tags */}
-          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
               type="radio"
               checked={value.type === 'tags'}
@@ -160,10 +160,10 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <TagIcon className="h-5 w-5 text-gray-600" />
+                <TagIcon className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 <p className="font-medium">Por tags</p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Selecione uma ou mais tags
               </p>
               
@@ -180,14 +180,14 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
                       className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                         selectedTags.includes(tag.id)
                           ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
                       }`}
                     >
                       {tag.name} ({tag.contact_count})
                     </button>
                   ))}
                   {tags.length === 0 && (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       Nenhuma tag criada ainda
                     </p>
                   )}
@@ -197,7 +197,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
           </label>
           
           {/* Por Listas */}
-          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
               type="radio"
               checked={value.type === 'lists'}
@@ -206,10 +206,10 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <List className="h-5 w-5 text-gray-600" />
+                <List className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 <p className="font-medium">Por listas</p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Selecione uma ou mais listas de contatos
               </p>
               
@@ -218,7 +218,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
                   {lists.map(list => (
                     <label
                       key={list.id}
-                      className="flex items-center gap-3 p-2 bg-white rounded border hover:border-blue-400 cursor-pointer"
+                      className="flex items-center gap-3 p-2 bg-white dark:bg-gray-800 rounded border hover:border-blue-400 cursor-pointer"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <input
@@ -227,13 +227,13 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
                         onChange={() => toggleList(list.id)}
                       />
                       <span className="font-medium text-sm">{list.name}</span>
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
                         ({list.contact_count} contatos)
                       </span>
                     </label>
                   ))}
                   {lists.length === 0 && (
-                    <p className="text-sm text-gray-500">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       Nenhuma lista criada ainda
                     </p>
                   )}
@@ -243,7 +243,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
           </label>
           
           {/* Manual */}
-          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
+          <label className="flex items-start gap-3 p-4 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
             <input
               type="radio"
               checked={value.type === 'manual'}
@@ -252,10 +252,10 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
             />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <UserCheck className="h-5 w-5 text-gray-600" />
+                <UserCheck className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                 <p className="font-medium">Seleção manual</p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Escolher contatos individualmente
               </p>
               
@@ -275,7 +275,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
       <Card className="p-4 bg-blue-50 border-blue-200">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600">Contatos que receberão a campanha:</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Contatos que receberão a campanha:</p>
             <p className="text-2xl font-bold text-blue-600 mt-1">
               {estimatedCount}
             </p>
@@ -289,7 +289,7 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
           </p>
         )}
         
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
           * Excluindo automaticamente contatos opted-out
         </p>
       </Card>

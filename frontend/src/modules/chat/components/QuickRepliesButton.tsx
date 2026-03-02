@@ -120,14 +120,14 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
           onClick={() => setIsOpen(!isOpen)}
           disabled={disabled}
           className={`
-            p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 
+            p-2 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 rounded-full transition-all duration-150 
             flex-shrink-0 shadow-sm hover:shadow-md
-            ${isOpen ? 'bg-gray-200 shadow-md' : ''}
+            ${isOpen ? 'bg-gray-200 dark:bg-gray-600 shadow-md' : ''}
             ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
           `}
           title="Respostas rápidas (/)"
         >
-          <Zap className="w-6 h-6 text-gray-600" />
+          <Zap className="w-6 h-6 text-gray-600 dark:text-gray-400" />
         </button>
       </div>
       
@@ -143,7 +143,7 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
           {/* Busca */}
           <div className="p-3 border-b border-gray-200 dark:border-gray-700">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <input
                 type="text"
                 value={search}

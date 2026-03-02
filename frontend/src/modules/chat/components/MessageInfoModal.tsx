@@ -49,7 +49,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
       case 'failed':
         return { icon: X, label: 'Falhou', color: 'text-red-600' };
       default:
-        return { icon: Clock, label: 'Pendente', color: 'text-gray-600' };
+        return { icon: Clock, label: 'Pendente', color: 'text-gray-600 dark:text-gray-400' };
     }
   };
 
@@ -67,17 +67,17 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md mx-4 max-h-[90vh] overflow-hidden flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 w-full max-w-md mx-4 max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Informações da Mensagem</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-600">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações da Mensagem</h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+            className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
           >
-            <X className="w-5 h-5 text-gray-500" />
+            <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
           </button>
         </div>
 
@@ -86,22 +86,22 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
           <div className="space-y-4">
             {/* Tipo da Mensagem */}
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                {React.createElement(messageType.icon, { className: "w-5 h-5 text-gray-600" })}
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                {React.createElement(messageType.icon, { className: "w-5 h-5 text-gray-600 dark:text-gray-400" })}
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Tipo</p>
-                <p className="text-sm text-gray-600">{messageType.label}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Tipo</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{messageType.label}</p>
               </div>
             </div>
 
             {/* Status */}
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                 <StatusIcon className={`w-5 h-5 ${statusInfo.color}`} />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Status</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</p>
                 <div className="flex flex-col">
                   <p className={`text-sm ${statusInfo.color}`}>{statusInfo.label}</p>
                 </div>
@@ -115,8 +115,8 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Entregue</p>
-                  <p className="text-sm text-gray-600">{formatDateTime(message.updated_at)}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Entregue</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{formatDateTime(message.updated_at)}</p>
                 </div>
               </div>
             )}
@@ -128,34 +128,34 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                   <Eye className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Lida</p>
-                  <p className="text-sm text-gray-600">{formatDateTime(message.updated_at)}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Lida</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{formatDateTime(message.updated_at)}</p>
                 </div>
               </div>
             )}
 
             {/* Data/Hora de Envio */}
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Clock className="w-5 h-5 text-gray-600" />
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Enviada em</p>
-                <p className="text-sm text-gray-600">{formatDateTime(message.created_at)}</p>
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Enviada em</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">{formatDateTime(message.created_at)}</p>
               </div>
             </div>
 
             {/* Remetente */}
             {message.sender_name && (
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <User className="w-5 h-5 text-gray-600" />
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <User className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Remetente</p>
-                  <p className="text-sm text-gray-600">{message.sender_name}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Remetente</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{message.sender_name}</p>
                   {message.sender_phone && (
-                    <p className="text-xs text-gray-500">{message.sender_phone}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{message.sender_phone}</p>
                   )}
                 </div>
               </div>
@@ -163,7 +163,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
 
             {/* Direção */}
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
+              <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                 {message.direction === 'outgoing' ? (
                   <FileText className="w-5 h-5 text-blue-600" />
                 ) : (
@@ -171,8 +171,8 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                 )}
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">Direção</p>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Direção</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   {message.direction === 'outgoing' ? 'Enviada' : 'Recebida'}
                 </p>
               </div>
@@ -181,17 +181,17 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
             {/* Anexos */}
             {message.attachments && message.attachments.length > 0 && (
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <File className="w-5 h-5 text-gray-600" />
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <File className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Anexos</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Anexos</p>
                   <div className="mt-1 space-y-1">
                     {message.attachments.map((attachment) => (
-                      <div key={attachment.id} className="text-sm text-gray-600">
+                      <div key={attachment.id} className="text-sm text-gray-600 dark:text-gray-400">
                         <p className="font-medium">{attachment.original_filename || 'Arquivo'}</p>
                         {attachment.file_size && (
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
                             {formatFileSize(attachment.file_size)}
                           </p>
                         )}
@@ -205,12 +205,12 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
             {/* Conteúdo (se for texto) */}
             {message.content && (
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <FileText className="w-5 h-5 text-gray-600" />
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Conteúdo</p>
-                  <p className="text-sm text-gray-600 break-words">{message.content}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Conteúdo</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 break-words">{message.content}</p>
                 </div>
               </div>
             )}
@@ -218,17 +218,17 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
             {/* Remetente (dados completos) */}
             {message.sender_data && (
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <User className="w-5 h-5 text-gray-600" />
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <User className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Enviado por</p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Enviado por</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     {message.sender_data.first_name && message.sender_data.last_name
                       ? `${message.sender_data.first_name} ${message.sender_data.last_name}`
                       : message.sender_data.email}
                   </p>
-                  <p className="text-xs text-gray-500">{message.sender_data.email}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{message.sender_data.email}</p>
                 </div>
               </div>
             )}
@@ -240,8 +240,8 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                   <Info className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Nota Interna</p>
-                  <p className="text-sm text-gray-600">Esta mensagem não foi enviada ao WhatsApp</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Nota Interna</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Esta mensagem não foi enviada ao WhatsApp</p>
                 </div>
               </div>
             )}
@@ -263,11 +263,11 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
             {/* Reações */}
             {message.reactions && message.reactions.length > 0 && (
               <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <MessageSquare className="w-5 h-5 text-gray-600" />
+                <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Reações</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Reações</p>
                   <div className="mt-1 flex flex-wrap gap-2">
                     {message.reactions.map((reaction) => (
                       <div key={reaction.id} className="flex items-center gap-1 text-sm">
@@ -289,7 +289,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end">
           <button
             onClick={onClose}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

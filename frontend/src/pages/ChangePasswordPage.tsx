@@ -105,7 +105,7 @@ export default function ChangePasswordPage() {
         <Button
           variant="ghost"
           onClick={() => navigate('/profile')}
-          className="mb-4 p-0 h-auto text-gray-600 hover:text-gray-900"
+          className="mb-4 p-0 h-auto text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Voltar ao Perfil
@@ -116,8 +116,8 @@ export default function ChangePasswordPage() {
             <Lock className="h-5 w-5 text-blue-600" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Alterar Senha</h1>
-            <p className="text-gray-600">Mantenha sua conta segura</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Alterar Senha</h1>
+            <p className="text-gray-600 dark:text-gray-400">Mantenha sua conta segura</p>
           </div>
         </div>
       </div>
@@ -145,9 +145,9 @@ export default function ChangePasswordPage() {
                 onClick={() => setShowCurrentPassword(!showCurrentPassword)}
               >
                 {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>
@@ -173,13 +173,13 @@ export default function ChangePasswordPage() {
                 onClick={() => setShowNewPassword(!showNewPassword)}
               >
                 {showNewPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               A senha deve ter pelo menos 8 caracteres
             </p>
           </div>
@@ -204,9 +204,9 @@ export default function ChangePasswordPage() {
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
               >
                 {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4 text-gray-400" />
+                  <EyeOff className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 ) : (
-                  <Eye className="h-4 w-4 text-gray-400" />
+                  <Eye className="h-4 w-4 text-gray-400 dark:text-gray-500" />
                 )}
               </button>
             </div>

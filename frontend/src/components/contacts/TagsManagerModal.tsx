@@ -161,17 +161,17 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
           <div className="p-6 flex-shrink-0 border-b">
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   <TagIcon className="h-6 w-6 text-blue-600" />
                   Gerenciar Tags
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   Crie, edite e exclua tags do sistema
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="text-gray-500 hover:text-gray-700 transition-colors"
+                className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -179,7 +179,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
 
             {/* Criar Nova Tag */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">Criar Nova Tag</h3>
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Criar Nova Tag</h3>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -192,13 +192,13 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                       createTag()
                     }
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <input
                   type="color"
                   value={newTagColor}
                   onChange={(e) => setNewTagColor(e.target.value)}
-                  className="w-16 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                  className="w-16 h-10 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer"
                   title="Cor da tag"
                 />
                 <Button
@@ -217,13 +217,13 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
           <div className="flex-1 overflow-y-auto p-6">
             {isLoading ? (
               <div className="text-center py-8">
-                <p className="text-gray-500">Carregando tags...</p>
-              </div>
+<p className="text-gray-500 dark:text-gray-400">Carregando tags...</p>
+            </div>
             ) : tags.length === 0 ? (
               <div className="text-center py-8">
-                <TagIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-500">Nenhuma tag cadastrada</p>
-                <p className="text-sm text-gray-400 mt-1">
+                <TagIcon className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+                <p className="text-gray-500 dark:text-gray-400">Nenhuma tag cadastrada</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">
                   Crie sua primeira tag usando o formulário acima
                 </p>
               </div>
@@ -232,7 +232,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                 {tags.map((tag) => (
                   <div
                     key={tag.id}
-                    className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                    className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-2 flex-1">
@@ -241,23 +241,23 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                           style={{ backgroundColor: tag.color }}
                         />
                         <div className="flex-1">
-                          <h4 className="font-medium text-gray-900">{tag.name}</h4>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">{tag.name}</h4>
                           {tag.description && (
-                            <p className="text-sm text-gray-500 mt-1">{tag.description}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{tag.description}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex gap-1">
                         <button
                           onClick={() => handleEditTag(tag)}
-                          className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                          className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                           title="Editar tag"
                         >
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteClick(tag)}
-                          className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          className="p-1.5 text-gray-600 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                           title="Excluir tag"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -265,7 +265,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                       </div>
                     </div>
                     {tag.contact_count !== undefined && (
-                      <div className="text-xs text-gray-500 mt-2">
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                         {tag.contact_count} contato{tag.contact_count !== 1 ? 's' : ''}
                       </div>
                     )}
@@ -309,7 +309,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                     setShowDeleteConfirm(false)
                     setDeletingTag(null)
                   }}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -330,13 +330,13 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
 
                 {deletingTag.contact_count !== undefined && deletingTag.contact_count > 0 && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                       Esta tag está associada a <strong>{deletingTag.contact_count} contato{deletingTag.contact_count !== 1 ? 's' : ''}</strong>.
                       O que deseja fazer?
                     </p>
 
                     <div className="space-y-2">
-                      <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                         <input
                           type="radio"
                           name="deleteOption"
@@ -345,17 +345,17 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                           className="mt-1"
                         />
                         <div>
-                          <div className="font-medium text-gray-900">
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
                             Apenas remover a tag
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
                             Os contatos serão mantidos, apenas a tag será removida deles
                           </div>
                         </div>
                       </label>
 
                       {tags.filter(t => t.id !== deletingTag.id).length > 0 && (
-                        <label className="flex items-start gap-3 p-3 border border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50">
+                        <label className="flex items-start gap-3 p-3 border border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30">
                           <input
                             type="radio"
                             name="deleteOption"
@@ -411,7 +411,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                 )}
 
                 {deletingTag.contact_count === 0 && (
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Esta tag não possui contatos associados. A exclusão será permanente.
                   </p>
                 )}

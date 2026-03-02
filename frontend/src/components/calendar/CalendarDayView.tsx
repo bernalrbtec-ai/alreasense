@@ -150,14 +150,14 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick,
         {Object.keys(tasksByHour).length === 0 ? (
           <div 
             onClick={handleDateClick}
-            className={`text-center py-12 text-gray-500 ${
+            className={`text-center py-12 text-gray-500 dark:text-gray-400 ${
               onDateClick && !isPast(currentDate) 
-                ? 'cursor-pointer hover:bg-gray-50 rounded-lg transition-colors' 
+                ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 rounded-lg transition-colors' 
                 : ''
             }`}
             title={onDateClick && !isPast(currentDate) ? 'Clique para criar uma tarefa' : ''}
           >
-            <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
             <p>Nenhuma tarefa agendada para este dia</p>
             {onDateClick && !isPast(currentDate) && (
               <p className="text-sm text-blue-600 mt-2">Clique aqui para criar uma tarefa</p>
@@ -172,7 +172,7 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick,
 
               return (
                 <div key={hour} className="border-l-4 border-blue-500 pl-4">
-                  <div className="font-semibold text-gray-700 mb-2">{hourLabel}</div>
+                  <div className="font-semibold text-gray-700 dark:text-gray-300 mb-2">{hourLabel}</div>
                   <div className="space-y-2">
                     {hourTasks.map(task => {
                       const taskDate = task.due_date ? new Date(task.due_date) : null
@@ -187,7 +187,7 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick,
                           }}
                           className={`task-item p-3 rounded-lg cursor-pointer transition-shadow hover:shadow-md ${
                             task.status === 'completed'
-                              ? 'bg-gray-100 text-gray-600 line-through'
+                              ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 line-through'
                               : task.priority === 'urgent'
                               ? 'bg-red-50 border border-red-200'
                               : task.priority === 'high'
@@ -201,14 +201,14 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick,
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 {timeStr && (
-                                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                                  <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
                                     <Clock className="h-3 w-3" />
                                     {timeStr}
                                   </span>
                                 )}
                                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                   task.status === 'completed'
-                                    ? 'bg-gray-200 text-gray-600'
+                                    ? 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
                                     : task.priority === 'urgent'
                                     ? 'bg-red-200 text-red-800'
                                     : task.priority === 'high'
@@ -218,11 +218,11 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick,
                                   {task.task_type === 'agenda' ? 'Agenda' : task.priority === 'urgent' ? 'Urgente' : task.priority === 'high' ? 'Alta' : 'Normal'}
                                 </span>
                               </div>
-                              <h3 className="font-semibold text-gray-900">{task.title}</h3>
+                              <h3 className="font-semibold text-gray-900 dark:text-gray-100">{task.title}</h3>
                               {task.description && (
-                                <p className="text-sm text-gray-600 mt-1 line-clamp-2">{task.description}</p>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">{task.description}</p>
                               )}
-                              <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                              <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
                                 {task.assigned_to_data && (
                                   <span>👤 {task.assigned_to_data.first_name || task.assigned_to_data.email}</span>
                                 )}

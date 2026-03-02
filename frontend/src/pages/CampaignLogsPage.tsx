@@ -126,7 +126,7 @@ export default function CampaignLogsPage() {
       case 'campaign_paused':
         return <X className="h-4 w-4 text-orange-500" />
       default:
-        return <MessageSquare className="h-4 w-4 text-gray-500" />
+        return <MessageSquare className="h-4 w-4 text-gray-500 dark:text-gray-400" />
     }
   }
 
@@ -143,7 +143,7 @@ export default function CampaignLogsPage() {
       case 'campaign_paused':
         return 'border-l-orange-500 bg-orange-50'
       default:
-        return 'border-l-gray-500 bg-gray-50'
+        return 'border-l-gray-500 bg-gray-50 dark:bg-gray-800'
     }
   }
 
@@ -168,8 +168,8 @@ export default function CampaignLogsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📊 Logs de Campanhas</h1>
-          <p className="text-gray-600">Monitore todas as atividades das suas campanhas</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">📊 Logs de Campanhas</h1>
+          <p className="text-gray-600 dark:text-gray-400">Monitore todas as atividades das suas campanhas</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={fetchLogs} variant="outline" size="sm">
@@ -190,7 +190,7 @@ export default function CampaignLogsPage() {
             <Card key={type} className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-600">{data.display}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{data.display}</p>
                   <p className="text-2xl font-bold">{data.count}</p>
                 </div>
                 {getLogIcon(type)}
@@ -277,21 +277,21 @@ export default function CampaignLogsPage() {
           <h3 className="text-lg font-semibold">
             📝 Logs ({pagination.total_count} total)
           </h3>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
             Página {pagination.page} de {pagination.total_pages}
           </div>
         </div>
 
         {loading ? (
           <div className="text-center py-8">
-            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-gray-400 mb-2" />
-            <p className="text-gray-600">Carregando logs...</p>
+            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+            <p className="text-gray-600 dark:text-gray-400">Carregando logs...</p>
           </div>
         ) : logs.length === 0 ? (
           <div className="text-center py-8">
-            <MessageSquare className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-            <p className="text-gray-600">Nenhum log encontrado</p>
-            <p className="text-sm text-gray-500">Tente ajustar os filtros</p>
+            <MessageSquare className="h-12 w-12 mx-auto text-gray-400 dark:text-gray-500 mb-4" />
+            <p className="text-gray-600 dark:text-gray-400">Nenhum log encontrado</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Tente ajustar os filtros</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -305,7 +305,7 @@ export default function CampaignLogsPage() {
                     {getLogIcon(log.log_type)}
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
                           {log.log_type_display}
                         </span>
                         {log.campaign_name && (
@@ -319,8 +319,8 @@ export default function CampaignLogsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-gray-700 mb-2">{log.message}</p>
-                      <div className="flex items-center gap-4 text-sm text-gray-500">
+                      <p className="text-gray-700 dark:text-gray-300 mb-2">{log.message}</p>
+                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
                           {formatDate(log.created_at)}
@@ -353,7 +353,7 @@ export default function CampaignLogsPage() {
             >
               Anterior
             </Button>
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-600 dark:text-gray-400">
               Página {pagination.page} de {pagination.total_pages}
             </span>
             <Button

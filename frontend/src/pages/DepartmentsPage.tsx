@@ -129,8 +129,8 @@ export default function DepartmentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Departamentos</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Departamentos</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             Gerencie os departamentos da sua organização
           </p>
         </div>
@@ -148,7 +148,7 @@ export default function DepartmentsPage() {
         {departments.map((dept) => (
           <div
             key={dept.id}
-            className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-6 hover:shadow-md transition-shadow"
           >
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
@@ -162,7 +162,7 @@ export default function DepartmentsPage() {
                   />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">{dept.name}</h3>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{dept.name}</h3>
                   {dept.ai_enabled && (
                     <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full mt-1 inline-block">
                       IA Habilitada
@@ -173,14 +173,14 @@ export default function DepartmentsPage() {
               <div className="flex gap-2">
                 <button
                   onClick={() => handleEdit(dept)}
-                  className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                  className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                   title="Editar"
                 >
                   <Pencil className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => handleDelete(dept.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                   title="Excluir"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -188,7 +188,7 @@ export default function DepartmentsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
               <Users className="w-4 h-4" />
               <span>0 usuários</span>
             </div>
@@ -197,9 +197,9 @@ export default function DepartmentsPage() {
       </div>
 
       {departments.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600">Nenhum departamento cadastrado</p>
+        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <Building2 className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-600 dark:text-gray-400">Nenhum departamento cadastrado</p>
           <button
             onClick={() => setShowModal(true)}
             className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
@@ -212,8 +212,8 @@ export default function DepartmentsPage() {
       {/* Modal Criar/Editar */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
               {editingDept ? 'Editar Departamento' : 'Novo Departamento'}
             </h2>
 
@@ -226,7 +226,7 @@ export default function DepartmentsPage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Financeiro, Comercial, Suporte"
                   required
                 />
@@ -247,24 +247,24 @@ export default function DepartmentsPage() {
                     type="text"
                     value={formData.color}
                     onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="#3b82f6"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Mensagem de Transferência
                 </label>
                 <textarea
                   value={formData.transfer_message}
                   onChange={(e) => setFormData({ ...formData, transfer_message: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Mensagem automática enviada ao cliente quando uma conversa é transferida para este departamento"
                   rows={3}
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Mensagem opcional que será enviada automaticamente ao cliente quando uma conversa for transferida para este departamento
                 </p>
               </div>
@@ -277,7 +277,7 @@ export default function DepartmentsPage() {
                   onChange={(e) => setFormData({ ...formData, ai_enabled: e.target.checked })}
                   className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
                 />
-                <label htmlFor="ai_enabled" className="text-sm text-gray-700">
+                <label htmlFor="ai_enabled" className="text-sm text-gray-700 dark:text-gray-300">
                   Habilitar recursos de IA
                 </label>
               </div>
@@ -286,7 +286,7 @@ export default function DepartmentsPage() {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Cancelar
                 </button>

@@ -63,13 +63,13 @@ function averageSatisfactionValue(summaries: ConversationSummaryItem[]): number 
 /** Renderiza 5 estrelas para satisfação 1-5; "—" se inválido. */
 function SatisfactionStars({ value }: { value: unknown }) {
   const n = parseSatisfactionValue(value)
-  if (n === null) return <span className="text-gray-400">—</span>
+  if (n === null) return <span className="text-gray-400 dark:text-gray-500">—</span>
   return (
     <span className="inline-flex items-center gap-0.5" title={`Satisfação: ${n}`} aria-label={`Satisfação: ${n} de 5`}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`h-4 w-4 shrink-0 ${i <= n ? 'fill-amber-400 text-amber-500' : 'text-gray-300'}`}
+          className={`h-4 w-4 shrink-0 ${i <= n ? 'fill-amber-400 text-amber-500 dark:fill-amber-500 dark:text-amber-400' : 'text-gray-300 dark:text-gray-600'}`}
           strokeWidth={i <= n ? 0 : 1.5}
         />
       ))}
@@ -653,7 +653,7 @@ export function RagMemoriesManager() {
         <div className="flex items-start justify-between mb-4">
           <div>
             <h3 className="text-lg font-medium text-gray-900">Contexto</h3>
-            <p className="text-sm text-gray-600 mt-1">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
             </p>
           </div>
@@ -751,45 +751,45 @@ export function RagMemoriesManager() {
             <LoadingSpinner />
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-gray-500 py-6">Nenhum resumo encontrado.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 py-6">Nenhum resumo encontrado.</p>
         ) : (
           <>
-            <p className="text-sm text-gray-600 mb-2">Total: {count}</p>
-            <div className="overflow-x-auto border border-gray-200 rounded-lg">
-              <table className="min-w-full divide-y divide-gray-200">
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Total: {count}</p>
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-600 rounded-lg">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 {(() => {
                   const groups = groupSummariesByContact(items)
                   return (
                     <>
-                      <tbody className="bg-white divide-y divide-gray-200">
+                      <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-600">
                         {groups.map((group) => {
                           const isCollapsed = collapsedContactKeys.has(group.contactKey)
                           return (
                             <Fragment key={group.contactKey}>
-                              <tr className="bg-gray-50 border-t border-gray-200 first:border-t-0">
+                              <tr className="bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-600 first:border-t-0">
                                 <td className="px-3 py-2 w-10 align-middle">
                                   <button
                                     type="button"
                                     tabIndex={0}
                                     onClick={() => toggleContactCollapsed(group.contactKey)}
                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleContactCollapsed(group.contactKey) } }}
-                                    className="inline-flex p-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                                    className="inline-flex p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300 dark:focus:ring-gray-500"
                                     aria-expanded={!isCollapsed}
                                     aria-label={isCollapsed ? 'Expandir detalhes do contato' : 'Retrair detalhes do contato'}
                                   >
-                                    {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600" /> : <ChevronDown className="h-4 w-4 text-gray-600" />}
+                                    {isCollapsed ? <ChevronRight className="h-4 w-4 text-gray-600 dark:text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-600 dark:text-gray-400" />}
                                   </button>
                                 </td>
-                                <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-700">
+                                <td colSpan={6} className="px-3 py-2 text-sm font-medium text-gray-900 dark:text-gray-100">
                                   <div className="flex items-center justify-between gap-3 flex-wrap min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap min-w-0">
-                                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-800 truncate max-w-[200px]" title={group.contactLabel}>
+                                      <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-gray-100 truncate max-w-[200px]" title={group.contactLabel}>
                                         {group.contactLabel}
                                       </span>
                                       {group.contactTags.length > 0 && (
                                         <span className="flex flex-wrap gap-1">
                                           {group.contactTags.map((tag) => (
-                                            <span key={tag} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                                            <span key={tag} className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
                                               {tag}
                                             </span>
                                           ))}
@@ -797,7 +797,7 @@ export function RagMemoriesManager() {
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2 shrink-0">
-                                      <span className="text-gray-600 font-normal">Último resumo {group.mostRecentAt}</span>
+                                      <span className="text-gray-800 dark:text-gray-200 font-normal">Último resumo {group.mostRecentAt}</span>
                                       <SatisfactionStars value={averageSatisfactionValue(group.summaries)} />
                                     </div>
                                   </div>
@@ -808,22 +808,22 @@ export function RagMemoriesManager() {
                         return (
                           <tr
                             key={`c-${group.contactKey}`}
-                            className="bg-blue-50/50"
+                            className="bg-blue-50/50 dark:bg-blue-900/20"
                             role="row"
                             aria-label={`Conversa consolidada do contato ${group.contactLabel}, somente leitura`}
                           >
                             <td className="px-3 py-2 align-top" role="gridcell">
-                              <span className="inline-flex text-blue-600" title="Memória consolidada (somente leitura)">
+                              <span className="inline-flex text-blue-600 dark:text-blue-400" title="Memória consolidada (somente leitura)">
                                 <Layers className="h-4 w-4" />
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-sm text-blue-700 align-top" role="gridcell">
+                            <td className="px-3 py-2 text-sm text-blue-700 dark:text-blue-300 align-top" role="gridcell">
                               <div className="flex items-center gap-1.5">
                                 <Layers className="h-4 w-4 shrink-0" />
                                 Conversa consolidada
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-sm text-gray-700 align-top max-w-md whitespace-pre-wrap" role="gridcell" title={consolidatedText ? (consolidatedText.length > 2000 ? `${consolidatedText.slice(0, 2000)}…` : consolidatedText) : undefined}>
+                            <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 align-top max-w-md whitespace-pre-wrap" role="gridcell" title={consolidatedText ? (consolidatedText.length > 2000 ? `${consolidatedText.slice(0, 2000)}…` : consolidatedText) : undefined}>
                               {consolidatedText ? (
                                 <>
                                   {consolidatedText.length > 400
@@ -832,7 +832,7 @@ export function RagMemoriesManager() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="mt-1.5 h-7 text-blue-600 hover:text-blue-800"
+                                    className="mt-1.5 h-7 text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
                                     onClick={() => setConsolidatedFullModalContent(consolidatedText)}
                                     aria-label="Ver texto completo da conversa consolidada"
                                   >
@@ -843,34 +843,34 @@ export function RagMemoriesManager() {
                               ) : '—'}
                             </td>
                             <td className="px-3 py-2 align-top" role="gridcell">
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200">
                                 Consolidado
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-500 align-top" role="gridcell">—</td>
-                            <td className="px-3 py-2 text-xs align-top" role="gridcell">—</td>
+                            <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300 align-top" role="gridcell">—</td>
+                            <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300 align-top" role="gridcell">—</td>
                             <td className="px-3 py-2 align-top" role="gridcell" />
                           </tr>
                         )
                       })()}
                       {!isCollapsed && (
                         <>
-                      <tr key={`h-${group.contactKey}`} className="bg-gray-50">
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-10">Consolidar</td>
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Contato / Conversa</td>
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Resumo</td>
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</td>
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Revisado</td>
-                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Satisfação</td>
-                        <td className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</td>
+                      <tr key={`h-${group.contactKey}`} className="bg-gray-100 dark:bg-gray-700">
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase w-10">Consolidar</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Contato / Conversa</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Resumo</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Status</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Revisado</td>
+                        <td className="px-3 py-2 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Satisfação</td>
+                        <td className="px-3 py-2 text-right text-xs font-medium text-gray-700 dark:text-gray-200 uppercase">Ações</td>
                       </tr>
-                      <tr key={`s-${group.contactKey}`} className="bg-gray-100/50">
-                        <td colSpan={7} className="px-3 py-1 text-xs font-medium text-gray-500">
+                      <tr key={`s-${group.contactKey}`} className="bg-gray-100 dark:bg-gray-700">
+                        <td colSpan={7} className="px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200">
                           Todas as conversas desse contato
                         </td>
                       </tr>
                       {group.summaries.map((item) => (
-                        <tr key={item.id}>
+                        <tr key={item.id} className="dark:bg-gray-800/50">
                           <td className="px-3 py-2">
                             {item.status === 'approved' ? (
                               <input
@@ -880,13 +880,13 @@ export function RagMemoriesManager() {
                                 title="Incluir na consolidação (mesmo contato)"
                               />
                             ) : (
-                              <span className="text-gray-300">—</span>
+                              <span className="text-gray-300 dark:text-gray-500">—</span>
                             )}
                           </td>
-                          <td className="px-3 py-2 text-sm text-gray-600">
+                          <td className="px-3 py-2 text-sm text-gray-800 dark:text-gray-200">
                             <div className="flex items-center gap-1.5">
                               {item.is_consolidated && (
-                                <span className="inline-flex shrink-0 text-blue-600" title="Incluído na memória consolidada do contato">
+                                <span className="inline-flex shrink-0 text-blue-600 dark:text-blue-400" title="Incluído na memória consolidada do contato">
                                   <Layers className="h-4 w-4" />
                                 </span>
                               )}
@@ -895,21 +895,21 @@ export function RagMemoriesManager() {
                                 : '—'}
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate" title={item.content}>
+                          <td className="px-3 py-2 text-sm text-gray-800 dark:text-gray-200 max-w-xs truncate" title={item.content}>
                             {item.content ? `${item.content.slice(0, 120)}${item.content.length > 120 ? '…' : ''}` : '—'}
                           </td>
                           <td className="px-3 py-2">
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              item.status === 'approved' ? 'bg-green-100 text-green-800' :
-                              item.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                              item.status === 'approved' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200' :
+                              item.status === 'rejected' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200' : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200'
                             }`} title={item.is_auto_rejected ? (item.metadata?.auto_rejected_reason as string) || 'Reprovado automaticamente' : undefined}>
                               {item.status_display ?? (item.status === 'pending' ? 'Pendente' : item.status === 'approved' ? 'Aprovado' : 'Reprovado')}
                             </span>
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-500">
+                          <td className="px-3 py-2 text-xs text-gray-700 dark:text-gray-300">
                             {item.reviewed_at ? new Date(item.reviewed_at).toLocaleString('pt-BR') : '—'}
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-600 tabular-nums">
+                          <td className="px-3 py-2 text-xs text-gray-800 dark:text-gray-200 tabular-nums">
                             <SatisfactionStars value={item.metadata?.satisfaction} />
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -943,7 +943,7 @@ export function RagMemoriesManager() {
               </table>
             </div>
             <div className="flex items-center justify-between mt-3">
-              <span className="text-sm text-gray-600">
+              <span className="text-sm text-gray-600 dark:text-gray-300">
                 Exibindo {items.length} de {count}
               </span>
               <div className="flex gap-2">

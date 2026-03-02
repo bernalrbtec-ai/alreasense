@@ -26,10 +26,10 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>(Object.keys(EMOJI_CATEGORIES)[0]);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden"
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 overflow-hidden"
          style={{ width: '100%', height: '100%' }}>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800">
         <div className="flex gap-1 overflow-x-auto">
           {Object.keys(EMOJI_CATEGORIES).map((category) => (
             <button
@@ -38,8 +38,8 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
               className={`
                 px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap
                 ${selectedCategory === category 
-                  ? 'bg-white text-blue-600' 
-                  : 'text-gray-600 hover:bg-gray-100'
+? 'bg-white dark:bg-gray-800 text-blue-600'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }
               `}
             >
@@ -49,9 +49,9 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
         </div>
         <button
           onClick={onClose}
-          className="p-1 hover:bg-gray-200 rounded transition-colors"
+          className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
         >
-          <X className="w-4 h-4 text-gray-600" />
+          <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
         </button>
       </div>
 
@@ -63,7 +63,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
               key={index}
               onClick={() => onSelect(emoji)}
               className="
-                w-8 h-8 flex items-center justify-center text-xl rounded hover:bg-gray-100
+                w-8 h-8 flex items-center justify-center text-xl rounded hover:bg-gray-100 dark:hover:bg-gray-700
                 transition-colors cursor-pointer
               "
               title={emoji}

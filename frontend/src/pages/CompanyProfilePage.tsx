@@ -283,18 +283,18 @@ export default function CompanyProfilePage() {
     <div className="max-w-3xl mx-auto p-6">
       <Link
         to="/billing"
-        className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-6"
+        className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 mb-6"
       >
         <ArrowLeft className="h-4 w-4" />
         Voltar para Planos
       </Link>
 
       <Card className="p-6">
-        <h1 className="text-xl font-semibold text-gray-900 mb-6 flex items-center gap-2">
+        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6 flex items-center gap-2">
           <Building2 className="h-6 w-6 text-blue-600" />
           Dados da Empresa
         </h1>
-        <p className="text-sm text-gray-600 mb-6">
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
           Preencha os dados usados para cobrança, faturamento e contexto da BIA (secretária virtual).
         </p>
 
@@ -431,7 +431,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="missao"
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.missao)}
               onChange={(e) => handleChange('missao', e.target.value)}
               placeholder="Nossa missão é..."
@@ -443,7 +443,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="sobre_empresa"
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.sobre_empresa)}
               onChange={(e) => handleChange('sobre_empresa', e.target.value)}
               placeholder="Histórico e descrição..."
@@ -455,7 +455,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="produtos_servicos"
               rows={4}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.produtos_servicos)}
               onChange={(e) => handleChange('produtos_servicos', e.target.value)}
               placeholder="Liste os principais produtos ou serviços oferecidos..."
@@ -464,7 +464,7 @@ export default function CompanyProfilePage() {
 
           <div>
             <Label>Logo</Label>
-            <p className="text-xs text-gray-500 mb-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
               Máx. {LOGO_MAX_KB} KB. PNG, JPEG ou WebP.
             </p>
             {profile.logo_url ? (

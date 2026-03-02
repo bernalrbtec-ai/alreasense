@@ -41,7 +41,7 @@ export function NotificationToggle() {
         p-2 rounded-full transition-colors
         ${isEnabled 
           ? 'text-green-600 hover:bg-green-100' 
-          : 'text-gray-600 hover:bg-gray-200'
+          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
         }
       `}
       title={isEnabled ? 'Desativar notificações' : 'Ativar notificações'}

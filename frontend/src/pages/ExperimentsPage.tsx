@@ -75,21 +75,21 @@ export default function ExperimentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Experimentos</h1>
-        <p className="text-gray-600">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Experimentos</h1>
+        <p className="text-gray-600 dark:text-gray-400">
           Gerencie prompts e execute experimentos de IA
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-600">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('prompts')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'prompts'
                 ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}
           >
             <FlaskConical className="h-4 w-4 inline mr-2" />
@@ -100,7 +100,7 @@ export default function ExperimentsPage() {
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'experiments'
                 ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}
           >
             <BarChart3 className="h-4 w-4 inline mr-2" />
@@ -127,8 +127,8 @@ export default function ExperimentsPage() {
           ) : prompts.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
-                <FlaskConical className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">Nenhum prompt configurado</p>
+                <FlaskConical className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 mb-4">Nenhum prompt configurado</p>
                 <Button>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Primeiro Prompt
@@ -170,8 +170,8 @@ export default function ExperimentsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-gray-600 mb-2">{prompt.description}</p>
-                    <div className="bg-gray-50 p-3 rounded text-sm font-mono">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{prompt.description}</p>
+                    <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded text-sm font-mono">
                       {prompt.body.substring(0, 200)}
                       {prompt.body.length > 200 && '...'}
                     </div>
@@ -195,8 +195,8 @@ export default function ExperimentsPage() {
           ) : experiments.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
-                <BarChart3 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">Nenhum experimento executado ainda</p>
+                <BarChart3 className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Nenhum experimento executado ainda</p>
               </CardContent>
             </Card>
           ) : (
@@ -215,7 +215,7 @@ export default function ExperimentsPage() {
                         experiment.status === 'running' ? 'bg-blue-100 text-blue-800' :
                         experiment.status === 'completed' ? 'bg-green-100 text-green-800' :
                         experiment.status === 'failed' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
+                        'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                       }`}>
                         {experiment.status}
                       </span>
@@ -227,7 +227,7 @@ export default function ExperimentsPage() {
                         <span>Prompt: {experiment.prompt_version}</span>
                         <span>Progresso: {experiment.processed_messages}/{experiment.total_messages}</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                         <div 
                           className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                           style={{ width: `${experiment.progress_percentage}%` }}

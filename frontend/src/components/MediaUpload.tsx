@@ -134,19 +134,19 @@ export function MediaUpload({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-4 space-y-4">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 space-y-4">
       {/* File Input */}
       {!file && (
         <div>
           <label
             htmlFor="file-upload"
-            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-gray-50 transition-colors"
+            className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
-            <Upload className="w-8 h-8 text-gray-400 mb-2" />
-            <p className="text-sm text-gray-600">
+            <Upload className="w-8 h-8 text-gray-400 dark:text-gray-500 mb-2" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Clique para selecionar ou arraste o arquivo
             </p>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
               Máx: {maxSize}MB
             </p>
           </label>
@@ -166,7 +166,7 @@ export function MediaUpload({
       {file && (
         <div className="space-y-3">
           {/* Preview/Icon */}
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+          <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
             {preview ? (
               <img
                 src={preview}
@@ -174,16 +174,16 @@ export function MediaUpload({
                 className="w-16 h-16 object-cover rounded"
               />
             ) : (
-              <div className="w-16 h-16 flex items-center justify-center bg-gray-200 rounded text-gray-500">
+              <div className="w-16 h-16 flex items-center justify-center bg-gray-200 dark:bg-gray-600 rounded text-gray-500 dark:text-gray-400">
                 {getFileIcon(file.type)}
               </div>
             )}
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                 {file.name}
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 {formatFileSize(file.size)}
               </p>
             </div>
@@ -191,9 +191,9 @@ export function MediaUpload({
             {!uploading && (
               <button
                 onClick={handleCancel}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
               </button>
             )}
           </div>
@@ -201,13 +201,13 @@ export function MediaUpload({
           {/* Progress Bar */}
           {uploading && (
             <div className="space-y-2">
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
                 <div
                   className="bg-blue-500 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
                 {progress < 100 ? `Enviando... ${progress}%` : 'Processando...'}
               </p>
             </div>
@@ -218,7 +218,7 @@ export function MediaUpload({
             <div className="flex gap-2">
               <button
                 onClick={handleCancel}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
               >
                 Cancelar
               </button>
@@ -235,7 +235,7 @@ export function MediaUpload({
           {uploading && (
             <div className="flex items-center justify-center gap-2 py-2">
               <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-              <span className="text-sm text-gray-600">Enviando arquivo...</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400">Enviando arquivo...</span>
             </div>
           )}
         </div>

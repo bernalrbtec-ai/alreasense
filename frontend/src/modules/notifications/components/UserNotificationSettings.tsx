@@ -126,7 +126,7 @@ export const UserNotificationSettings: React.FC = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando suas preferências...</p>
+          <p className="text-gray-600 dark:text-gray-400">Carregando suas preferências...</p>
         </div>
       </div>
     );
@@ -174,11 +174,11 @@ export const UserNotificationSettings: React.FC = () => {
       <Card className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <Clock className="h-5 w-5" />
               Resumo Diário
             </h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Configure um horário para receber um resumo completo das suas tarefas
             </p>
           </div>
@@ -196,14 +196,14 @@ export const UserNotificationSettings: React.FC = () => {
         {preferences.daily_summary_enabled && (
           <div className="mt-4 space-y-4 animate-fade-in">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Horário do Resumo
               </label>
               <input
                 type="time"
                 value={preferences.daily_summary_time || ''}
                 onChange={(e) => updatePreference('daily_summary_time', e.target.value)}
-                className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-2 px-4"
+                className="block w-full rounded-lg border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-2 px-4"
                 required
               />
               {preferences.daily_summary_time && (
@@ -212,7 +212,7 @@ export const UserNotificationSettings: React.FC = () => {
                 </p>
               )}
             </div>
-            <div className="pt-2 border-t border-gray-200">
+            <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
               <Button
                 onClick={sendDailySummaryNow}
                 disabled={isSending}
@@ -241,7 +241,7 @@ export const UserNotificationSettings: React.FC = () => {
 
       {/* Canais de Notificação */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <Bell className="h-5 w-5" />
           Canais de Notificação
         </h3>
@@ -253,8 +253,8 @@ export const UserNotificationSettings: React.FC = () => {
           ].map(({ key, label, desc }) => (
             <div key={key} className="flex items-center justify-between">
               <div>
-                <label className="text-sm font-medium text-gray-700">{label}</label>
-                <p className="text-xs text-gray-500">{desc}</p>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
@@ -272,7 +272,7 @@ export const UserNotificationSettings: React.FC = () => {
 
       {/* Tipos de Notificação */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
           <CheckCircle className="h-5 w-5" />
           Tipos de Notificação
         </h3>
@@ -286,8 +286,8 @@ export const UserNotificationSettings: React.FC = () => {
           ].map(({ key, label, desc }) => (
             <div key={key} className="flex items-center justify-between">
               <div>
-                <label className="text-sm font-medium text-gray-700">{label}</label>
-                <p className="text-xs text-gray-500">{desc}</p>
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

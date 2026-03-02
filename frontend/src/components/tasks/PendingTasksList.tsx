@@ -87,20 +87,20 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
   return (
     <Card className="p-6 h-full flex flex-col">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-3">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2 mb-3">
           <List className="h-5 w-5 text-blue-600" />
           Pendências
         </h3>
 
         {/* Tabs */}
         {urgentTasks.length > 0 && (
-          <div className="flex border-b border-gray-200">
+          <div className="flex border-b border-gray-200 dark:border-gray-600">
             <button
               onClick={() => setActiveTab('urgent')}
               className={`flex-1 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'urgent'
                   ? 'border-red-600 text-red-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               <AlertTriangle className="h-4 w-4 inline mr-1" />
@@ -116,7 +116,7 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
               className={`flex-1 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'pending'
                   ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
               }`}
             >
               <List className="h-4 w-4 inline mr-1" />
@@ -133,8 +133,8 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
 
       <div className="flex-1 overflow-y-auto space-y-2">
         {currentTasks.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+          <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+            <CheckCircle className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
             <p className="text-sm font-medium">
               {displayTab === 'urgent' ? 'Nenhuma tarefa urgente' : 'Nenhuma pendência'}
             </p>
@@ -152,14 +152,14 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
               <div
                 key={task.id}
                 onClick={() => onTaskClick(task)}
-                className={`p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-all ${
-                  isUrgent && displayTab === 'urgent'
-                    ? 'border-red-300 bg-red-50 hover:border-red-400'
-                    : 'border-gray-200 bg-white hover:border-blue-300'
+className={`p-3 rounded-lg border cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-all ${
+                    isUrgent && displayTab === 'urgent'
+                    ? 'border-red-300 bg-red-50 dark:bg-red-900/20 hover:border-red-400'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-300'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <h4 className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
+                  <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">
                     {task.title}
                   </h4>
                   {isUrgent && displayTab === 'urgent' && (
@@ -169,10 +169,10 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
                 
                 {/* Informações adicionais */}
                 <div className="space-y-1.5">
-                  <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
+                  <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-400 flex-wrap">
                     {/* Departamento */}
                     {task.department_name && (
-                      <span className="font-medium text-gray-700">
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
                         {task.department_name}
                       </span>
                     )}
@@ -186,7 +186,7 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
                           ? 'bg-blue-100 text-blue-700'
                           : task.status === 'completed'
                           ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
                       }`}>
                         {task.status_display}
                       </span>
@@ -194,14 +194,14 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
                     
                     {/* Atribuído a */}
                     {task.assigned_to_name && (
-                      <span className="text-gray-500">
-                        Atribuída a: <span className="font-medium text-gray-700">{task.assigned_to_name}</span>
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Atribuída a: <span className="font-medium text-gray-700 dark:text-gray-300">{task.assigned_to_name}</span>
                       </span>
                     )}
                   </div>
                   
                   {/* Data e prioridade */}
-                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                     {task.is_overdue && (
                       <span className="text-red-600 font-medium">Atrasada</span>
                     )}

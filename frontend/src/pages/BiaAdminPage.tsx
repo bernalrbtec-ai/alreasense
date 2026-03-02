@@ -414,11 +414,11 @@ export default function BiaAdminPage() {
     return (
       <div className="max-w-md mx-auto mt-12 p-6">
         <Card className="p-6">
-          <div className="flex items-center gap-2 text-gray-700 mb-4">
+          <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-4">
             <Lock className="h-5 w-5" />
             <h1 className="text-xl font-semibold">Acesso à página BIA</h1>
           </div>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Esta página é restrita. Digite a chave de acesso para configurar o prompt e testar a BIA.
           </p>
           <Label htmlFor="bia-key">Chave de acesso</Label>
@@ -450,7 +450,7 @@ export default function BiaAdminPage() {
         id="bia-test-model"
         value={effectiveModel}
         onChange={(e) => setTestSelectedModel(e.target.value)}
-        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800"
         disabled={aiModelsLoading}
       >
         {aiModelOptions.length === 0 ? (
@@ -461,7 +461,7 @@ export default function BiaAdminPage() {
           ))
         )}
       </select>
-      {aiModelsLoading && <p className="text-xs text-gray-500 mt-1">Carregando modelos...</p>}
+      {aiModelsLoading && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Carregando modelos...</p>}
       {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
         <p className="text-xs text-amber-600 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
       )}
@@ -491,7 +491,7 @@ export default function BiaAdminPage() {
       </div>
       {testErrorConfig && <p className="text-sm text-red-600">{testErrorConfig}</p>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-gray-500">Histórico do teste</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Histórico do teste</span>
         {testMessagesConfig.length > 0 && (
           <Button
             type="button"
@@ -506,20 +506,20 @@ export default function BiaAdminPage() {
           </Button>
         )}
       </div>
-      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-3 space-y-2">
         {testMessagesConfig.length === 0 ? (
-          <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Envie uma mensagem para testar.</p>
         ) : (
           testMessagesConfig.map((m, i) => (
             <div
               key={i}
               className={`text-sm rounded-lg px-3 py-2 max-w-[90%] ${
                 m.role === 'user'
-                  ? 'ml-auto bg-blue-100 text-blue-900 border border-blue-200'
-                  : 'mr-auto bg-white text-gray-800 border border-gray-200'
+                  ? 'ml-auto bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700'
+                  : 'mr-auto bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600'
               }`}
             >
-              <span className="font-medium text-gray-600 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
               <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
             </div>
           ))
@@ -551,7 +551,7 @@ export default function BiaAdminPage() {
       </div>
       {testErrorHomolog && <p className="text-sm text-red-600">{testErrorHomolog}</p>}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-gray-500">Histórico do teste</span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">Histórico do teste</span>
         {testMessagesHomolog.length > 0 && (
           <Button
             type="button"
@@ -566,20 +566,20 @@ export default function BiaAdminPage() {
           </Button>
         )}
       </div>
-      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 bg-gray-50 p-3 space-y-2">
+      <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-3 space-y-2">
         {testMessagesHomolog.length === 0 ? (
-          <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Envie uma mensagem para testar.</p>
         ) : (
           testMessagesHomolog.map((m, i) => (
             <div
               key={i}
               className={`text-sm rounded-lg px-3 py-2 max-w-[90%] ${
                 m.role === 'user'
-                  ? 'ml-auto bg-blue-100 text-blue-900 border border-blue-200'
-                  : 'mr-auto bg-white text-gray-800 border border-gray-200'
+                  ? 'ml-auto bg-blue-100 dark:bg-blue-900/30 text-blue-900 dark:text-blue-200 border border-blue-200 dark:border-blue-700'
+                  : 'mr-auto bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600'
               }`}
             >
-              <span className="font-medium text-gray-600 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
               <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
             </div>
           ))
@@ -602,7 +602,7 @@ export default function BiaAdminPage() {
       {modelSelect}
       <div>
         <Label>Prompt de sistema (opcional)</Label>
-        <p className="text-xs text-gray-500 mt-0 mb-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0 mb-1">
           Vazio: usa o prompt da Configuração. Preenchido: usa só este texto no teste.
         </p>
         <textarea
@@ -626,7 +626,7 @@ export default function BiaAdminPage() {
             Configure o prompt e o modelo na aba Configuração. Use Homologação para testar com conversa real.
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1" role="tablist" aria-label="Abas BIA">
+        <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-1" role="tablist" aria-label="Abas BIA">
           <button
             type="button"
             role="tab"
@@ -636,8 +636,8 @@ export default function BiaAdminPage() {
             onClick={() => setActiveTab('config')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'config'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <Settings className="h-4 w-4" aria-hidden />
@@ -652,8 +652,8 @@ export default function BiaAdminPage() {
             onClick={() => setActiveTab('homolog')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'homolog'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <FlaskConical className="h-4 w-4" aria-hidden />
@@ -665,7 +665,7 @@ export default function BiaAdminPage() {
       {activeTab === 'config' && (
         <div id="bia-tab-config" role="tabpanel" aria-labelledby="bia-tab-config-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Prompt da BIA</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da BIA</h2>
             {secretaryLoading || aiSettingsLoading ? (
               <LoadingSpinner />
             ) : (
@@ -693,8 +693,8 @@ export default function BiaAdminPage() {
             )}
           </Card>
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">AREA DE TESTE DO MODELO</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">AREA DE TESTE DO MODELO</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               O teste usa o webhook definido em Configurações &gt; IA.
             </p>
             {aiSettingsLoading ? (
@@ -709,18 +709,18 @@ export default function BiaAdminPage() {
       {activeTab === 'homolog' && (
         <div id="bia-tab-homolog" role="tabpanel" aria-labelledby="bia-tab-homolog-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Testar com contexto</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Testar com contexto</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Escolha o modelo, opcionalmente um prompt só para o teste, e envie uma mensagem. A conversa real selecionada à direita será enviada como contexto no prompt (se houver).
             </p>
             {testAreaHomolog}
           </Card>
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center gap-2">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
               <MessageSquare className="h-5 w-5" />
               Conversa real no prompt
             </h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
               Selecione uma conversa. Ela será enviada como contexto no prompt ao testar ao lado.
             </p>
             <div className="space-y-3">
@@ -729,7 +729,7 @@ export default function BiaAdminPage() {
                 <select
                   value={selectedConversationId}
                   onChange={(e) => setSelectedConversationId(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
+                  className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800"
                   disabled={conversationsLoading}
                 >
                   <option value="">Nenhuma (só prompt de sistema)</option>
@@ -737,10 +737,10 @@ export default function BiaAdminPage() {
                     <option key={c.id} value={c.id}>{c.contact_name || c.contact_phone || c.id}</option>
                   ))}
                 </select>
-                {conversationsLoading && <p className="text-xs text-gray-500 mt-1">Carregando conversas...</p>}
+                {conversationsLoading && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Carregando conversas...</p>}
               </div>
               {messagesLoading && selectedConversationId && (
-                <p className="text-sm text-gray-500 flex items-center gap-1">
+                <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-1">
                   <Loader2 className="h-4 w-4 animate-spin" /> Carregando mensagens...
                 </p>
               )}

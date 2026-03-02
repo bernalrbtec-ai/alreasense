@@ -513,8 +513,8 @@ export default function ConnectionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Instâncias WhatsApp</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Instâncias WhatsApp</h1>
+          <p className="text-gray-600 dark:text-gray-400">
             Gerencie suas instâncias WhatsApp conectadas
           </p>
         </div>
@@ -573,7 +573,7 @@ export default function ConnectionsPage() {
               )}
               {/* Header com nome e badges - mais compacto */}
               <div className="flex items-center justify-between mb-1.5">
-                <h3 className="font-semibold text-gray-900 text-sm">{instance.friendly_name}</h3>
+                <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{instance.friendly_name}</h3>
                 <div className="flex items-center gap-1 flex-shrink-0">
                   {instance.integration_type === INTEGRATION_META_CLOUD && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
@@ -607,15 +607,15 @@ export default function ConnectionsPage() {
               {/* Conteúdo principal - telefone e API key */}
               <div className="space-y-1">
                 {instance.phone_number && (
-                  <p className="text-xs text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">📱 {formatPhone(instance.phone_number)}</p>
                 )}
                 {instance.integration_type === INTEGRATION_META_CLOUD && instance.phone_number_id && (
-                  <p className="text-xs text-gray-600 font-mono">ID: {instance.phone_number_id}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 font-mono">ID: {instance.phone_number_id}</p>
                 )}
                 {instance.api_key && (
                   <div className="flex items-center gap-1">
                     <span className="text-xs">🔑</span>
-                    <p className="text-xs text-gray-600 font-mono break-all">
+                    <p className="text-xs text-gray-600 dark:text-gray-400 font-mono break-all">
                       {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••••••••••••••••'}
                     </p>
                     <button
@@ -631,7 +631,7 @@ export default function ConnectionsPage() {
                           return next
                         })
                       }}
-                      className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-1"
+                      className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-1"
                       title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
                     >
                       {visibleApiKeys.has(instance.id) ? '👁️' : '👁️‍🗨️'}
@@ -639,7 +639,7 @@ export default function ConnectionsPage() {
                   </div>
                 )}
                 {!instance.api_key && instance.instance_name && instance.integration_type !== INTEGRATION_META_CLOUD && (
-                  <p className="text-xs text-gray-400 italic">API Key será gerada ao conectar</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 italic">API Key será gerada ao conectar</p>
                 )}
               </div>
               <div className="mt-2 flex gap-1 flex-wrap">
@@ -708,7 +708,7 @@ export default function ConnectionsPage() {
                       className={`${
                         instance.connection_state === 'open' 
                           ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
-                          : 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-300 dark:text-gray-500 cursor-not-allowed'
                       }`}
                       title={instance.connection_state === 'open' ? 'Enviar Mensagem de Teste' : 'Conecte a instância primeiro'}
                     >
@@ -722,7 +722,7 @@ export default function ConnectionsPage() {
                       className={`${
                         instance.connection_state === 'open' 
                           ? 'text-orange-600 hover:text-orange-700 hover:bg-orange-50' 
-                          : 'text-gray-300 cursor-not-allowed'
+                          : 'text-gray-300 dark:text-gray-500 cursor-not-allowed'
                       }`}
                       title={instance.connection_state === 'open' ? 'Desconectar' : 'Instância não conectada'}
                     >
@@ -752,8 +752,8 @@ export default function ConnectionsPage() {
           {(!Array.isArray(instances) || instances.length === 0) && (
             <Card className="col-span-full">
               <CardContent className="text-center py-12">
-                <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 mb-4">Nenhuma instância WhatsApp configurada</p>
+                <MessageSquare className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400 mb-4">Nenhuma instância WhatsApp configurada</p>
                 <Button onClick={() => {
                   setEditingInstance(null)
                   setMetaValidationOk(false)
@@ -785,9 +785,9 @@ export default function ConnectionsPage() {
       {/* WhatsApp Instance Modal */}
       {showInstanceModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {editingInstance ? 'Editar Instância WhatsApp' : 'Nova Instância WhatsApp'}
               </h3>
               <Button
@@ -832,7 +832,7 @@ export default function ConnectionsPage() {
                   <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
                   <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {instanceForm.integration_type === INTEGRATION_META_CLOUD
                     ? 'Conexão via WhatsApp Cloud API (Meta). Requer Phone Number ID e Access Token.'
                     : 'Conexão via API não oficial. Após salvar, use "Gerar QR Code" para conectar.'}
@@ -848,7 +848,7 @@ export default function ConnectionsPage() {
                   placeholder="Ex: WhatsApp Suporte"
                   required
                 />
-                <p className="text-xs text-gray-500 mt-1">Nome amigável para identificar esta instância</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Nome amigável para identificar esta instância</p>
               </div>
 
               {instanceForm.integration_type === INTEGRATION_META_CLOUD ? (
@@ -865,7 +865,7 @@ export default function ConnectionsPage() {
                       placeholder="ID do número no Meta Business"
                       disabled={!!editingInstance}
                     />
-                    <p className="text-xs text-gray-500 mt-1">ID do número de telefone no Meta (não alterável após criar)</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">ID do número de telefone no Meta (não alterável após criar)</p>
                   </div>
                   <div>
                     <Label htmlFor="access_token">Access Token *</Label>
@@ -879,7 +879,7 @@ export default function ConnectionsPage() {
                       }}
                       placeholder={editingInstance && (editingInstance as any).access_token_set ? '•••••••• (deixe em branco para manter)' : 'Token permanente do Meta'}
                     />
-                    <p className="text-xs text-gray-500 mt-1">Token do app no Meta for Developers. Ao editar, preencha só se for trocar.</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Token do app no Meta for Developers. Ao editar, preencha só se for trocar.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -931,7 +931,7 @@ export default function ConnectionsPage() {
                       onChange={(e) => setInstanceForm({ ...instanceForm, phone_number: e.target.value })}
                       placeholder="Ex: 5517991234567"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
                   </div>
                   <div className="bg-blue-50 p-3 rounded-lg">
                     <p className="text-sm text-blue-800">
@@ -956,7 +956,7 @@ export default function ConnectionsPage() {
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   Novas conversas desta instância irão automaticamente para este departamento. Deixe em branco para ir para Inbox.
                 </p>
               </div>
@@ -1015,9 +1015,9 @@ export default function ConnectionsPage() {
       {/* Modal: Importar templates após validação OK */}
       {showImportTemplatesModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Validação OK</h3>
-            <p className="text-gray-600 text-sm mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">Validação OK</h3>
+            <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
               Deseja importar os templates da Meta agora? Eles ficarão disponíveis para envio fora da janela de 24h.
             </p>
             {!(instanceForm.business_account_id || '').trim() && (
@@ -1051,9 +1051,9 @@ export default function ConnectionsPage() {
       {/* QR Code Modal */}
       {showQRModal && qrCodeData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Conectar WhatsApp</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Conectar WhatsApp</h3>
               <Button
                 variant="ghost"
                 size="sm"
@@ -1072,16 +1072,16 @@ export default function ConnectionsPage() {
                       : `data:image/png;base64,${qrCodeData.qr_code}`
                   }
                   alt="QR Code para conectar WhatsApp"
-                  className="mx-auto border border-gray-200 rounded-lg"
+                  className="mx-auto border border-gray-200 dark:border-gray-600 rounded-lg"
                 />
               </div>
               
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Escaneie o QR Code com seu WhatsApp para conectar a instância
               </p>
               
               {qrCodeData.expires_at && (
-                <p className="text-xs text-gray-500 mb-4">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                   Expira em: {new Date(qrCodeData.expires_at).toLocaleString()}
                 </p>
               )}
@@ -1115,10 +1115,10 @@ export default function ConnectionsPage() {
       {/* Modal Teste de Mensagem */}
       {showTestModal && testInstance && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                   📱 Enviar Mensagem de Teste
                 </h3>
                 <button
@@ -1127,7 +1127,7 @@ export default function ConnectionsPage() {
                     setTestPhone('')
                     setTestInstance(null)
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   <XIcon className="h-5 w-5" />
                 </button>
@@ -1135,7 +1135,7 @@ export default function ConnectionsPage() {
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Instância: <strong>{testInstance.friendly_name}</strong>
                   </p>
                   <Label htmlFor="test-phone">
@@ -1149,7 +1149,7 @@ export default function ConnectionsPage() {
                     onChange={(e) => setTestPhone(e.target.value)}
                     className="mt-1"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Formato: DDI + DDD + Número (ex: 5511999999999)
                   </p>
                 </div>

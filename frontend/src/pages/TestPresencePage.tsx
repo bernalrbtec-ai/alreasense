@@ -71,8 +71,8 @@ export default function TestPresencePage() {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">🧪 Teste de Presença (Status Digitando)</h1>
-        <p className="text-gray-600">Teste o envio de status "digitando" via Evolution API</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">🧪 Teste de Presença (Status Digitando)</h1>
+        <p className="text-gray-600 dark:text-gray-400">Teste o envio de status "digitando" via Evolution API</p>
       </div>
 
       <Card>
@@ -89,7 +89,7 @@ export default function TestPresencePage() {
               id="instance"
               value={selectedInstance}
               onChange={(e) => setSelectedInstance(e.target.value)}
-              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md"
+              className="w-full mt-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md"
             >
               <option value="">Selecione uma instância</option>
               {instances.map((instance) => (
@@ -149,10 +149,10 @@ export default function TestPresencePage() {
                   {/* Request */}
                   <div>
                     <h3 className="font-semibold text-lg mb-2">📤 Request Enviado:</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg space-y-2">
                       <div>
                         <strong>URL:</strong>
-                        <pre className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto">
+                        <pre className="bg-white dark:bg-gray-800 p-2 rounded mt-1 text-xs overflow-x-auto">
                           {result.request.url}
                         </pre>
                       </div>
@@ -161,13 +161,13 @@ export default function TestPresencePage() {
                       </div>
                       <div>
                         <strong>Headers:</strong>
-                        <pre className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto">
+                        <pre className="bg-white dark:bg-gray-800 p-2 rounded mt-1 text-xs overflow-x-auto">
                           {JSON.stringify(result.request.headers, null, 2)}
                         </pre>
                       </div>
                       <div>
                         <strong>Body:</strong>
-                        <pre className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto">
+                        <pre className="bg-white dark:bg-gray-800 p-2 rounded mt-1 text-xs overflow-x-auto">
                           {JSON.stringify(result.request.body, null, 2)}
                         </pre>
                       </div>
@@ -177,7 +177,7 @@ export default function TestPresencePage() {
                   {/* Response */}
                   <div>
                     <h3 className="font-semibold text-lg mb-2">📥 Response Recebido:</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg space-y-2">
                       <div>
                         <strong>Status Code:</strong>
                         <span className={`ml-2 px-2 py-1 rounded ${
@@ -190,13 +190,13 @@ export default function TestPresencePage() {
                       </div>
                       <div>
                         <strong>Response Headers:</strong>
-                        <pre className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto">
+                        <pre className="bg-white dark:bg-gray-800 p-2 rounded mt-1 text-xs overflow-x-auto">
                           {JSON.stringify(result.response.headers, null, 2)}
                         </pre>
                       </div>
                       <div>
                         <strong>Response Body:</strong>
-                        <pre className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto">
+                        <pre className="bg-white dark:bg-gray-800 p-2 rounded mt-1 text-xs overflow-x-auto">
                           {result.response.body_json
                             ? JSON.stringify(result.response.body_json, null, 2)
                             : result.response.body}

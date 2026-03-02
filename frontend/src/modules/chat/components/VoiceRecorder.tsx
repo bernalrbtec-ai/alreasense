@@ -283,7 +283,7 @@ export function VoiceRecorder({
     return (
       <button
         onClick={handleClick}
-        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        className="p-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
         title="Clique para gravar áudio"
       >
         <Mic size={20} />
@@ -332,9 +332,9 @@ export function VoiceRecorder({
   // UI: Enviando → Loader
   if (isUploading) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
-        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-        <span className="text-sm text-gray-600">Enviando...</span>
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+        <div className="w-4 h-4 border-2 border-gray-400 dark:border-gray-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-sm text-gray-600 dark:text-gray-400">Enviando...</span>
       </div>
     );
   }

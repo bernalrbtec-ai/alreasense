@@ -497,7 +497,7 @@ export default function TaskModal({
             {formData.has_due_date && formData.status !== 'completed' && (
               <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Data</label>
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Data</label>
                   <input
                     type="date"
                     value={formData.due_date}
@@ -532,7 +532,7 @@ export default function TaskModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">
+                  <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">
                     Hora
                     {formData.due_date === new Date().toISOString().split('T')[0] && (() => {
                       // ✅ NOVO: Mostrar hora mínima permitida
@@ -695,7 +695,7 @@ export default function TaskModal({
                 {/* Task Creation Info */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg p-3 border border-border">
                   <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Criação</div>
-                  <div className="text-xs text-gray-600 space-y-1">
+                  <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
                     <div>
                       <span className="font-medium">Data:</span>{' '}
                       {task.created_at ? format(new Date(task.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
@@ -742,14 +742,14 @@ export default function TaskModal({
                           </div>
                           
                           {historyItem.old_status && historyItem.new_status && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="font-medium">Status:</span>{' '}
                               {getStatusDisplay(historyItem.old_status)} → {getStatusDisplay(historyItem.new_status)}
                             </div>
                           )}
                           
                           {historyItem.old_due_date && historyItem.new_due_date && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="font-medium">Data:</span>{' '}
                               {format(new Date(historyItem.old_due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} →{' '}
                               {format(new Date(historyItem.new_due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
@@ -757,14 +757,14 @@ export default function TaskModal({
                           )}
                           
                           {historyItem.old_priority && historyItem.new_priority && (
-                            <div className="text-xs text-gray-600">
+                            <div className="text-xs text-gray-600 dark:text-gray-400">
                               <span className="font-medium">Prioridade:</span>{' '}
                               {historyItem.old_priority} → {historyItem.new_priority}
                             </div>
                           )}
                           
                           {historyItem.description && (
-                            <div className="text-xs text-gray-600 mt-1">
+                            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                               {historyItem.description}
                             </div>
                           )}

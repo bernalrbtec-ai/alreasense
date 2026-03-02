@@ -38,10 +38,10 @@ class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-800 py-12 px-4 sm:px-6 lg:px-8">
           <div className="max-w-md w-full space-y-8">
             <div>
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30">
                 <svg
                   className="h-6 w-6 text-red-600"
                   xmlns="http://www.w3.org/2000/svg"
@@ -57,10 +57,10 @@ class ErrorBoundary extends Component<Props, State> {
                   />
                 </svg>
               </div>
-              <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+              <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
                 Oops! Algo deu errado
               </h2>
-              <p className="mt-2 text-center text-sm text-gray-600">
+              <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
                 Ocorreu um erro inesperado. Não se preocupe, você pode voltar ao início.
               </p>
             </div>
@@ -93,10 +93,10 @@ class ErrorBoundary extends Component<Props, State> {
 
             {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
               <details className="mt-4 text-xs">
-                <summary className="cursor-pointer text-gray-600 hover:text-gray-900">
+                <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
                   Stack trace (desenvolvimento)
                 </summary>
-                <pre className="mt-2 whitespace-pre-wrap text-xs text-gray-500 bg-gray-100 p-2 rounded">
+                <pre className="mt-2 whitespace-pre-wrap text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 p-2 rounded">
                   {this.state.errorInfo.componentStack}
                 </pre>
               </details>

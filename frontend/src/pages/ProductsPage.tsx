@@ -159,8 +159,8 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Produtos</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Produtos</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Gerencie os produtos da plataforma
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function ProductsPage() {
         {Array.isArray(products) && products.map((product) => {
           const IconComponent = getIconComponent(product.icon)
           return (
-            <Card key={product.id} className={`p-6 relative ${!product.is_active ? 'opacity-60 border-gray-300' : 'border-blue-200'}`}>
+            <Card key={product.id} className={`p-6 relative ${!product.is_active ? 'opacity-60 border-gray-300 dark:border-gray-600' : 'border-blue-200'}`}>
               {/* Status Badge */}
               <div className="absolute top-4 right-4 flex gap-2">
                 {product.is_active ? (
@@ -183,7 +183,7 @@ export default function ProductsPage() {
                     Ativo
                   </span>
                 ) : (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200">
                     <span className="w-2 h-2 rounded-full bg-gray-500 mr-1.5"></span>
                     Inativo
                   </span>
@@ -201,11 +201,11 @@ export default function ProductsPage() {
                     <IconComponent className="h-6 w-6 text-blue-600" />
                   </div>
                   <div>
-                    <h3 className="text-lg font-bold text-gray-900">{product.name}</h3>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{product.name}</h3>
                   </div>
                 </div>
                 
-                <p className="text-sm text-gray-600 mb-3">{product.description}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{product.description}</p>
                 
                 {product.addon_price && (
                   <div className="flex items-center gap-2 text-sm">
@@ -217,7 +217,7 @@ export default function ProductsPage() {
                 )}
               </div>
             
-              <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -244,9 +244,9 @@ export default function ProductsPage() {
       {(!Array.isArray(products) || products.length === 0) && !isLoading && (
         <Card className="p-12">
           <div className="text-center">
-            <Package className="mx-auto h-12 w-12 text-gray-400" />
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum produto cadastrado</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <Package className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">Nenhum produto cadastrado</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Comece criando um novo produto
             </p>
             <div className="mt-6">
@@ -265,17 +265,17 @@ export default function ProductsPage() {
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
               <form onSubmit={handleSubmit}>
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                <div className="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
                     {editingProduct ? 'Editar Produto' : 'Novo Produto'}
                   </h3>
                   
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Nome do Produto
                         </label>
                         <input
@@ -284,12 +284,12 @@ export default function ProductsPage() {
                           required
                           value={formData.name}
                           onChange={(e) => handleNameChange(e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                       </div>
 
                       <div>
-                        <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="slug" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Slug (identificador único)
                         </label>
                         <input
@@ -298,16 +298,16 @@ export default function ProductsPage() {
                           required
                           value={formData.slug}
                           onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Usado para identificar o produto no sistema
                         </p>
                       </div>
                     </div>
 
                     <div>
-                      <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Descrição
                       </label>
                       <textarea
@@ -316,20 +316,20 @@ export default function ProductsPage() {
                         required
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="icon" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="icon" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Ícone
                         </label>
                         <select
                           id="icon"
                           value={formData.icon}
                           onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         >
                           <option value="Package">Package</option>
                           <option value="Zap">Zap</option>
@@ -338,7 +338,7 @@ export default function ProductsPage() {
                       </div>
 
                       <div>
-                        <label htmlFor="addon_price" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="addon_price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Preço Add-on (R$)
                         </label>
                         <input
@@ -351,10 +351,10 @@ export default function ProductsPage() {
                             ...formData, 
                             addon_price: e.target.value ? parseFloat(e.target.value) : null 
                           })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                           placeholder="Deixe vazio se não for add-on"
                         />
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Preço adicional por mês (opcional)
                         </p>
                       </div>
@@ -366,16 +366,16 @@ export default function ProductsPage() {
                         id="is_active"
                         checked={formData.is_active}
                         onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-gray-600 rounded"
                       />
-                      <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+                      <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
                         Produto ativo
                       </label>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                   <Button type="submit" disabled={isSaving}>
                     <Check className="h-4 w-4 mr-2" />
                     {isSaving ? 'Salvando...' : 'Salvar'}

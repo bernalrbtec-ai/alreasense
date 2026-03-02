@@ -14,7 +14,7 @@ export function StatusIcon({ status, className = '' }: StatusIconProps) {
     case 'pending':
       return (
         <Clock 
-          className={`w-3 h-3 text-gray-400 ${className}`}
+          className={`w-3 h-3 text-gray-400 dark:text-gray-500 ${className}`}
           title="Enviando..."
         />
       );
@@ -22,7 +22,7 @@ export function StatusIcon({ status, className = '' }: StatusIconProps) {
     case 'sent':
       return (
         <Check 
-          className={`w-3 h-3 text-gray-400 ${className}`}
+          className={`w-3 h-3 text-gray-400 dark:text-gray-500 ${className}`}
           title="Enviada"
         />
       );
@@ -30,7 +30,7 @@ export function StatusIcon({ status, className = '' }: StatusIconProps) {
     case 'delivered':
       return (
         <CheckCheck 
-          className={`w-3 h-3 text-gray-400 ${className}`}
+          className={`w-3 h-3 text-gray-400 dark:text-gray-500 ${className}`}
           title="Entregue"
         />
       );

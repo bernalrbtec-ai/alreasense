@@ -211,8 +211,8 @@ export default function PlansPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Planos</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Planos</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Gerencie os planos de assinatura da plataforma
           </p>
         </div>
@@ -246,13 +246,13 @@ export default function PlansPage() {
             </div>
 
             <div className="mb-4 pr-24">
-              <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{plan.name}</h3>
               <div className="mt-2">
                 <p className="text-3xl font-bold text-blue-600">
                   {plan.is_free ? 'Grátis' : `R$ ${Number(plan.price).toFixed(2)}`}
                 </p>
                 {!plan.is_free && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Cobrança a cada {plan.billing_cycle_days} dias
                   </p>
                 )}
@@ -260,34 +260,34 @@ export default function PlansPage() {
             </div>
             
             <div className="space-y-3">
-              <div className="text-sm text-gray-600 space-y-1">
+              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                 <p className="font-medium">
                   📦 Produtos: {plan.product_count} incluído(s)
                 </p>
               </div>
               
-              <div className="pt-3 border-t border-gray-200">
+              <div className="pt-3 border-t border-gray-200 dark:border-gray-600">
                 <div className="space-y-2">
                   {Array.isArray(plan.products) && plan.products.length > 0 ? (
                     plan.products.map((planProduct, index) => (
                       <div key={index} className="flex items-center justify-between text-sm">
                         <div className="flex items-center">
                           <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
-                          <span className="text-gray-600">{planProduct.product.name}</span>
+                          <span className="text-gray-600 dark:text-gray-400">{planProduct.product.name}</span>
                         </div>
-                        <span className="text-gray-500 font-medium">
+                        <span className="text-gray-500 dark:text-gray-400 font-medium">
                           {planProduct.limit_value || 0} instâncias
                         </span>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-500">Nenhum produto incluído</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Nenhum produto incluído</p>
                   )}
                 </div>
               </div>
             </div>
             
-            <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600 flex gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -314,7 +314,7 @@ export default function PlansPage() {
         <Card className="p-12">
           <div className="text-center">
             <svg
-              className="mx-auto h-12 w-12 text-gray-400"
+              className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -326,8 +326,8 @@ export default function PlansPage() {
                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
               />
             </svg>
-            <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum plano cadastrado</h3>
-            <p className="mt-1 text-sm text-gray-500">
+            <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">Nenhum plano cadastrado</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Comece criando um novo plano de assinatura
             </p>
             <div className="mt-6">
@@ -344,19 +344,19 @@ export default function PlansPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
+            <div className="fixed inset-0 bg-gray-500 dark:bg-black/50 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
               <form onSubmit={handleSubmit}>
-                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                <div className="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
                     {editingPlan ? 'Editar Plano' : 'Novo Plano'}
                   </h3>
                   
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Nome do Plano
                         </label>
                         <input
@@ -370,7 +370,7 @@ export default function PlansPage() {
                       </div>
 
                       <div>
-                        <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="slug" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Slug (identificador único)
                         </label>
                         <input
@@ -385,7 +385,7 @@ export default function PlansPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Descrição
                       </label>
                       <textarea
@@ -400,7 +400,7 @@ export default function PlansPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="price" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Preço (R$)
                         </label>
                         <input
@@ -416,7 +416,7 @@ export default function PlansPage() {
                       </div>
 
                       <div>
-                        <label htmlFor="sort_order" className="block text-sm font-medium text-gray-700">
+                        <label htmlFor="sort_order" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                           Ordem de Exibição
                         </label>
                         <input
@@ -432,7 +432,7 @@ export default function PlansPage() {
 
                     {/* Seção de Produtos */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Produtos Incluídos
                       </label>
                       <div className="space-y-3">
@@ -463,7 +463,7 @@ export default function PlansPage() {
                               <div className="space-y-3">
                                 {/* Limite de Instâncias - Todos os produtos */}
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                                     Limite de Instâncias
                                   </label>
                                   <div className="grid grid-cols-2 gap-4">
@@ -480,10 +480,10 @@ export default function PlansPage() {
                                       type="text"
                                       value="instâncias"
                                       readOnly
-                                      className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                      className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-500 dark:text-gray-400"
                                     />
                                   </div>
-                                  <p className="text-xs text-gray-500 mt-1">
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     Número máximo de instâncias que o cliente pode cadastrar para este produto
                                   </p>
                                 </div>
@@ -491,7 +491,7 @@ export default function PlansPage() {
                                 {/* Limites específicos por produto */}
                                 {planProduct.product.slug === 'sense' && (
                                   <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                                       Limite de Análises (Adicional)
                                     </label>
                                     <div className="grid grid-cols-2 gap-4">
@@ -507,10 +507,10 @@ export default function PlansPage() {
                                         type="text"
                                         value="análises/mês"
                                         readOnly
-                                        className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-500 dark:text-gray-400"
                                       />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                       Número máximo de análises de sentimento por mês
                                     </p>
                                   </div>
@@ -518,7 +518,7 @@ export default function PlansPage() {
                                 
                                 {planProduct.product.slug === 'api_public' && (
                                   <div>
-                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                                       Limite de Requests (Adicional)
                                     </label>
                                     <div className="grid grid-cols-2 gap-4">
@@ -534,10 +534,10 @@ export default function PlansPage() {
                                         type="text"
                                         value="requests/dia"
                                         readOnly
-                                        className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-500 dark:text-gray-400"
                                       />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                       Número máximo de requests à API por dia
                                     </p>
                                   </div>
@@ -579,14 +579,14 @@ export default function PlansPage() {
                         onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                       />
-                      <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
+                      <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
                         Plano ativo
                       </label>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                   <Button type="submit">
                     <Check className="h-4 w-4 mr-2" />
                     Salvar

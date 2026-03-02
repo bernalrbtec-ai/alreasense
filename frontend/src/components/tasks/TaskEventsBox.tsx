@@ -25,7 +25,7 @@ interface TaskEventsBoxProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-700 border-gray-200',
+  low: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600',
   medium: 'bg-blue-100 text-blue-700 border-blue-200',
   high: 'bg-orange-100 text-orange-700 border-orange-200',
   urgent: 'bg-red-100 text-red-700 border-red-200',
@@ -89,8 +89,8 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
     <div
       key={task.id}
       onClick={() => onTaskClick(task)}
-      className={`p-2 rounded border cursor-pointer hover:bg-gray-50 transition-colors ${
-        task.is_overdue ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
+      className={`p-2 rounded border cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+        task.is_overdue ? 'border-red-200 bg-red-50 dark:bg-red-900/20' : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -103,19 +103,19 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
               <AlertCircle className="h-3 w-3 text-red-600 flex-shrink-0" />
             )}
           </div>
-          <h4 className="font-medium text-sm text-gray-900 truncate">{task.title}</h4>
+          <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{task.title}</h4>
           {task.due_date && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {format(new Date(task.due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
             </p>
           )}
           {!task.due_date && (
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Criada em {format(new Date(task.created_at), "dd/MM/yyyy", { locale: ptBR })}
             </p>
           )}
           {task.assigned_to_name && (
-            <p className="text-xs text-gray-400 mt-0.5">{task.assigned_to_name}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{task.assigned_to_name}</p>
           )}
         </div>
       </div>
@@ -123,15 +123,15 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
   )
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg shadow-sm h-full flex flex-col">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm h-full flex flex-col">
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 dark:border-gray-600">
         <button
           onClick={() => setActiveTab('events')}
           className={`flex-1 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'events'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           <Calendar className="h-4 w-4 inline mr-1" />
@@ -142,7 +142,7 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
           className={`flex-1 px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
             activeTab === 'pending'
               ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}
         >
           <List className="h-4 w-4 inline mr-1" />
@@ -201,7 +201,7 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
                 <div className="space-y-2">
                   {categorizedTasks.upcoming.slice(0, 10).map(renderTaskItem)}
                   {categorizedTasks.upcoming.length > 10 && (
-                    <p className="text-xs text-gray-500 text-center py-2">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-2">
                       +{categorizedTasks.upcoming.length - 10} mais
                     </p>
                   )}
@@ -212,8 +212,8 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
             {categorizedTasks.overdue.length === 0 &&
              categorizedTasks.today.length === 0 &&
              categorizedTasks.upcoming.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <Calendar className="h-12 w-12 mx-auto mb-2 text-gray-400 dark:text-gray-500" />
                 <p className="text-sm">Nenhum evento agendado</p>
               </div>
             )}
@@ -226,8 +226,8 @@ export default function TaskEventsBox({ tasks, onTaskClick }: TaskEventsBoxProps
                 {categorizedTasks.pending.map(renderTaskItem)}
               </div>
             ) : (
-              <div className="text-center py-8 text-gray-500">
-                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+              <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                <CheckCircle className="h-12 w-12 mx-auto mb-2 text-gray-400 dark:text-gray-500" />
                 <p className="text-sm">Nenhuma pendência</p>
               </div>
             )}

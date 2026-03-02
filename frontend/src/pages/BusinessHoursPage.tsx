@@ -422,8 +422,8 @@ export default function BusinessHoursPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Horários de Atendimento</h1>
-          <p className="text-gray-600">Configure horários, mensagens automáticas e tarefas para fora de horário</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Horários de Atendimento</h1>
+          <p className="text-gray-600 dark:text-gray-400">Configure horários, mensagens automáticas e tarefas para fora de horário</p>
         </div>
       </div>
 
@@ -444,7 +444,7 @@ export default function BusinessHoursPage() {
             ))}
           </select>
           <div className="flex-1" />
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 dark:text-gray-400">
             {selectedDepartment
               ? `Configurando para: ${departments.find(d => d.id === selectedDepartment)?.name || 'Departamento'}`
               : 'Configurando para: Geral (todos os departamentos)'}
@@ -453,14 +453,14 @@ export default function BusinessHoursPage() {
       </Card>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-600">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('hours')}
             className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
               activeTab === 'hours'
                 ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}
           >
             <Clock className="h-4 w-4" />
@@ -471,7 +471,7 @@ export default function BusinessHoursPage() {
             className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
               activeTab === 'message'
                 ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}
           >
             <MessageSquare className="h-4 w-4" />
@@ -482,7 +482,7 @@ export default function BusinessHoursPage() {
             className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
               activeTab === 'tasks'
                 ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
             }`}
           >
             <Calendar className="h-4 w-4" />
@@ -521,7 +521,7 @@ export default function BusinessHoursPage() {
                 const end = businessHours[`${day.key}_end` as keyof BusinessHours] as string
 
                 return (
-                  <div key={day.key} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
+                  <div key={day.key} className="flex items-center gap-4 p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
                     <div className="flex items-center gap-2 w-32">
                       <input
                         type="checkbox"
@@ -542,7 +542,7 @@ export default function BusinessHoursPage() {
                           onChange={(e) => updateDayHours(day.key, 'start', e.target.value)}
                           className="w-32"
                         />
-                        <span className="text-gray-500">até</span>
+                        <span className="text-gray-500 dark:text-gray-400">até</span>
                         <Input
                           type="time"
                           value={end}
@@ -567,7 +567,7 @@ export default function BusinessHoursPage() {
                 rows={4}
                 className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
               />
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                 Exemplo: 2025-12-25 (Natal), 2026-01-01 (Ano Novo)
               </p>
             </div>
@@ -692,7 +692,7 @@ export default function BusinessHoursPage() {
                   Responder em Grupos
                 </Label>
               </div>
-              <p className="text-sm text-gray-500 ml-6" style={{ visibility: 'visible', display: 'block' }}>
+              <p className="text-sm text-gray-500 dark:text-gray-400 ml-6" style={{ visibility: 'visible', display: 'block' }}>
                 Se habilitado, envia mensagem automática também para grupos. Se desabilitado, apenas para conversas individuais.
               </p>
             </div>
@@ -750,7 +750,7 @@ export default function BusinessHoursPage() {
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Cliente entrou em contato fora do horário..."
                   />
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     Variáveis: <code>&#123;contact_name&#125;</code>, <code>&#123;contact_phone&#125;</code>, <code>&#123;message_time&#125;</code>, <code>&#123;message_content&#125;</code>, <code>&#123;next_open_time&#125;</code>
                   </p>
                 </div>

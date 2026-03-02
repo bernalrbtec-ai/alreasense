@@ -50,9 +50,9 @@ export function WebSocketStatus({
         return {
           icon: WifiOff,
           text: 'Polling',
-          bgColor: 'bg-gray-100',
-          textColor: 'text-gray-800',
-          borderColor: 'border-gray-200',
+          bgColor: 'bg-gray-100 dark:bg-gray-700',
+          textColor: 'text-gray-800 dark:text-gray-200',
+          borderColor: 'border-gray-200 dark:border-gray-600',
           dotColor: 'bg-gray-500',
           animate: false
         }

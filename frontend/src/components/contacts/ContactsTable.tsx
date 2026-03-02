@@ -46,10 +46,10 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
   const customColumns = availableCustomFields
 
   const lifecycleColors: Record<string, string> = {
-    lead: 'bg-gray-100 text-gray-700',
-    customer: 'bg-green-100 text-green-700',
-    at_risk: 'bg-yellow-100 text-yellow-700',
-    churned: 'bg-red-100 text-red-700'
+    lead: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200',
+    customer: 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-200',
+    at_risk: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-200',
+    churned: 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-200'
   }
 
   const lifecycleLabels: Record<string, string> = {
@@ -62,7 +62,7 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
   if (contacts.length === 0) {
     return (
       <Card className="p-8 text-center">
-        <p className="text-gray-500">Nenhum contato encontrado</p>
+        <p className="text-gray-500 dark:text-gray-400">Nenhum contato encontrado</p>
       </Card>
     )
   }
@@ -70,13 +70,13 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+          <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
               {standardColumns.map((col) => (
                 <th
                   key={col}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
                 >
                   {col}
                 </th>
@@ -92,20 +92,20 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                   </span>
                 </th>
               ))}
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Ações
               </th>
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
             {contacts.map((contact) => (
-              <tr key={contact.id} className="hover:bg-gray-50">
+              <tr key={contact.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                 {/* Nome */}
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex items-center">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{contact.name}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{contact.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           lifecycleColors[contact.lifecycle_stage] || lifecycleColors.lead
                         }`}>
@@ -118,8 +118,8 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
 
                 {/* Telefone */}
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center text-sm text-gray-900">
-                    <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                  <div className="flex items-center text-sm text-gray-900 dark:text-gray-100">
+                    <Phone className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
                     {contact.phone}
                   </div>
                 </td>
@@ -127,33 +127,33 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                 {/* Email */}
                 <td className="px-6 py-4 whitespace-nowrap">
                   {contact.email ? (
-                    <div className="flex items-center text-sm text-gray-900">
-                      <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                    <div className="flex items-center text-sm text-gray-900 dark:text-gray-100">
+                      <Mail className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
                       {contact.email}
                     </div>
                   ) : (
-                    <span className="text-sm text-gray-400">-</span>
+                    <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
                   )}
                 </td>
 
                 {/* Cidade/Estado */}
                 <td className="px-6 py-4 whitespace-nowrap">
                   {(contact.city || contact.state) ? (
-                    <div className="flex items-center text-sm text-gray-900">
-                      <MapPin className="h-4 w-4 mr-2 text-gray-400" />
+                    <div className="flex items-center text-sm text-gray-900 dark:text-gray-100">
+                      <MapPin className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
                       {[contact.city, contact.state].filter(Boolean).join(', ') || '-'}
                     </div>
                   ) : (
-                    <span className="text-sm text-gray-400">-</span>
+                    <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
                   )}
                 </td>
 
                 {/* Última Compra */}
                 <td className="px-6 py-4 whitespace-nowrap">
                   {contact.last_purchase_date || contact.last_purchase_value ? (
-                    <div className="text-sm text-gray-900">
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
                       {contact.last_purchase_date && (
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
                           {new Date(contact.last_purchase_date).toLocaleDateString('pt-BR')}
                         </div>
                       )}
@@ -164,7 +164,7 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                       )}
                     </div>
                   ) : (
-                    <span className="text-sm text-gray-400">-</span>
+                    <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
                   )}
                 </td>
 
@@ -182,10 +182,10 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                         </span>
                       ))
                     ) : (
-                      <span className="text-sm text-gray-400">-</span>
+                      <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
                     )}
                     {contact.tags && contact.tags.length > 2 && (
-                      <span className="text-xs text-gray-500">+{contact.tags.length - 2}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">+{contact.tags.length - 2}</span>
                     )}
                   </div>
                 </td>
@@ -193,13 +193,13 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                 {/* Campos Customizados */}
                 {customColumns.map((field) => (
                   <td key={field} className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-gray-900">
+                    <div className="text-sm text-gray-900 dark:text-gray-100">
                       {contact.custom_fields?.[field] ? (
                         <span className="inline-flex items-center px-2 py-1 rounded bg-purple-50 text-purple-700 text-xs">
                           {String(contact.custom_fields[field])}
                         </span>
                       ) : (
-                        <span className="text-gray-400">-</span>
+                        <span className="text-gray-400 dark:text-gray-500">-</span>
                       )}
                     </div>
                   </td>

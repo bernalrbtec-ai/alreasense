@@ -89,12 +89,12 @@ export function PermissionGuard({
   return (
     <Card className="p-6">
       <div className="text-center">
-        <Lock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
+        <Lock className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
           Acesso Restrito
         </h3>
-        <p className="text-gray-600 mb-4">{getMessage()}</p>
-        <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+        <p className="text-gray-600 dark:text-gray-400 mb-4">{getMessage()}</p>
+        <div className="flex items-center justify-center gap-2 text-sm text-gray-500 dark:text-gray-400">
           <AlertCircle className="h-4 w-4" />
           <span>
             Entre em contato com um administrador para solicitar acesso.

@@ -141,14 +141,14 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
             <div 
               key={index} 
               onClick={(e) => canClick && handleDateClick(date, e)}
-              className={`border border-gray-200 rounded-lg p-3 ${
-                canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''
+              className={`border border-gray-200 dark:border-gray-600 rounded-lg p-3 ${
+                canClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors' : ''
               } ${isPastDay ? 'opacity-60' : ''}`}
               title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
             >
-              <div className={`text-center mb-3 ${isCurrentDay ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
+              <div className={`text-center mb-3 ${isCurrentDay ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-700 dark:text-gray-300'}`}>
                 <div className="text-sm font-medium">{weekDayNames[date.getDay()]}</div>
-                <div className={`text-2xl ${isCurrentDay ? 'text-blue-600' : 'text-gray-900'}`}>
+                <div className={`text-2xl ${isCurrentDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
                   {date.getDate()}
                 </div>
               </div>
@@ -178,7 +178,7 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
                         }}
                         className={`task-item p-2 rounded cursor-pointer text-sm ${
                           task.status === 'completed'
-                            ? 'bg-gray-200 text-gray-600 line-through'
+                            ? 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 line-through'
                             : task.priority === 'urgent'
                             ? 'bg-red-100 text-red-800 border-l-4 border-red-500'
                             : task.priority === 'high'
@@ -201,7 +201,7 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
                     )
                   })}
                 {dayTasks.length === 0 && (
-                  <div className="text-xs text-gray-400 text-center py-4">
+                  <div className="text-xs text-gray-400 dark:text-gray-500 text-center py-4">
                     Sem tarefas
                   </div>
                 )}

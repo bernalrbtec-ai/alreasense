@@ -119,7 +119,7 @@ export default function NotificationsPage() {
       case 'read':
         return <Eye className="h-4 w-4 text-purple-500" />;
       default:
-        return <Bell className="h-4 w-4 text-gray-500" />;
+        return <Bell className="h-4 w-4 text-gray-500 dark:text-gray-400" />;
     }
   };
 
@@ -256,7 +256,7 @@ export default function NotificationsPage() {
                               <div className="text-sm font-medium text-muted-foreground mb-1">
                                 Campanha: {notification.campaign_name}
                          </div>
-                              <div className="text-sm bg-gray-50 p-3 rounded-lg border">
+                              <div className="text-sm bg-gray-50 dark:bg-gray-800 p-3 rounded-lg border dark:border-gray-600">
                                 {notification.received_message}
                          </div>
                          </div>

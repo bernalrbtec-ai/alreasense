@@ -1264,7 +1264,7 @@ export default function ConfigurationsPage() {
       case 'open': return 'text-green-600 bg-green-100'
       case 'connecting': return 'text-yellow-600 bg-yellow-100'
       case 'close': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 bg-gray-100'
+      default: return 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700'
     }
   }
 
@@ -1795,20 +1795,20 @@ export default function ConfigurationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configurações</h1>
-          <p className="text-gray-600">Gerencie suas instâncias, servidores e configurações</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Configurações</h1>
+          <p className="text-gray-600 dark:text-gray-400">Gerencie suas instâncias, servidores e configurações</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 dark:border-gray-600">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('instances')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'instances'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Server className="h-4 w-4 inline mr-2" />
@@ -1818,8 +1818,8 @@ export default function ConfigurationsPage() {
             onClick={() => setActiveTab('smtp')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'smtp'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Mail className="h-4 w-4 inline mr-2" />
@@ -1829,8 +1829,8 @@ export default function ConfigurationsPage() {
             onClick={() => setActiveTab('plan')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'plan'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <CreditCard className="h-4 w-4 inline mr-2" />
@@ -1840,8 +1840,8 @@ export default function ConfigurationsPage() {
             onClick={() => setActiveTab('team')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'team'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Users className="h-4 w-4 inline mr-2" />
@@ -1851,8 +1851,8 @@ export default function ConfigurationsPage() {
             onClick={() => setActiveTab('notifications')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'notifications'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Bell className="h-4 w-4 inline mr-2" />
@@ -1862,8 +1862,8 @@ export default function ConfigurationsPage() {
             onClick={() => setActiveTab('business-hours')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'business-hours'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Clock className="h-4 w-4 inline mr-2" />
@@ -1872,10 +1872,10 @@ export default function ConfigurationsPage() {
           {user?.is_admin && (
             <button
               onClick={() => setActiveTab('ai')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'ai'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'ai'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
             >
               <Activity className="h-4 w-4 inline mr-2" />
@@ -1885,10 +1885,10 @@ export default function ConfigurationsPage() {
           {user?.is_admin && (
             <button
               onClick={() => setActiveTab('welcome-menu')}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'welcome-menu'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'welcome-menu'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
             >
               <MessageSquare className="h-4 w-4 inline mr-2" />
@@ -1905,8 +1905,8 @@ export default function ConfigurationsPage() {
           {limits && (
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Limites do Plano</h3>
-                <div className="flex items-center text-sm text-gray-500">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Limites do Plano</h3>
+                <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <Crown className="h-4 w-4 mr-1" />
                   {limits.plan?.name || 'Sem plano'}
                 </div>
@@ -1936,7 +1936,7 @@ export default function ConfigurationsPage() {
           {/* Lista de Instâncias */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-medium text-gray-900">Suas Instâncias WhatsApp</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Suas Instâncias WhatsApp</h3>
               <div className="flex items-center space-x-2">
                 <Button
                   variant="outline"
@@ -1959,9 +1959,9 @@ export default function ConfigurationsPage() {
 
             {instances.length === 0 ? (
               <div className="text-center py-12">
-                <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma instância cadastrada</h3>
-                <p className="text-gray-500 mb-4">Crie sua primeira instância WhatsApp para começar</p>
+                <Server className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Nenhuma instância cadastrada</h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">Crie sua primeira instância WhatsApp para começar</p>
                 <Button onClick={() => setIsInstanceModalOpen(true)}>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Primeira Instância
@@ -1970,7 +1970,7 @@ export default function ConfigurationsPage() {
             ) : (
               <div className="grid gap-4">
                 {instances.map((instance) => (
-                  <div key={instance.id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={instance.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
@@ -1989,7 +1989,7 @@ export default function ConfigurationsPage() {
                               <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                             </button>
                           )}
-                          <h4 className="font-medium text-gray-900">{instance.friendly_name}</h4>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">{instance.friendly_name}</h4>
                           {instance.integration_type === INTEGRATION_META_CLOUD && (
                             <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">API Meta</span>
                           )}
@@ -1999,7 +1999,7 @@ export default function ConfigurationsPage() {
                             {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' : getConnectionStatusText(instance.connection_state)}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600">
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-300">
                           {instance.integration_type === INTEGRATION_META_CLOUD && instance.phone_number_id && (
                             <div className="flex items-center font-mono text-xs">{instance.phone_number_id}</div>
                           )}
@@ -2239,8 +2239,8 @@ export default function ConfigurationsPage() {
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-lg font-medium text-gray-900">Configurações SMTP</h3>
-                <p className="text-sm text-gray-600">Configure servidores SMTP para envio de emails</p>
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Configurações SMTP</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Configure servidores SMTP para envio de emails</p>
               </div>
               <Button onClick={() => {
                 setEditingSmtp(null)
@@ -2266,10 +2266,10 @@ export default function ConfigurationsPage() {
             </div>
 
             {smtpConfigs.length === 0 ? (
-              <div className="bg-gray-50 p-4 rounded-lg text-center">
-                <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h4 className="font-medium text-gray-900 mb-2">Nenhuma configuração SMTP</h4>
-                <p className="text-gray-600 mb-4">Configure um servidor SMTP para enviar emails</p>
+              <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg text-center">
+                <Mail className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+                <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Nenhuma configuração SMTP</h4>
+                <p className="text-gray-600 dark:text-gray-400 mb-4">Configure um servidor SMTP para enviar emails</p>
                 <Button onClick={() => {
                   setEditingSmtp(null)
                   setSmtpFormData({
@@ -2295,23 +2295,23 @@ export default function ConfigurationsPage() {
             ) : (
               <div className="grid gap-4">
                 {smtpConfigs.map((config) => (
-                  <div key={config.id} className="border border-gray-200 rounded-lg p-4">
+                  <div key={config.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
-                          <h4 className="font-medium text-gray-900">{config.name}</h4>
+                          <h4 className="font-medium text-gray-900 dark:text-gray-100">{config.name}</h4>
                           {config.is_default && (
                             <span className="ml-2 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
                               Padrão
                             </span>
                           )}
                           <span className={`ml-2 px-2 py-1 text-xs font-medium rounded-full ${
-                            config.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            config.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
                           }`}>
                             {config.is_active ? 'Ativo' : 'Inativo'}
                           </span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 dark:text-gray-300">
                           <div>
                             <span className="font-medium">Servidor:</span> {config.host}:{config.port}
                           </div>
@@ -2407,18 +2407,18 @@ export default function ConfigurationsPage() {
 
       {activeTab === 'ai' && user?.is_admin && (
         <div className="space-y-6">
-          <div className="flex gap-2 border-b border-gray-200 pb-2">
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
             <button
               type="button"
               onClick={() => setAiSubTab('config')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'config' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'config' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
               Configurações
             </button>
             <button
               type="button"
               onClick={() => setAiSubTab('ia-assistente')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'ia-assistente' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'ia-assistente' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
               <MessageSquare className="h-4 w-4" />
               Secretaria
@@ -2426,7 +2426,7 @@ export default function ConfigurationsPage() {
             <button
               type="button"
               onClick={() => setAiSubTab('rag-memories')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
               <FileText className="h-4 w-4" />
               Contexto
@@ -2434,7 +2434,7 @@ export default function ConfigurationsPage() {
             <button
               type="button"
               onClick={() => setAiSubTab('auditoria-ia')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'auditoria-ia' ? 'bg-white border border-b-0 border-gray-200 text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'auditoria-ia' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
               Auditoria IA
             </button>
@@ -2448,8 +2448,8 @@ export default function ConfigurationsPage() {
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900">Auditoria IA</h3>
-                  <p className="text-sm text-gray-600">Histórico das chamadas (testes e produção).</p>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Auditoria IA</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Histórico das chamadas (testes e produção).</p>
                 </div>
                 <Button
                   type="button"
@@ -2567,17 +2567,17 @@ export default function ConfigurationsPage() {
                   <LoadingSpinner />
                 </div>
               ) : gatewayAuditItems.length === 0 ? (
-                <div className="text-sm text-gray-500">Nenhum registro encontrado.</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">Nenhum registro encontrado.</div>
               ) : (
                 <div className="space-y-3">
                   {gatewayAuditItems.map((item) => (
-                    <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                    <div key={item.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                             Request ID: {item.request_id}
                           </div>
-                          <div className="text-xs text-gray-500">Trace ID: {item.trace_id}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Trace ID: {item.trace_id}</div>
                         </div>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                           item.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -2586,7 +2586,7 @@ export default function ConfigurationsPage() {
                         </span>
                       </div>
 
-                      <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
+                      <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-300">
                         <span>Modelo: {item.model_name || '-'}</span>
                         <span>Latência: {item.latency_ms ?? '-'}</span>
                         <span>RAG hits: {item.rag_hits ?? '-'}</span>
@@ -2611,7 +2611,7 @@ export default function ConfigurationsPage() {
                       )}
 
                       {(item.input_summary || item.output_summary) && (
-                        <div className="mt-2 text-xs text-gray-600 space-y-1">
+                        <div className="mt-2 text-xs text-gray-600 dark:text-gray-300 space-y-1">
                           <div><span className="font-medium">Input:</span> {item.input_summary || '-'}</div>
                           <div><span className="font-medium">Output:</span> {item.output_summary || '-'}</div>
                         </div>
@@ -2623,17 +2623,17 @@ export default function ConfigurationsPage() {
                         </div>
                       )}
 
-                      <details className="mt-2 text-xs text-gray-600">
+                      <details className="mt-2 text-xs text-gray-600 dark:text-gray-300">
                         <summary className="cursor-pointer text-blue-600">Ver payloads</summary>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Request (mascarado)</p>
                             <pre className="rounded-lg border border-border bg-background text-foreground p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
                               {item.request_payload_masked ? JSON.stringify(item.request_payload_masked, null, 2) : 'Sem request.'}
                             </pre>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Response (mascarado)</p>
                             <pre className="rounded-lg border border-border bg-background text-foreground p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
                               {item.response_payload_masked ? JSON.stringify(item.response_payload_masked, null, 2) : 'Sem response.'}
                             </pre>
@@ -2646,7 +2646,7 @@ export default function ConfigurationsPage() {
               )}
 
               {gatewayAuditCount > 0 && (
-                <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-xs text-gray-600">
+                <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-xs text-gray-600 dark:text-gray-300">
                   <span>
                     Mostrando {gatewayAuditOffset + 1}-
                     {Math.min(gatewayAuditOffset + gatewayAuditItems.length, gatewayAuditCount)} de {gatewayAuditCount}
@@ -2708,7 +2708,7 @@ export default function ConfigurationsPage() {
                   )}
 
                   {!aiSettings.ai_enabled && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+                    <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300">
                       Habilite a IA para editar as configurações abaixo.
                     </div>
                   )}
@@ -2850,8 +2850,8 @@ export default function ConfigurationsPage() {
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-1">Secretária IA (Bia)</h3>
-                    <p className="text-sm text-gray-600">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Secretária IA (Bia)</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
                       Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
                     </p>
                   </div>
@@ -2875,10 +2875,10 @@ export default function ConfigurationsPage() {
                 </div>
                 {secretaryProfile && !secretaryProfileLoading && (
                   <div className="mt-4 space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                       <div>
                         <Label className="text-base font-semibold">Ativar BIA</Label>
-                        <p className="text-sm text-gray-600 mt-1">
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                           A secretária responderá em conversas do Inbox quando habilitada.
                         </p>
                       </div>
@@ -3092,11 +3092,11 @@ export default function ConfigurationsPage() {
         <div className="space-y-6">
           {tenant && (
             <Card className="p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Informações do Plano</h3>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Informações do Plano</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Plano Atual</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Plano Atual</h4>
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <div className="text-2xl font-bold text-blue-900">
                       {tenant.current_plan?.name || 'Sem plano'}
@@ -3108,7 +3108,7 @@ export default function ConfigurationsPage() {
                 </div>
                 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Status da Conta</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Status da Conta</h4>
                   <div className="bg-green-50 p-4 rounded-lg">
                     <div className="text-2xl font-bold text-green-900 capitalize">
                       {tenant.status}
@@ -3122,8 +3122,8 @@ export default function ConfigurationsPage() {
 
               {tenant.current_plan?.description && (
                 <div className="mt-6">
-                  <h4 className="font-medium text-gray-900 mb-2">Descrição do Plano</h4>
-                  <p className="text-gray-600">{tenant.current_plan.description}</p>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Descrição do Plano</h4>
+                  <p className="text-gray-600 dark:text-gray-300">{tenant.current_plan.description}</p>
                 </div>
               )}
 

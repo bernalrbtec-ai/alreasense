@@ -106,8 +106,8 @@ export default function AiTriageTestPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">IA Triagem</h1>
-        <p className="text-gray-600">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">IA Triagem</h1>
+        <p className="text-gray-600 dark:text-gray-400">
           Teste de prompt e historico de triagem
         </p>
       </div>
@@ -121,7 +121,7 @@ export default function AiTriageTestPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Mensagem</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Mensagem</label>
             <textarea
               value={message}
               onChange={(event) => setMessage(event.target.value)}
@@ -131,7 +131,7 @@ export default function AiTriageTestPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Prompt (opcional)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prompt (opcional)</label>
             <textarea
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
@@ -141,7 +141,7 @@ export default function AiTriageTestPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Contexto (JSON)</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Contexto (JSON)</label>
             <textarea
               value={contextJson}
               onChange={(event) => setContextJson(event.target.value)}
@@ -167,12 +167,12 @@ export default function AiTriageTestPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">Arquivo de audio</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Arquivo de audio</label>
             <input
               type="file"
               accept="audio/*"
               onChange={(event) => setAudioFile(event.target.files?.[0] || null)}
-              className="mt-1 block w-full text-sm text-gray-700"
+              className="mt-1 block w-full text-sm text-gray-700 dark:text-gray-300"
             />
           </div>
           {transcriptionError && (
@@ -182,7 +182,7 @@ export default function AiTriageTestPage() {
             {isTranscribing ? 'Transcrevendo...' : 'Executar transcricao'}
           </Button>
           {transcriptionResponse && (
-            <pre className="whitespace-pre-wrap rounded-md bg-gray-50 p-3 text-sm">
+            <pre className="whitespace-pre-wrap rounded-md bg-gray-50 dark:bg-gray-800 p-3 text-sm">
               {JSON.stringify(transcriptionResponse, null, 2)}
             </pre>
           )}
@@ -196,7 +196,7 @@ export default function AiTriageTestPage() {
             <CardDescription>Resultado retornado pelo N8N</CardDescription>
           </CardHeader>
           <CardContent>
-            <pre className="whitespace-pre-wrap rounded-md bg-gray-50 p-3 text-sm">
+            <pre className="whitespace-pre-wrap rounded-md bg-gray-50 dark:bg-gray-800 p-3 text-sm">
               {JSON.stringify(response, null, 2)}
             </pre>
           </CardContent>
@@ -210,19 +210,19 @@ export default function AiTriageTestPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           {history.length === 0 ? (
-            <div className="text-sm text-gray-500">Nenhuma triagem registrada.</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">Nenhuma triagem registrada.</div>
           ) : (
             <div className="space-y-3">
               {history.map((item) => (
-                <div key={item.id} className="rounded-md border border-gray-200 p-3 text-sm">
+                <div key={item.id} className="rounded-md border border-gray-200 dark:border-gray-600 p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <div className="font-medium">{item.action}</div>
-                    <div className="text-gray-500">{formatDate(item.created_at)}</div>
+                    <div className="text-gray-500 dark:text-gray-400">{formatDate(item.created_at)}</div>
                   </div>
-                  <div className="text-gray-600">
+                  <div className="text-gray-600 dark:text-gray-400">
                     Status: {item.status} • Latencia: {item.latency_ms ?? 0} ms
                   </div>
-                  <div className="mt-2 rounded-md bg-gray-50 p-2 font-mono text-xs">
+                  <div className="mt-2 rounded-md bg-gray-50 dark:bg-gray-800 p-2 font-mono text-xs">
                     {JSON.stringify(item.result, null, 2)}
                   </div>
                 </div>

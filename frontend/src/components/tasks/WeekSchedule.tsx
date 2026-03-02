@@ -28,7 +28,7 @@ interface WeekScheduleProps {
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'bg-gray-100 text-gray-700 border-gray-200',
+  low: 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600',
   medium: 'bg-blue-100 text-blue-700 border-blue-200',
   high: 'bg-orange-100 text-orange-700 border-orange-200',
   urgent: 'bg-red-100 text-red-700 border-red-200',
@@ -101,11 +101,11 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
     <Card className="p-6 h-full flex flex-col">
       <div className="mb-6 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-blue-600" />
             Compromissos da Semana
           </h3>
-          <div className="flex items-center gap-4 text-sm text-gray-600">
+          <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
             {overdueTasks > 0 && (
               <span className="flex items-center gap-1 text-red-600">
                 <AlertCircle className="h-4 w-4" />
@@ -118,20 +118,20 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                 {todayTasks} hoje
               </span>
             )}
-            <span className="text-gray-500">
+            <span className="text-gray-500 dark:text-gray-400">
               {totalTasks} total
             </span>
           </div>
         </div>
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
           {format(today, "dd 'de' MMMM", { locale: ptBR })} até {format(weekEnd, "dd 'de' MMMM", { locale: ptBR })}
         </p>
       </div>
 
       {totalTasks === 0 ? (
-        <div className="text-center py-12 text-gray-500 flex-1 flex items-center justify-center">
+        <div className="text-center py-12 text-gray-500 dark:text-gray-400 flex-1 flex items-center justify-center">
           <div>
-            <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+            <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
             <p className="text-sm font-medium">Nenhum compromisso nos próximos 7 dias</p>
             <p className="text-xs mt-1">Suas tarefas agendadas aparecerão aqui</p>
           </div>
@@ -149,10 +149,10 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                 key={idx}
                 className={`border rounded-lg p-4 ${
                   isCurrentDay
-                    ? 'border-blue-500 bg-blue-50'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
                     : isPastDay
-                    ? 'border-gray-200 bg-gray-50 opacity-60'
-                    : 'border-gray-200 bg-white'
+                    ? 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 opacity-60'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800'
                 }`}
               >
                 {/* Header do Dia */}
@@ -163,25 +163,25 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                     }
                   }}
                   className={`flex items-center justify-between mb-3 pb-2 border-b ${
-                    isCurrentDay ? 'border-blue-200' : 'border-gray-200'
+                    isCurrentDay ? 'border-blue-200' : 'border-gray-200 dark:border-gray-600'
                   } ${canClick ? 'cursor-pointer' : ''}`}
                   title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`text-center ${isCurrentDay ? 'text-blue-600' : 'text-gray-700'}`}>
-                      <div className="text-xs font-medium text-gray-500">{dayName}</div>
+                    <div className={`text-center ${isCurrentDay ? 'text-blue-600' : 'text-gray-700 dark:text-gray-300'}`}>
+                      <div className="text-xs font-medium text-gray-500 dark:text-gray-400">{dayName}</div>
                       <div className={`text-2xl font-bold ${
-                        isCurrentDay ? 'text-blue-600' : 'text-gray-900'
+                        isCurrentDay ? 'text-blue-600' : 'text-gray-900 dark:text-gray-100'
                       }`}>
                         {dayNumber}
                       </div>
                     </div>
-                    <div className="text-sm text-gray-600">
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
                       {format(day, "dd 'de' MMMM", { locale: ptBR })}
                     </div>
                   </div>
                   {dayTasks.length > 0 && (
-                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
                       {dayTasks.length} {dayTasks.length === 1 ? 'compromisso' : 'compromissos'}
                     </span>
                   )}
@@ -192,8 +192,8 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                   {dayTasks.length === 0 ? (
                     <div 
                       onClick={() => canClick && onDateClick(day)}
-                      className={`text-center py-4 text-xs text-gray-400 ${
-                        canClick ? 'cursor-pointer hover:text-gray-600' : ''
+                      className={`text-center py-4 text-xs text-gray-400 dark:text-gray-500 ${
+                        canClick ? 'cursor-pointer hover:text-gray-600 dark:hover:text-gray-400' : ''
                       }`}
                     >
                       {canClick ? 'Clique para criar uma tarefa' : 'Sem tarefas'}
@@ -210,12 +210,12 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                             e.stopPropagation()
                             onTaskClick?.(task)
                           }}
-                          className={`task-item p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
-                            task.is_overdue
-                              ? 'border-red-300 bg-red-50'
+className={`task-item p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
+                              task.is_overdue
+                              ? 'border-red-300 bg-red-50 dark:bg-red-900/20'
                               : task.status === 'completed'
-                              ? 'border-gray-200 bg-gray-100 opacity-60'
-                              : 'border-gray-200 bg-white hover:border-blue-300'
+                              ? 'border-gray-200 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 opacity-60'
+                              : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:border-blue-300'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
@@ -233,12 +233,12 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                               </div>
                               <h4 className={`text-sm font-medium mb-1 ${
                                 task.status === 'completed'
-                                  ? 'line-through text-gray-500'
-                                  : 'text-gray-900'
+                                  ? 'line-through text-gray-500 dark:text-gray-400'
+                                  : 'text-gray-900 dark:text-gray-100'
                               }`}>
                                 {task.title}
                               </h4>
-                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                              <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
                                 {hasTime && taskDate && (
                                   <span className="flex items-center gap-1">
                                     <Clock className="h-3 w-3" />

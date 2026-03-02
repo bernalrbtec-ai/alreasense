@@ -93,9 +93,9 @@ export default function BillingPage() {
   if (!token || !user) {
     return (
       <div className="text-center py-12">
-        <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h2 className="text-xl font-semibold text-gray-700 mb-2">Sessão Expirada</h2>
-        <p className="text-gray-600 mb-4">Por favor, faça login novamente para ver seus produtos e planos.</p>
+        <Package className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+        <h2 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">Sessão Expirada</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-4">Por favor, faça login novamente para ver seus produtos e planos.</p>
         <Button onClick={() => window.location.href = '/login'}>
           Fazer Login
         </Button>
@@ -106,8 +106,8 @@ export default function BillingPage() {
   if (!tenant) {
     return (
       <div className="text-center py-8">
-        <Package className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-        <p className="text-gray-600">Erro ao carregar informações do tenant</p>
+        <Package className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
+        <p className="text-gray-600 dark:text-gray-400">Erro ao carregar informações do tenant</p>
       </div>
     )
   }
@@ -126,10 +126,10 @@ export default function BillingPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
           <CreditCard className="h-6 w-6" /> Meu Plano
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Confira os detalhes do seu plano atual e recursos disponíveis
         </p>
       </div>
@@ -143,7 +143,7 @@ export default function BillingPage() {
                 <Building2 className="h-5 w-5 text-blue-600" />
                 Dados da Empresa
               </h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Razão social, CNPJ, endereço e produtos. Usado para cobrança e contexto da BIA.
               </p>
             </div>
@@ -192,17 +192,17 @@ export default function BillingPage() {
                     return (
                       <div
                         key={planProduct.product.id}
-                        className="border border-gray-200 rounded-lg p-4 hover:border-blue-300 transition-colors"
+                        className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:border-blue-300 transition-colors"
                       >
                         <div className="flex items-start gap-3">
                           <div className="p-2 bg-blue-50 rounded-lg">
                             <IconComponent className="h-5 w-5 text-blue-600" />
                           </div>
                           <div className="flex-1">
-                            <h4 className="font-semibold text-gray-900">
+                            <h4 className="font-semibold text-gray-900 dark:text-gray-100">
                               {planProduct.product.name}
                             </h4>
-                            <p className="text-sm text-gray-600 mt-1">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                               {planProduct.product.description}
                             </p>
                             
@@ -211,7 +211,7 @@ export default function BillingPage() {
                               {/* Limite de Instâncias (sempre mostrar) */}
                               <div className="flex items-center gap-2 text-sm">
                                 <Check className="h-4 w-4 text-green-600" />
-                                <span className="text-gray-700">
+                                <span className="text-gray-700 dark:text-gray-300">
                                   <strong>{planProduct.limit_value || 0}</strong> {planProduct.limit_unit || 'instâncias'}
                                 </span>
                               </div>
@@ -221,11 +221,11 @@ export default function BillingPage() {
                                 <>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">Campanhas ilimitadas</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Campanhas ilimitadas</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">Contatos ilimitados</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Contatos ilimitados</span>
                                   </div>
                                 </>
                               )}
@@ -234,11 +234,11 @@ export default function BillingPage() {
                                 <>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">Análise de sentimento</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Análise de sentimento</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">Relatórios avançados</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Relatórios avançados</span>
                                   </div>
                                 </>
                               )}
@@ -247,11 +247,11 @@ export default function BillingPage() {
                                 <>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">API REST completa</span>
+                                    <span className="text-gray-700 dark:text-gray-300">API REST completa</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700">Documentação Swagger</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Documentação Swagger</span>
                                   </div>
                                 </>
                               )}
@@ -263,8 +263,8 @@ export default function BillingPage() {
                   })}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Package className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <Package className="h-12 w-12 mx-auto mb-2 text-gray-400 dark:text-gray-500" />
                   <p>Nenhum produto incluído neste plano</p>
                 </div>
               )}
@@ -278,7 +278,7 @@ export default function BillingPage() {
               <h3 className="text-lg font-semibold mb-4">Status da Conta</h3>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Status</span>
+                  <span className="text-gray-600 dark:text-gray-400">Status</span>
                   <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                     tenant.status === 'active' 
                       ? 'bg-green-100 text-green-700'
@@ -292,7 +292,7 @@ export default function BillingPage() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Empresa</span>
+                  <span className="text-gray-600 dark:text-gray-400">Empresa</span>
                   <span className="font-medium">{tenant.name}</span>
                 </div>
               </div>
@@ -302,19 +302,19 @@ export default function BillingPage() {
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4">Precisa de Mais?</h3>
               <div className="space-y-3">
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
                   Se você precisa de mais instâncias ou recursos, entre em contato com nosso time.
                 </p>
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <Check className="h-4 w-4 text-green-600" />
                     <span>Upgrade de plano disponível</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <Check className="h-4 w-4 text-green-600" />
                     <span>Add-ons de instâncias extras</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
                     <Check className="h-4 w-4 text-green-600" />
                     <span>Suporte dedicado</span>
                   </div>
@@ -325,11 +325,11 @@ export default function BillingPage() {
         </>
       ) : (
         <Card className="p-8 text-center">
-          <CreditCard className="h-16 w-16 mx-auto mb-4 text-gray-400" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
+          <CreditCard className="h-16 w-16 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
             Nenhum plano ativo
           </h3>
-          <p className="text-gray-600">
+          <p className="text-gray-600 dark:text-gray-400">
             Entre em contato com o administrador para ativar um plano
           </p>
         </Card>

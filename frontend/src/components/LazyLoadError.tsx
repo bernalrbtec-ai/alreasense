@@ -31,10 +31,10 @@ export function LazyLoadError({ error, onRetry }: LazyLoadErrorProps) {
         </div>
         
         <div>
-          <h3 className="text-lg font-semibold text-gray-900">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
             Erro ao carregar página
           </h3>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Não foi possível carregar o módulo necessário. Isso pode acontecer após um deploy recente.
           </p>
         </div>

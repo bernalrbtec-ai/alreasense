@@ -49,7 +49,7 @@ export function MediaPreview({
                 onError={() => setImageError(true)}
               />
             ) : (
-              <div className="w-full h-48 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-gray-400">
+              <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded-lg flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
                 <ImageIcon className="w-12 h-12 mb-2" />
                 <p className="text-sm">Erro ao carregar imagem</p>
                 {showDownload && (
@@ -69,18 +69,18 @@ export function MediaPreview({
               <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-opacity rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                 <button
                   onClick={() => window.open(fileUrl, '_blank')}
-                  className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
+                  className="p-2 bg-white dark:bg-gray-800 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                   title="Abrir em nova aba"
                 >
-                  <ExternalLink className="w-5 h-5 text-gray-700" />
+                  <ExternalLink className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                 </button>
                 {showDownload && (
                   <button
                     onClick={handleDownload}
-                    className="p-2 bg-white rounded-full hover:bg-gray-100 transition-colors"
+                    className="p-2 bg-white dark:bg-gray-800 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                     title="Baixar"
                   >
-                    <Download className="w-5 h-5 text-gray-700" />
+                    <Download className="w-5 h-5 text-gray-700 dark:text-gray-300" />
                   </button>
                 )}
               </div>
@@ -97,12 +97,12 @@ export function MediaPreview({
               </div>
               <div className="flex-1 min-w-0">
                 {filename && (
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
                     {filename}
                   </p>
                 )}
                 {fileSize && (
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
                     {formatFileSize(fileSize)}
                   </p>
                 )}
@@ -121,7 +121,7 @@ export function MediaPreview({
             {showDownload && (
               <button
                 onClick={handleDownload}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Baixar áudio
@@ -146,7 +146,7 @@ export function MediaPreview({
             {showDownload && (
               <button
                 onClick={handleDownload}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Download className="w-4 h-4" />
                 Baixar vídeo
@@ -158,18 +158,18 @@ export function MediaPreview({
       case 'document':
         return (
           <div className="w-full max-w-md space-y-3">
-            <div className="p-6 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+            <div className="p-6 bg-gray-50 dark:bg-gray-700 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
               <div className="flex flex-col items-center text-center">
-                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-3">
+                <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-3">
                   <FileText className="w-8 h-8 text-red-600" />
                 </div>
                 {filename && (
-                  <p className="text-sm font-medium text-gray-900 mb-1">
+                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
                     {filename}
                   </p>
                 )}
                 {fileSize && (
-                  <p className="text-xs text-gray-500 mb-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                     {formatFileSize(fileSize)}
                   </p>
                 )}
@@ -177,7 +177,7 @@ export function MediaPreview({
                 <div className="flex gap-2">
                   <button
                     onClick={() => window.open(fileUrl, '_blank')}
-                    className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                    className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
                   >
                     <ExternalLink className="w-4 h-4" />
                     Abrir
@@ -199,7 +199,7 @@ export function MediaPreview({
 
       default:
         return (
-          <div className="text-center text-gray-500">
+          <div className="text-center text-gray-500 dark:text-gray-400">
             Tipo de arquivo não suportado
           </div>
         )
@@ -212,9 +212,9 @@ export function MediaPreview({
       {onClose && (
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md hover:bg-gray-100 transition-colors z-10"
+          className="absolute top-2 right-2 p-1 bg-white dark:bg-gray-800 rounded-full shadow-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors z-10"
         >
-          <X className="w-5 h-5 text-gray-600" />
+          <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
       )}
 
@@ -264,7 +264,7 @@ export function MediaThumbnail({
       case 'document':
         return 'bg-red-100 text-red-600'
       default:
-        return 'bg-gray-100 text-gray-600'
+        return 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
     }
   }
 

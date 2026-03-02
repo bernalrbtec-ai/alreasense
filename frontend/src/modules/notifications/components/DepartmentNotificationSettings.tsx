@@ -111,7 +111,7 @@ export const DepartmentNotificationSettings: React.FC = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando preferências dos departamentos...</p>
+          <p className="text-gray-600 dark:text-gray-400">Carregando preferências dos departamentos...</p>
         </div>
       </div>
     );
@@ -141,11 +141,11 @@ export const DepartmentNotificationSettings: React.FC = () => {
           <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg p-6 border border-purple-100">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   <Building2 className="h-6 w-6 text-purple-600" />
                   {pref.department_name}
                 </h3>
-                <p className="mt-2 text-sm text-gray-600">
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                   Configure as notificações para este departamento
                 </p>
               </div>
@@ -176,10 +176,10 @@ export const DepartmentNotificationSettings: React.FC = () => {
           <Card className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
                   <Bell className="h-5 w-5 text-blue-600" /> Resumo Diário
                 </h4>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                   Configure um horário para receber um resumo das tarefas do departamento
                 </p>
               </div>
@@ -197,17 +197,17 @@ export const DepartmentNotificationSettings: React.FC = () => {
             {pref.daily_summary_enabled && (
               <div className="mt-4 space-y-4 animate-fade-in">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Horário do Resumo
                   </label>
                   <input
                     type="time"
                     value={pref.daily_summary_time || ''}
                     onChange={(e) => updatePreference(pref.id!, 'daily_summary_time', e.target.value)}
-                    className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-2 px-4"
+                    className="block w-full rounded-lg border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-lg py-2 px-4"
                   />
                   {pref.daily_summary_time && (
-                    <p className="mt-2 text-xs text-gray-500">
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                       Você receberá o resumo todos os dias às {pref.daily_summary_time}
                     </p>
                   )}
@@ -224,8 +224,8 @@ export const DepartmentNotificationSettings: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Apenas Tarefas Críticas</label>
-                  <p className="text-xs text-gray-500">Mostrar apenas tarefas com prioridade alta ou urgente</p>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Apenas Tarefas Críticas</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Mostrar apenas tarefas com prioridade alta ou urgente</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -239,8 +239,8 @@ export const DepartmentNotificationSettings: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">Apenas Tarefas Atribuídas</label>
-                  <p className="text-xs text-gray-500">Mostrar apenas tarefas com responsável definido</p>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Apenas Tarefas Atribuídas</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Mostrar apenas tarefas com responsável definido</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -253,7 +253,7 @@ export const DepartmentNotificationSettings: React.FC = () => {
                 </label>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Máximo de Tarefas por Notificação
                 </label>
                 <input
@@ -262,9 +262,9 @@ export const DepartmentNotificationSettings: React.FC = () => {
                   max="50"
                   value={pref.max_tasks_per_notification}
                   onChange={(e) => updatePreference(pref.id!, 'max_tasks_per_notification', parseInt(e.target.value))}
-                  className="block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-4"
+                  className="block w-full rounded-lg border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 py-2 px-4"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Limite para evitar mensagens muito longas (padrão: 20)
                 </p>
               </div>
@@ -279,8 +279,8 @@ export const DepartmentNotificationSettings: React.FC = () => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">WhatsApp</label>
-                  <p className="text-xs text-gray-500">Receber notificações via WhatsApp</p>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">WhatsApp</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Receber notificações via WhatsApp</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -294,8 +294,8 @@ export const DepartmentNotificationSettings: React.FC = () => {
               </div>
               <div className="flex items-center justify-between">
                 <div>
-                  <label className="text-sm font-medium text-gray-700">WebSocket (Navegador)</label>
-                  <p className="text-xs text-gray-500">Receber notificações no navegador</p>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300">WebSocket (Navegador)</label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Receber notificações no navegador</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -324,8 +324,8 @@ export const DepartmentNotificationSettings: React.FC = () => {
               ].map(({ key, label, desc }) => (
                 <div key={key} className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium text-gray-700">{label}</label>
-                    <p className="text-xs text-gray-500">{desc}</p>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{desc}</p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input

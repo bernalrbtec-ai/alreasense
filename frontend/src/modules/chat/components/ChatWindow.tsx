@@ -791,7 +791,7 @@ export function ChatWindow() {
                     }
                   }}
                   disabled={isCheckingContact}
-                  className="flex-shrink-0 p-1.5 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+                  className="flex-shrink-0 p-1.5 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
                   title={existingContact ? 'Ver Contato' : 'Adicionar Contato'}
                 >
                   {isCheckingContact ? (
@@ -868,12 +868,12 @@ export function ChatWindow() {
               }`}
               title="Histórico do Contato"
             >
-              <Clock className="w-5 h-5 text-gray-600" />
+              <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
           )}
           
           <button 
-            className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
+            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
             title="Buscar"
           >
             <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
@@ -928,7 +928,7 @@ export function ChatWindow() {
                         setLoadingGroupInfo(false);
                       }
                     }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
                     <User className="w-4 h-4" />
                     Informações do grupo
@@ -941,7 +941,7 @@ export function ChatWindow() {
                       setShowTransferModal(true);
                       setShowMenu(false);
                     }}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
                     <ArrowRightLeft className="w-4 h-4" />
                     Transferir conversa
@@ -987,11 +987,11 @@ export function ChatWindow() {
       {/* ✅ CORREÇÃO: Histórico ocupa toda a tela quando aberto */}
       {showHistory && existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
         <div className="flex flex-col flex-1 min-w-0 bg-white dark:bg-gray-900 h-full overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
+          <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between bg-gray-50 dark:bg-gray-800 flex-shrink-0">
             <h3 className="font-semibold text-gray-900 dark:text-gray-100">Histórico</h3>
             <button
               onClick={() => setShowHistory(false)}
-              className="p-1 hover:bg-gray-200 rounded transition-colors"
+              className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
             >
               <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
@@ -1035,14 +1035,14 @@ export function ChatWindow() {
       {showGroupInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações do Grupo</h2>
               <button
                 onClick={() => {
                   setShowGroupInfo(false);
                   setGroupInfo(null);
                 }}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
               >
                 <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
@@ -1060,19 +1060,19 @@ export function ChatWindow() {
                     <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Informações Básicas</h3>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 w-24">Nome:</span>
-                        <span className="text-sm font-medium text-gray-900">{groupInfo?.group_name || 'Sem nome'}</span>
+                        <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Nome:</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{groupInfo?.group_name || 'Sem nome'}</span>
                       </div>
                       {groupInfo?.description && (
                         <div className="flex items-start gap-2">
-                          <span className="text-sm text-gray-600 w-24">Descrição:</span>
-                          <span className="text-sm text-gray-900 flex-1">{groupInfo.description}</span>
+                          <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Descrição:</span>
+                          <span className="text-sm text-gray-900 dark:text-gray-100 flex-1">{groupInfo.description}</span>
                         </div>
                       )}
                       {groupInfo?.creation_date && (
                         <div className="flex items-center gap-2">
-                          <span className="text-sm text-gray-600 w-24">Criado em:</span>
-                          <span className="text-sm text-gray-900">
+                          <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Criado em:</span>
+                          <span className="text-sm text-gray-900 dark:text-gray-100">
                             {new Date(groupInfo.creation_date).toLocaleString('pt-BR', {
                               dateStyle: 'long',
                               timeStyle: 'short'
@@ -1081,8 +1081,8 @@ export function ChatWindow() {
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600 w-24">Participantes:</span>
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm text-gray-600 dark:text-gray-400 w-24">Participantes:</span>
+                        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
                           {(() => {
                             if (!groupInfo) return 0;
                             if (typeof groupInfo.participants_count === 'number') {

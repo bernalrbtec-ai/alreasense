@@ -112,7 +112,7 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
             <h2 className="text-xl font-bold">Editar Tag</h2>
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 transition-colors"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -124,21 +124,21 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
               <div className="space-y-4">
                 {/* Nome */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Nome da Tag *
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Ex: VIP, Cliente Premium"
                   />
                 </div>
 
                 {/* Cor */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Cor
                   </label>
                   <div className="flex items-center gap-3">
@@ -146,13 +146,13 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                       type="color"
                       value={color}
                       onChange={(e) => setColor(e.target.value)}
-                      className="h-10 w-20 border border-gray-300 rounded cursor-pointer"
+                      className="h-10 w-20 border border-gray-300 dark:border-gray-600 rounded cursor-pointer"
                     />
                     <input
                       type="text"
                       value={color}
                       onChange={(e) => setColor(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
                       placeholder="#3B82F6"
                     />
                   </div>
@@ -160,14 +160,14 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
 
                 {/* Descrição */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Descrição (opcional)
                   </label>
                   <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Descrição da tag..."
                   />
                 </div>
@@ -224,13 +224,13 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
 
                 {tag.contact_count !== undefined && tag.contact_count > 0 && (
                   <div className="space-y-3">
-                    <p className="text-sm text-gray-700">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                       Esta tag está associada a <strong>{tag.contact_count} contato{tag.contact_count !== 1 ? 's' : ''}</strong>.
                       O que deseja fazer?
                     </p>
 
                     <div className="space-y-2">
-                      <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                      <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
                         <input
                           type="radio"
                           name="deleteOption"
@@ -239,10 +239,10 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                           className="mt-1"
                         />
                         <div>
-                          <div className="font-medium text-gray-900">
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
                             Apenas remover a tag
                           </div>
-                          <div className="text-sm text-gray-500">
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
                             Os contatos serão mantidos, apenas a tag será removida deles
                           </div>
                         </div>
@@ -305,7 +305,7 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                 )}
 
                 {tag.contact_count === 0 && (
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Esta tag não possui contatos associados. A exclusão será permanente.
                   </p>
                 )}

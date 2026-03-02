@@ -276,8 +276,8 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
         {/* Lista de conversas e contatos */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           {filteredItems.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300 dark:text-gray-500" />
               <p>{searchQuery.trim() ? 'Nenhuma conversa ou contato encontrado' : 'Nenhuma conversa disponível'}</p>
             </div>
           ) : (
@@ -316,9 +316,9 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
                     ) : (
                       <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
                         {isConv ? (
-                          <MessageSquare className="w-5 h-5 text-gray-400" />
+                          <MessageSquare className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                         ) : (
-                          <User className="w-5 h-5 text-gray-400" />
+                          <User className="w-5 h-5 text-gray-400 dark:text-gray-500" />
                         )}
                       </div>
                     )}
@@ -350,10 +350,10 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             disabled={sending}
           >
             Cancelar
@@ -365,7 +365,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
               px-4 py-2 rounded-lg transition-colors
               ${selectedItem && !sending
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
               }
             `}
           >

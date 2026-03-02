@@ -51,23 +51,23 @@ export function WebSocketDebug({
   }
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 max-h-96 bg-white border border-gray-200 rounded-lg shadow-xl z-50">
+    <div className="fixed bottom-4 right-4 w-96 max-h-96 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-xl z-50">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-gray-200">
+      <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600">
         <div className="flex items-center gap-2">
           <Bug className="w-4 h-4 text-blue-600" />
           <h3 className="font-semibold text-sm">WebSocket Debug</h3>
         </div>
         <Button
           onClick={() => setIsVisible(false)}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
         >
           <EyeOff className="w-4 h-4" />
         </Button>
       </div>
 
       {/* Status */}
-      <div className="p-3 border-b border-gray-200">
+      <div className="p-3 border-b border-gray-200 dark:border-gray-600">
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
             <span className="font-medium">Status:</span>
@@ -86,18 +86,18 @@ export function WebSocketDebug({
 
       {/* Last Update */}
       {lastUpdate && (
-        <div className="p-3 border-b border-gray-200">
+        <div className="p-3 border-b border-gray-200 dark:border-gray-600">
           <div className="flex items-center justify-between mb-2">
             <h4 className="font-medium text-xs">Última Atualização</h4>
             <Button
               onClick={() => copyToClipboard(JSON.stringify(lastUpdate, null, 2))}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
               title="Copiar"
             >
               <Copy className="w-3 h-3" />
             </Button>
           </div>
-          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded max-h-20 overflow-y-auto">
+          <div className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-2 rounded max-h-20 overflow-y-auto">
             <div><strong>Campanha:</strong> {lastUpdate.campaign_name}</div>
             <div><strong>Evento:</strong> {lastUpdate.type}</div>
             <div><strong>Status:</strong> {lastUpdate.status}</div>
@@ -114,14 +114,14 @@ export function WebSocketDebug({
           <div className="flex gap-1">
             <Button
               onClick={() => setAutoScroll(!autoScroll)}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
               title={autoScroll ? "Auto-scroll ativo" : "Auto-scroll desativado"}
             >
-              <Eye className={`w-3 h-3 ${autoScroll ? 'text-green-600' : 'text-gray-400'}`} />
+              <Eye className={`w-3 h-3 ${autoScroll ? 'text-green-600' : 'text-gray-400 dark:text-gray-500'}`} />
             </Button>
             <Button
               onClick={clearMessages}
-              className="p-1 hover:bg-gray-100 rounded"
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
               title="Limpar"
             >
               <Trash2 className="w-3 h-3" />
@@ -129,14 +129,14 @@ export function WebSocketDebug({
           </div>
         </div>
         
-        <div className="max-h-32 overflow-y-auto bg-gray-50 p-2 rounded text-xs">
+        <div className="max-h-32 overflow-y-auto bg-gray-50 dark:bg-gray-700 p-2 rounded text-xs">
           {messages.length === 0 ? (
-            <div className="text-gray-500 text-center">Nenhuma mensagem recebida</div>
+            <div className="text-gray-500 dark:text-gray-400 text-center">Nenhuma mensagem recebida</div>
           ) : (
             messages.slice(-10).map((msg, index) => (
-              <div key={index} className="mb-1 p-1 bg-white rounded border">
+              <div key={index} className="mb-1 p-1 bg-white dark:bg-gray-800 rounded border dark:border-gray-600">
                 <div className="font-medium">{msg.type}</div>
-                <div className="text-gray-600 text-xs">
+                <div className="text-gray-600 dark:text-gray-400 text-xs">
                   {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString() : 'Agora'}
                 </div>
               </div>

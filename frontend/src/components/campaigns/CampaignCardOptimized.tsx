@@ -151,8 +151,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
       case 'draft':
         return {
           icon: <Edit className="h-3 w-3" />,
-          color: 'bg-gray-100 text-gray-800 border-gray-200',
-          bgColor: 'bg-gray-50',
+          color: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600',
+          bgColor: 'bg-gray-50 dark:bg-gray-800',
           pulse: false
         }
       case 'scheduled':
@@ -172,8 +172,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
       default:
         return {
           icon: <Activity className="h-3 w-3" />,
-          color: 'bg-gray-100 text-gray-800 border-gray-200',
-          bgColor: 'bg-gray-50',
+          color: 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-600',
+          bgColor: 'bg-gray-50 dark:bg-gray-800',
           pulse: false
         }
     }
@@ -221,8 +221,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
           <div className="flex items-start justify-between">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
-                <CardTitle className="text-lg font-semibold text-gray-900 truncate">
-                  {campaign.name}
+<CardTitle className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+                {campaign.name}
                 </CardTitle>
                 <Badge 
                   variant="outline" 
@@ -234,7 +234,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
               </div>
               
               {/* Métricas básicas */}
-              <div className="flex items-center gap-4 text-sm text-gray-600">
+              <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <div className="flex items-center gap-1">
                   <Users className="h-4 w-4" />
                   <span>{campaign.total_contacts} contatos</span>
@@ -319,7 +319,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                     size="sm"
                     variant="outline"
                     onClick={() => onViewLogs(campaign)}
-                    className="h-8 w-8 p-0 hover:bg-gray-100 hover:text-gray-700"
+                    className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-300"
                   >
                     <FileText className="h-4 w-4" />
                   </Button>
@@ -334,12 +334,12 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
           {campaign.status === 'running' && campaign.total_contacts > 0 && (
             <div className="space-y-2">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-gray-600 font-medium">Progresso da Campanha</span>
-                <span className="text-gray-900 font-bold">
+                <span className="text-gray-600 dark:text-gray-400 font-medium">Progresso da Campanha</span>
+                <span className="text-gray-900 dark:text-gray-100 font-bold">
                   {campaign.messages_sent} / {campaign.total_contacts} ({Math.round(campaign.progress_percentage || 0)}%)
                 </span>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 ease-out rounded-full"
                   style={{ width: `${Math.min(campaign.progress_percentage || 0, 100)}%` }}
@@ -391,7 +391,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                       Tentativa {campaign.retryInfo.retry_attempt}/3
                     </span>
                   </div>
-                  <div className="text-sm text-gray-700 mb-1">
+                  <div className="text-sm text-gray-700 dark:text-gray-300 mb-1">
                     <strong>Contato:</strong> {campaign.retryInfo.retry_contact_name} ({campaign.retryInfo.retry_contact_phone})
                   </div>
                   {campaign.retryInfo.retry_error_reason && (
@@ -408,25 +408,25 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
           )}
 
           {/* Footer info */}
-          <div className="pt-4 border-t border-gray-200">
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
             <div className="space-y-2 text-sm">
               {/* ✅ CORREÇÃO: Removido contador duplicado - mantido apenas no card "Via:" */}
               
               {campaign.next_contact_name && (
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                   <Users className="h-4 w-4 text-blue-500" />
                   <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
                 </div>
               )}
               {campaign.next_instance_name && (
-                <div className="flex items-center gap-2 text-gray-600">
+                <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                   <Phone className="h-4 w-4 text-green-500" />
                   <span><strong>Via:</strong> {campaign.next_instance_name}</span>
                   {countdown > 0 && !campaign.retryInfo?.is_retrying && (
                     <>
-                      <span className="text-gray-400">•</span>
-                      <Clock className="h-3 w-3 text-gray-500" />
-                      <span className="text-xs">Próximo disparo em: <strong className="text-gray-900">{formatCountdown(countdown)}</strong></span>
+                      <span className="text-gray-400 dark:text-gray-500">•</span>
+                      <Clock className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                      <span className="text-xs">Próximo disparo em: <strong className="text-gray-900 dark:text-gray-100">{formatCountdown(countdown)}</strong></span>
                     </>
                   )}
                 </div>

@@ -40,14 +40,14 @@ export function MessageVariables({ className = '', contactId }: MessageVariables
   return (
     <div className={`${className}`}>
       <div className="mb-3">
-        <h4 className="text-sm font-medium text-gray-700 mb-2">📝 Variáveis Disponíveis</h4>
-        <p className="text-xs text-gray-500 mb-3">
+        <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">📝 Variáveis Disponíveis</h4>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
           Clique em qualquer variável para inserir na mensagem ou arraste para o campo de texto
         </p>
       </div>
       
       {loading ? (
-        <div className="text-center py-4 text-sm text-gray-500">
+        <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
           Carregando variáveis...
         </div>
       ) : (
@@ -101,18 +101,18 @@ export function MessageVariables({ className = '', contactId }: MessageVariables
                 <div className="flex-shrink-0 w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center group-hover:bg-blue-200 transition-colors">
                   <IconComponent className="w-3 h-3 text-blue-600" />
                 </div>
-                <h4 className="text-xs font-medium text-gray-900 truncate">
+                <h4 className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">
                   {item.display_name}
                 </h4>
               </div>
               
               {/* Variável */}
-              <code className="text-xs text-blue-600 font-mono bg-white px-2 py-1 rounded border block mb-1">
+              <code className="text-xs text-blue-600 font-mono bg-white dark:bg-gray-800 px-2 py-1 rounded border dark:border-gray-600 block mb-1">
                 {item.variable}
               </code>
               
               {/* Exemplo */}
-              <p className="text-xs text-gray-500 italic">
+              <p className="text-xs text-gray-500 dark:text-gray-400 italic">
                 {item.example_value ? `Ex: ${item.example_value}` : item.description}
               </p>
               
@@ -135,7 +135,7 @@ export function MessageVariables({ className = '', contactId }: MessageVariables
                 {copiedVariable === item.variable ? (
                   <Check className="w-3 h-3 text-green-600" />
                 ) : (
-                  <Copy className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                  <Copy className="w-3 h-3 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-400" />
                 )}
               </button>
               

@@ -142,7 +142,7 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
       <div className="grid grid-cols-7 gap-1">
         {/* Cabeçalho dos dias da semana */}
         {weekDays.map(day => (
-          <div key={day} className="p-2 text-center text-sm font-semibold text-gray-600">
+          <div key={day} className="p-2 text-center text-sm font-semibold text-gray-600 dark:text-gray-400">
             {day}
           </div>
         ))}
@@ -160,17 +160,17 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
             <div
               key={index}
               onClick={(e) => canClick && handleDateClick(date, e)}
-              className={`min-h-[100px] border border-gray-200 p-2 ${
-                !isCurrentMonth ? 'bg-gray-50' : ''
-              } ${isCurrentDay ? 'bg-blue-50 border-blue-300' : ''} ${
-                canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''
+              className={`min-h-[100px] border border-gray-200 dark:border-gray-600 p-2 ${
+                !isCurrentMonth ? 'bg-gray-50 dark:bg-gray-800/50' : ''
+              } ${isCurrentDay ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-600' : ''} ${
+                canClick ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors' : ''
               } ${isPastDay && isCurrentMonth ? 'opacity-60' : ''}`}
               title={isPastDay && isCurrentMonth ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
             >
               {date && (
                 <>
                   <div className={`text-sm font-medium mb-1 ${
-                    isCurrentDay ? 'text-blue-600' : 'text-gray-900'
+                    isCurrentDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'
                   }`}>
                     {date.getDate()}
                   </div>
@@ -192,7 +192,7 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
                           }}
                           className={`task-item text-xs p-1 rounded cursor-pointer truncate ${
                             task.status === 'completed'
-                              ? 'bg-gray-200 text-gray-600 line-through'
+                              ? 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 line-through'
                               : task.priority === 'urgent'
                               ? 'bg-red-100 text-red-800'
                               : task.priority === 'high'
@@ -207,7 +207,7 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
                         </div>
                       ))}
                     {dayTasks.length > 3 && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         +{dayTasks.length - 3} mais
                       </div>
                     )}

@@ -103,10 +103,10 @@ export function FileUploader({
       <button
         onClick={handleButtonClick}
         disabled={disabled || externalIsUploading}
-        className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         title="Anexar arquivo"
       >
-        <Paperclip className="w-6 h-6 text-gray-600" />
+        <Paperclip className="w-6 h-6 text-gray-600 dark:text-gray-400" />
       </button>
     </>
   );

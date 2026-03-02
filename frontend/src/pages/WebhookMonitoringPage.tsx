@@ -174,19 +174,19 @@ export default function WebhookMonitoringPage() {
       case 'messages.update': return 'text-blue-600 bg-blue-50'
       case 'contacts.update': return 'text-purple-600 bg-purple-50'
       case 'connection.update': return 'text-orange-600 bg-orange-50'
-      case 'presence.update': return 'text-gray-600 bg-gray-50'
-      default: return 'text-gray-600 bg-gray-50'
+      case 'presence.update': return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700'
+      default: return 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700'
     }
   }
 
   // Lista de tipos de evento disponíveis
   const eventTypes = [
-    { type: '', icon: '📋', label: 'Todos os Eventos', color: 'text-gray-600 bg-gray-50' },
+    { type: '', icon: '📋', label: 'Todos os Eventos', color: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700' },
     { type: 'messages.upsert', icon: '📥', label: 'Mensagens Recebidas', color: 'text-green-600 bg-green-50' },
     { type: 'messages.update', icon: '📤', label: 'Status de Mensagens', color: 'text-blue-600 bg-blue-50' },
     { type: 'contacts.update', icon: '📞', label: 'Atualizações de Contato', color: 'text-purple-600 bg-purple-50' },
     { type: 'connection.update', icon: '🔗', label: 'Status de Conexão', color: 'text-orange-600 bg-orange-50' },
-    { type: 'presence.update', icon: '👤', label: 'Status de Presença', color: 'text-gray-600 bg-gray-50' },
+    { type: 'presence.update', icon: '👤', label: 'Status de Presença', color: 'text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700' },
   ]
 
   if (isLoading) {
@@ -202,8 +202,8 @@ export default function WebhookMonitoringPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Monitoramento de Webhooks</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Monitoramento de Webhooks</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Cache Redis com TTL de 24h para reprocessamento de eventos
           </p>
         </div>
@@ -236,8 +236,8 @@ export default function WebhookMonitoringPage() {
                 <Database className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total de Eventos</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.total_events}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Total de Eventos</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total_events}</p>
               </div>
             </div>
           </Card>
@@ -248,8 +248,8 @@ export default function WebhookMonitoringPage() {
                 <TrendingUp className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Memória Usada</p>
-                <p className="text-2xl font-bold text-gray-900">{formatBytes(stats.total_memory_bytes)}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Memória Usada</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{formatBytes(stats.total_memory_bytes)}</p>
               </div>
             </div>
           </Card>
@@ -260,8 +260,8 @@ export default function WebhookMonitoringPage() {
                 <Clock className="h-5 w-5 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">TTL Cache</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.cache_ttl_hours}h</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">TTL Cache</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.cache_ttl_hours}h</p>
               </div>
             </div>
           </Card>
@@ -272,8 +272,8 @@ export default function WebhookMonitoringPage() {
                 <AlertCircle className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Tipos de Eventos</p>
-                <p className="text-2xl font-bold text-gray-900">{Object.keys(stats.event_types).length}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Tipos de Eventos</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{Object.keys(stats.event_types).length}</p>
               </div>
             </div>
           </Card>
@@ -283,13 +283,13 @@ export default function WebhookMonitoringPage() {
       {/* Event Types Breakdown */}
       {stats && stats.event_types && (
         <Card className="p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Distribuição por Tipo de Evento</h3>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Distribuição por Tipo de Evento</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Object.entries(stats.event_types).map(([eventType, count]) => (
               <div key={eventType} className="text-center">
                 <div className="text-2xl mb-1">{getEventIcon(eventType)}</div>
-                <p className="text-sm font-medium text-gray-900">{count}</p>
-                <p className="text-xs text-gray-500">{eventType}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{count}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{eventType}</p>
               </div>
             ))}
           </div>
@@ -300,20 +300,20 @@ export default function WebhookMonitoringPage() {
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
               Eventos Recentes {pagination && `(${pagination.total_events} total)`}
             </h3>
             {/* Active Filter Indicator */}
             {filters.event_type && (
               <div className="flex items-center gap-2 mt-1">
-                <span className="text-sm text-gray-500">Filtro ativo:</span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">Filtro ativo:</span>
                 <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getEventColor(filters.event_type)}`}>
                   <span>{getEventIcon(filters.event_type)}</span>
                   {eventTypes.find(et => et.type === filters.event_type)?.label || filters.event_type}
                 </span>
                 <button
                   onClick={() => handleFilterChange('event_type', '')}
-                  className="text-gray-400 hover:text-gray-600 text-xs"
+                  className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-xs"
                 >
                   ✕
                 </button>
@@ -334,10 +334,10 @@ export default function WebhookMonitoringPage() {
 
         {/* Filters Panel */}
         {showFilters && (
-          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+          <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             {/* Event Type Filter with Icons */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Tipo de Evento
               </label>
               <div className="flex flex-wrap gap-2">
@@ -348,7 +348,7 @@ export default function WebhookMonitoringPage() {
                     className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
                       filters.event_type === eventType.type
                         ? `${eventType.color} border-current`
-                        : 'bg-white border-gray-300 hover:bg-gray-50'
+                        : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600'
                     }`}
                   >
                     <span className="text-lg">{eventType.icon}</span>
@@ -360,7 +360,7 @@ export default function WebhookMonitoringPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Instância
                 </label>
                 <input
@@ -372,7 +372,7 @@ export default function WebhookMonitoringPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Data Inicial
                 </label>
                 <input
@@ -383,7 +383,7 @@ export default function WebhookMonitoringPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Data Final
                 </label>
                 <input
@@ -415,22 +415,22 @@ export default function WebhookMonitoringPage() {
 
         <div className="space-y-3">
           {recentEvents.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
               <p>Nenhum evento encontrado com os filtros aplicados</p>
             </div>
           ) : (
             recentEvents.map((event) => (
               <div
                 key={event._event_id}
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                className="flex items-center justify-between p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
                 onClick={() => setSelectedEvent(event)}
               >
                 <div className="flex items-center gap-4">
                   <div className="text-2xl">{getEventIcon(event.event)}</div>
                   <div>
-                    <p className="font-medium text-gray-900">{event.event}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{event.event}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
                       {event.instance} • {formatDate(event._cached_at)}
                     </p>
                   </div>
@@ -449,7 +449,7 @@ export default function WebhookMonitoringPage() {
         {/* Pagination */}
         {pagination && pagination.total_pages > 1 && (
           <div className="mt-6 flex items-center justify-between">
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-gray-700 dark:text-gray-300">
               Mostrando {((pagination.current_page - 1) * pagination.page_size) + 1} a{' '}
               {Math.min(pagination.current_page * pagination.page_size, pagination.total_events)} de{' '}
               {pagination.total_events} eventos
@@ -505,9 +505,9 @@ export default function WebhookMonitoringPage() {
       {/* Event Details Modal */}
       {selectedEvent && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Detalhes do Evento: {selectedEvent._event_id}
               </h3>
               <Button
@@ -521,25 +521,25 @@ export default function WebhookMonitoringPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Tipo de Evento</p>
-                  <p className="text-sm text-gray-900">{selectedEvent.event}</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Tipo de Evento</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{selectedEvent.event}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Instância</p>
-                  <p className="text-sm text-gray-900">{selectedEvent.instance}</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Instância</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{selectedEvent.instance}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Recebido em</p>
-                  <p className="text-sm text-gray-900">{formatDate(selectedEvent._cached_at)}</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Recebido em</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{formatDate(selectedEvent._cached_at)}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">Server URL</p>
-                  <p className="text-sm text-gray-900">{selectedEvent.server_url}</p>
+                  <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Server URL</p>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{selectedEvent.server_url}</p>
                 </div>
               </div>
               <div>
-                <p className="text-sm font-medium text-gray-500 mb-2">Dados do Evento</p>
-                <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto">
+                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Dados do Evento</p>
+                <pre className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg text-xs overflow-x-auto">
                   {JSON.stringify(selectedEvent.data, null, 2)}
                 </pre>
               </div>

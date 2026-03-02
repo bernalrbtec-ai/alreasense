@@ -140,7 +140,7 @@ export function DepartmentsManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-medium text-gray-900">Departamentos</h3>
+        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Departamentos</h3>
         <Button size="sm" onClick={() => setShowModal(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Departamento
@@ -151,7 +151,7 @@ export function DepartmentsManager() {
         {Array.isArray(departments) && departments.map((dept) => (
           <div
             key={dept.id}
-            className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
+            className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-4 hover:shadow-sm transition-shadow"
           >
             <div className="flex items-start justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -162,7 +162,7 @@ export function DepartmentsManager() {
                   <Building2 className="w-5 h-5" style={{ color: dept.color }} />
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-900 text-sm">{dept.name}</h4>
+                  <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm">{dept.name}</h4>
                   {dept.ai_enabled && (
                     <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full">
                       IA
@@ -173,13 +173,13 @@ export function DepartmentsManager() {
               <div className="flex gap-1">
                 <button
                   onClick={() => handleEdit(dept)}
-                  className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                  className="p-1 text-gray-400 dark:text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(dept.id)}
-                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                  className="p-1 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -190,9 +190,9 @@ export function DepartmentsManager() {
       </div>
 
       {departments.length === 0 && (
-        <div className="text-center py-8 bg-gray-50 rounded-lg">
-          <Building2 className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-          <p className="text-gray-600 text-sm">Nenhum departamento cadastrado</p>
+        <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <Building2 className="w-10 h-10 text-gray-400 dark:text-gray-500 mx-auto mb-2" />
+          <p className="text-gray-600 dark:text-gray-400 text-sm">Nenhum departamento cadastrado</p>
           <button
             onClick={() => setShowModal(true)}
             className="mt-3 text-blue-600 hover:text-blue-700 font-medium text-sm"
@@ -205,28 +205,28 @@ export function DepartmentsManager() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">
               {editingDept ? 'Editar Departamento' : 'Novo Departamento'}
             </h2>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nome
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Ex: Financeiro, Comercial"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Cor
                 </label>
                 <div className="flex items-center gap-2">
@@ -234,29 +234,29 @@ export function DepartmentsManager() {
                     type="color"
                     value={formData.color}
                     onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    className="w-12 h-10 border border-gray-300 rounded cursor-pointer"
+                    className="w-12 h-10 border border-gray-300 dark:border-gray-600 rounded cursor-pointer"
                   />
                   <input
                     type="text"
                     value={formData.color}
                     onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Mensagem de Transferência
                 </label>
                 <textarea
                   value={formData.transfer_message}
                   onChange={(e) => setFormData({ ...formData, transfer_message: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500"
                   placeholder="Mensagem automática enviada ao cliente quando uma conversa é transferida para este departamento"
                   rows={3}
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   Mensagem opcional que será enviada automaticamente ao cliente quando uma conversa for transferida para este departamento
                 </p>
               </div>
@@ -269,7 +269,7 @@ export function DepartmentsManager() {
                   disabled
                   className="w-4 h-4 text-blue-600 rounded"
                 />
-                <label htmlFor="ai_enabled" className="text-sm text-gray-700">
+                <label htmlFor="ai_enabled" className="text-sm text-gray-700 dark:text-gray-300">
                   Habilitar IA <span className="text-xs text-blue-600 font-medium">(Em breve)</span>
                 </label>
               </div>
@@ -278,7 +278,7 @@ export function DepartmentsManager() {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   Cancelar
                 </button>

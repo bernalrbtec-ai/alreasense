@@ -195,18 +195,18 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
   const contactExists = savedContact !== null;
   
   return (
-    <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-shadow">
+    <div className="mb-2 border border-gray-200 dark:border-gray-600 rounded-lg p-3 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center shadow-sm">
           <User className="w-6 h-6 text-blue-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs text-gray-500 mb-2 font-medium">📇 Contato compartilhado</div>
-          <div className="font-semibold text-gray-900 mb-1 text-base">{displayName}</div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">📇 Contato compartilhado</div>
+          <div className="font-semibold text-gray-900 dark:text-gray-100 mb-1 text-base">{displayName}</div>
           
           {/* Mostrar telefone apenas se contato não existir (dados do card) */}
           {!contactExists && displayPhone && (
-            <div className="text-sm text-gray-600 mb-3 flex items-center gap-1">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-1">
               <Phone className="w-3.5 h-3.5" />
               <span>{displayPhone}</span>
             </div>
@@ -233,7 +233,7 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
           
           <div className="flex gap-2 flex-wrap">
             {isCheckingContact && (
-              <span className="text-xs text-gray-500">Verificando...</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">Verificando...</span>
             )}
             
             {!isCheckingContact && cleanPhoneForSearch && (
@@ -250,7 +250,7 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
             {!isCheckingContact && !contactExists && (
               <button
                 onClick={handleAddContact}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shadow-sm hover:shadow-md"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors shadow-sm hover:shadow-md"
               >
                 <Plus className="w-4 h-4" />
                 Adicionar aos contatos

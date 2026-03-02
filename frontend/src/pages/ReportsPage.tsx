@@ -636,7 +636,7 @@ export default function ReportsPage() {
                                   <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg px-3 py-2 text-sm max-w-xs">
                                     <p className="font-medium">{p.department_name} – {p.user_name}</p>
                                     <p>{p.total_sent} mensagens enviadas (total)</p>
-                                    {daily && <p className="text-xs mt-1 text-gray-500">Últimos dias: {daily}</p>}
+                                    {daily && <p className="text-xs mt-1 text-gray-500 dark:text-gray-400">Últimos dias: {daily}</p>}
                                   </div>
                                 )
                               }}

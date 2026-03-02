@@ -426,8 +426,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         {/* Results */}
         <div className="flex-1 overflow-y-auto p-4">
           {searchQuery.length < 2 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Search className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <Search className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
               <p>Digite um nome ou telefone para buscar</p>
             </div>
           ) : contacts.length > 0 ? (
@@ -437,10 +437,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                   key={contact.id}
                   onClick={() => handleStartConversation(contact)}
                   disabled={isCreating}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 rounded-lg transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center gap-3 p-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                    <User className="h-5 w-5 text-gray-600" />
+                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                    <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-gray-900 truncate">{contact.name}</div>
@@ -464,7 +464,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                           </span>
                         ))}
                         {contact.tags.length > 2 && (
-                          <span className="text-xs text-gray-500">+{contact.tags.length - 2}</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">+{contact.tags.length - 2}</span>
                         )}
                       </div>
                     )}
@@ -475,9 +475,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           ) : showPhoneOption ? (
             <div className="text-center py-8">
               <div className="mb-4">
-                <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-600 mb-2">Nenhum contato encontrado</p>
-                <p className="text-sm text-gray-500 mb-4">
+                <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
+                <p className="text-gray-600 dark:text-gray-400 mb-2">Nenhum contato encontrado</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   Iniciar conversa com <strong>{formatPhone(phoneInput)}</strong>
                 </p>
               </div>
@@ -502,10 +502,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           ) : isSearching ? (
             <div className="text-center py-8">
               <Loader2 className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
-              <p className="text-gray-500">Buscando...</p>
+              <p className="text-gray-500 dark:text-gray-400">Buscando...</p>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <p>Nenhum resultado encontrado</p>
               {isPhone && !isValidPhone && (
                 <p className="text-sm text-red-500 mt-2">Telefone inválido</p>
