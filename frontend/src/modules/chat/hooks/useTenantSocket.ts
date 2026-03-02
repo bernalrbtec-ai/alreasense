@@ -28,6 +28,10 @@ let globalWebSocket: WebSocket | null = null;
 /** Tenant ao qual a conexão global atual pertence. Se o usuário trocar de tenant, a conexão deve ser fechada e recriada. */
 let globalWebSocketTenantId: string | null = null;
 let globalWebSocketRefs: Set<() => void> = new Set(); // Callbacks para notificar todas as instâncias
+/** Quando true, o onclose não deve reconectar nem chamar logout (fechamento explícito no logout). */
+let closedByLogout = false;
+/** Timeout de reconexão em nível de módulo; cancelado no logout para não reconectar após troca de conta. */
+let globalReconnectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 // ✅ SINGLETON global para prevenir toasts duplicados ACROSS múltiplas instâncias
 // Isso é necessário porque useTenantSocket pode ser chamado múltiplas vezes (React StrictMode, etc)
@@ -51,8 +55,34 @@ const globalToastRegistry = {
     setTimeout(() => {
       this.shownToasts.delete(toastKey);
     }, timeout);
+  },
+  clear(): void {
+    this.shownToasts.clear();
   }
 };
+
+/**
+ * Fecha o WebSocket global do tenant e limpa o registry de toasts.
+ * Deve ser chamado no logout para evitar notificações do tenant anterior após troca de conta.
+ */
+export function closeGlobalTenantSocket(): void {
+  closedByLogout = true;
+  if (globalReconnectTimeoutId != null) {
+    clearTimeout(globalReconnectTimeoutId);
+    globalReconnectTimeoutId = null;
+  }
+  if (globalWebSocket) {
+    try {
+      globalWebSocket.close();
+    } catch (e) {
+      console.warn('⚠️ [TENANT WS] Erro ao fechar WebSocket no logout:', e);
+    }
+    globalWebSocket = null;
+  }
+  globalWebSocketTenantId = null;
+  globalToastRegistry.clear();
+  console.log('✅ [TENANT WS] WebSocket global e toasts limpos (logout)');
+}
 
 /**
  * Verifica se o usuário pode ver a conversa (mesma regra do backend ConversationViewSet.get_queryset).
@@ -1154,8 +1184,14 @@ export function useTenantSocket() {
       ws.onclose = (event) => {
         console.warn('🔌 [TENANT WS] Conexão fechada:', event.code, event.reason);
         socketRef.current = null;
-        globalWebSocket = null; // ✅ Limpar singleton global
+        globalWebSocket = null;
         globalWebSocketTenantId = null;
+
+        if (closedByLogout) {
+          closedByLogout = false;
+          setConnectionStatus('disconnected');
+          return;
+        }
 
         // ✅ Token inválido ou expirado (4001) → limpar sessão e redirecionar para login
         if (event.code === 4001) {
@@ -1169,11 +1205,14 @@ export function useTenantSocket() {
         if (reconnectAttemptsRef.current < 5) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
           console.log(`🔄 [TENANT WS] Reconectando em ${delay}ms...`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
+          if (globalReconnectTimeoutId != null) clearTimeout(globalReconnectTimeoutId);
+          const timeoutId = setTimeout(() => {
+            globalReconnectTimeoutId = null;
             reconnectAttemptsRef.current++;
             connect();
           }, delay);
+          globalReconnectTimeoutId = timeoutId;
+          reconnectTimeoutRef.current = timeoutId;
         }
       };
 

@@ -176,18 +176,23 @@ export const useAuthStore = create<AuthState>()(
           console.error('❌ [AUTH] Erro ao importar chat store:', error)
         }
         
-        // 6. Desconectar WebSocket
+        // 6. Desconectar WebSockets (chat por conversa + tenant global)
         try {
           import('../modules/chat/services/ChatWebSocketManager').then(({ ChatWebSocketManager }) => {
             ChatWebSocketManager.getInstance().disconnect()
-            console.log('✅ [AUTH] WebSocket desconectado')
+            console.log('✅ [AUTH] Chat WebSocket desconectado')
           }).catch((error) => {
-            console.error('❌ [AUTH] Erro ao desconectar WebSocket:', error)
+            console.error('❌ [AUTH] Erro ao desconectar Chat WebSocket:', error)
+          })
+          import('../modules/chat/hooks/useTenantSocket').then(({ closeGlobalTenantSocket }) => {
+            closeGlobalTenantSocket()
+          }).catch((error) => {
+            console.error('❌ [AUTH] Erro ao fechar tenant WebSocket:', error)
           })
         } catch (error) {
-          console.error('❌ [AUTH] Erro ao importar WebSocket manager:', error)
+          console.error('❌ [AUTH] Erro ao importar WebSocket:', error)
         }
-        
+
         console.log('✅ [AUTH] Logout completo - todos os caches foram limpos')
       },
 
