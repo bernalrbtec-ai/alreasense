@@ -57,9 +57,7 @@ import { useTheme } from './hooks/useTheme'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
-  
-  // ✅ Inicializar tema (aplica classe dark no HTML)
-  useTheme()
+  const { theme } = useTheme()
 
   useEffect(() => {
     // ✅ FIX: Sempre verificar autenticação ao montar o componente
@@ -132,6 +130,7 @@ function App() {
         richColors
         closeButton
         duration={4000}
+        theme={theme === 'dark' ? 'dark' : 'light'}
         toastOptions={{
           style: {
             fontSize: '14px',

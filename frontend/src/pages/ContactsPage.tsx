@@ -587,7 +587,7 @@ export default function ContactsPage() {
           <Button
             variant={viewMode === 'cards' ? 'default' : 'outline'}
             onClick={() => setViewMode('cards')}
-            className="flex items-center gap-2"
+            className={viewMode !== 'cards' ? 'flex items-center gap-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700' : 'flex items-center gap-2'}
           >
             <Grid className="h-4 w-4" />
             Cards
@@ -595,7 +595,7 @@ export default function ContactsPage() {
           <Button
             variant={viewMode === 'table' ? 'default' : 'outline'}
             onClick={() => setViewMode('table')}
-            className="flex items-center gap-2"
+            className={viewMode !== 'table' ? 'flex items-center gap-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700' : 'flex items-center gap-2'}
           >
             <TableIcon className="h-4 w-4" />
             Tabela
@@ -613,7 +613,7 @@ export default function ContactsPage() {
             placeholder="Buscar por nome, telefone ou email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {searchTerm && !isLoading && (
             <button

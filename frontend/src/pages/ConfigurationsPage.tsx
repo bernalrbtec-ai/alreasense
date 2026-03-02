@@ -2490,7 +2490,7 @@ export default function ConfigurationsPage() {
                     id="gateway_audit_status"
                     value={gatewayAuditStatus}
                     onChange={(e) => setGatewayAuditStatus(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   >
                     <option value="all">Todos</option>
                     <option value="success">Success</option>
@@ -2541,6 +2541,7 @@ export default function ConfigurationsPage() {
                 <Button
                   type="button"
                   variant="outline"
+                  className="border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => {
                     setGatewayAuditRequestId('')
                     setGatewayAuditTraceId('')
@@ -2557,7 +2558,7 @@ export default function ConfigurationsPage() {
               </div>
 
               {gatewayAuditError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-700 dark:text-red-200">
                   {gatewayAuditError}
                 </div>
               )}
@@ -2833,7 +2834,7 @@ export default function ConfigurationsPage() {
                     </div>
                   ) : null}
 
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 text-sm text-yellow-800 dark:text-yellow-200">
                     A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
                   </div>
 
@@ -3127,12 +3128,12 @@ export default function ConfigurationsPage() {
                 </div>
               )}
 
-              <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
+              <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
                 <div className="flex items-center">
-                  <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
+                  <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
                   <div>
-                    <h4 className="font-medium text-yellow-900">Precisa de mais recursos?</h4>
-                    <p className="text-sm text-yellow-700">
+                    <h4 className="font-medium text-yellow-900 dark:text-yellow-200">Precisa de mais recursos?</h4>
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
                       Entre em contato conosco para upgrade do seu plano
                     </p>
                   </div>
@@ -3539,16 +3540,16 @@ export default function ConfigurationsPage() {
                   value={smtpTestEmail}
                   onChange={(e) => setSmtpTestEmail(e.target.value)}
                   placeholder="destino@exemplo.com"
-                  className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   disabled={smtpTestLoading}
                 />
                 {smtpTestResult && (
-                  <div className={`mt-4 p-3 rounded-lg text-sm ${smtpTestResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                  <div className={`mt-4 p-3 rounded-lg text-sm ${smtpTestResult.success ? 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200' : 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200'}`}>
                     {smtpTestResult.message}
                   </div>
                 )}
               </div>
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+              <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                 <Button
                   onClick={handleSendSmtpTest}
                   disabled={smtpTestLoading || !smtpTestEmail.trim()}
@@ -3765,7 +3766,7 @@ export default function ConfigurationsPage() {
               <select
                 value={selectedBusinessHoursDept || ''}
                 onChange={(e) => setSelectedBusinessHoursDept(e.target.value || null)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="">Geral</option>
                 {businessHoursDepts.map((dept) => (
@@ -3832,7 +3833,7 @@ export default function ConfigurationsPage() {
                     id="timezone"
                     value={businessHours.timezone}
                     onChange={(e) => setBusinessHours({ ...businessHours, timezone: e.target.value })}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     {TIMEZONES.map((tz) => (
                       <option key={tz.value} value={tz.value}>
@@ -3850,14 +3851,14 @@ export default function ConfigurationsPage() {
                     const end = businessHours[`${day.key}_end` as keyof BusinessHours] as string
 
                     return (
-                      <div key={day.key} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
+                      <div key={day.key} className="flex items-center gap-4 p-4 border border-gray-200 dark:border-gray-600 rounded-lg">
                         <div className="flex items-center gap-2 w-32">
                           <input
                             type="checkbox"
                             id={`${day.key}_enabled`}
                             checked={enabled}
                             onChange={(e) => updateDayHours(day.key, 'enabled', e.target.checked)}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-blue-600 focus:ring-blue-500"
                           />
                           <Label htmlFor={`${day.key}_enabled`} className="font-medium cursor-pointer">
                             {day.label}

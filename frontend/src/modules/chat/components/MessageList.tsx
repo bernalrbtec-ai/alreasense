@@ -25,6 +25,7 @@ import { EditMessageModal } from './EditMessageModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 import { EmojiPicker } from './EmojiPicker';
 import { parseMessageSignature } from '../utils/signatureParser';
+import { useTheme } from '@/hooks/useTheme';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -332,6 +333,8 @@ export function MessageList() {
     activeConversationId: activeConversation?.id,
     conversationType: activeConversation?.conversation_type
   });
+
+  const { theme } = useTheme();
   
   // ✅ CORREÇÃO: Capturar conversationId de forma segura antes de usar
   const conversationId = activeConversation?.id;
@@ -921,10 +924,11 @@ export function MessageList() {
 
   const displayItems = useMemo(() => buildDisplayItems(safeMessages), [safeMessages]);
 
+  const isDark = theme === 'dark';
   return (
     <div 
-      className="h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2"
-      style={{
+      className={`h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2 ${isDark ? 'bg-gray-900' : ''}`}
+      style={isDark ? undefined : {
         backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0h100v100H0z\' fill=\'%23e5ddd5\'/%3E%3Cpath d=\'M20 10h60v2H20zm0 15h60v2H20zm0 15h40v2H20z\' fill=\'%23ffffff\' opacity=\'0.1\'/%3E%3C/svg%3E")',
       }}
     >
