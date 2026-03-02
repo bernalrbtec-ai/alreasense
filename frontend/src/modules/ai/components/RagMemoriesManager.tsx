@@ -77,6 +77,57 @@ function SatisfactionStars({ value }: { value: unknown }) {
   )
 }
 
+/** Extrai texto de resumo de um objeto (summary, resumo, text, content). */
+function getSummaryFromPayload(parsed: Record<string, unknown>): string {
+  for (const key of ['summary', 'resumo', 'text', 'content']) {
+    const v = parsed[key]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return ''
+}
+
+/** Normaliza conteúdo para exibir no modal de edição: sempre string; se for objeto ou JSON válido, formata. */
+function normalizeContentForEdit(content: unknown): string {
+  if (content == null) return ''
+  if (typeof content === 'object') return JSON.stringify(content, null, 2)
+  let s = String(content).trim()
+  if (!s) return ''
+  // Tenta parsear JSON (algumas respostas vêm com BOM ou espaços)
+  const toTry = [s, s.replace(/^\uFEFF/, '')]
+  for (const str of toTry) {
+    try {
+      const parsed = JSON.parse(str) as unknown
+      return JSON.stringify(parsed, null, 2)
+    } catch {
+      /* continua */
+    }
+  }
+  return s
+}
+
+/** Prévia do conteúdo para a lista: se for JSON/objeto com summary/resumo/text/content, usa esse texto; senão trunca. */
+function getContentPreview(content: unknown, maxLen: number): { text: string; title: string } {
+  const raw = content == null ? '' : typeof content === 'string' ? content : JSON.stringify(content)
+  const full = raw.trim() || '—'
+  let parsed: Record<string, unknown> | null = null
+  if (typeof content === 'object' && content !== null) {
+    parsed = content as Record<string, unknown>
+  } else {
+    try {
+      parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as Record<string, unknown>
+    } catch {
+      /* não é JSON */
+    }
+  }
+  const summary = parsed ? getSummaryFromPayload(parsed) : ''
+  if (summary) {
+    const text = summary.length > maxLen ? `${summary.slice(0, maxLen)}…` : summary
+    return { text, title: full }
+  }
+  const text = full === '—' ? '—' : (full.length > maxLen ? `${full.slice(0, maxLen)}…` : full)
+  return { text, title: full }
+}
+
 /** Agrupa resumos por contato; cada grupo ordenado por conversa mais recente primeiro. */
 function groupSummariesByContact(items: ConversationSummaryItem[]): { contactKey: string; contactLabel: string; contactPhone: string; contactTags: string[]; hasConsolidation: boolean; mostRecentAt: string; summaries: ConversationSummaryItem[] }[] {
   const byContact = new Map<string, ConversationSummaryItem[]>()
@@ -359,7 +410,7 @@ export function RagMemoriesManager() {
 
   const openEditModal = (item: ConversationSummaryItem) => {
     setEditItem(item)
-    setEditContent(item.content)
+    setEditContent(normalizeContentForEdit(item.content))
     setEditModalOpen(true)
   }
 
@@ -895,8 +946,8 @@ export function RagMemoriesManager() {
                                 : '—'}
                             </div>
                           </td>
-                          <td className="px-3 py-2 text-sm text-gray-800 dark:text-gray-200 max-w-xs truncate" title={item.content}>
-                            {item.content ? `${item.content.slice(0, 120)}${item.content.length > 120 ? '…' : ''}` : '—'}
+                          <td className="px-3 py-2 text-sm text-gray-800 dark:text-gray-200 max-w-xs truncate" title={getContentPreview(item.content, 500).title}>
+                            {getContentPreview(item.content, 120).text}
                           </td>
                           <td className="px-3 py-2">
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${

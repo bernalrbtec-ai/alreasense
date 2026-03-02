@@ -4,6 +4,7 @@ Rag-upsert (n8n/pgvector) é chamado apenas ao aprovar na tela de gestão RAG.
 Executa em background; não bloqueia o fechamento da conversa.
 Se N8N_SUMMARIZE_WEBHOOK_URL estiver vazio, sai sem erro.
 """
+import json
 import logging
 import threading
 import time
@@ -22,6 +23,85 @@ logger = logging.getLogger(__name__)
 SUMMARIZE_TIMEOUT = 30
 RETRY_DELAY = 2
 MAX_RETRIES = 1
+
+
+def _extract_summary_text(obj):
+    """Extrai texto do resumo de um dict: summary, resumo, text, content (primeiro não vazio)."""
+    if not isinstance(obj, dict):
+        return ""
+    for key in ("summary", "resumo", "text", "content"):
+        val = obj.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return ""
+
+
+def _extract_meta(obj):
+    """Extrai subject, sentiment, satisfaction, confidence de um dict."""
+    if not isinstance(obj, dict):
+        return {}
+    return {
+        "subject": obj.get("subject"),
+        "sentiment": obj.get("sentiment"),
+        "satisfaction": obj.get("satisfaction"),
+        "confidence": obj.get("confidence"),
+    }
+
+
+def _normalize_summarize_response(data):
+    """
+    Extrai do webhook de resumo: texto do resumo (content) e dict flat para metadata.
+    Aceita: objeto com summary/resumo/text/content no topo; resposta em lista (primeiro item);
+    objeto aninhado (result/data/output/body); ou valor string que seja JSON.
+    Retorna: (content: str, metadata_dict: dict).
+    """
+    if data is None:
+        return "", {}
+    # Resposta é lista (alguns webhooks devolvem [ {...} ])
+    if isinstance(data, list):
+        for item in data:
+            content, meta = _normalize_summarize_response(item)
+            if content:
+                return content, meta
+        return "", {}
+    # Resposta é string (JSON)
+    if isinstance(data, str):
+        parsed = _safe_json_loads(data)
+        if parsed:
+            return _normalize_summarize_response(parsed)
+        return "", {}
+    # Dict
+    if isinstance(data, dict):
+        summary = _extract_summary_text(data)
+        if summary:
+            return summary, _extract_meta(data)
+        # Nested: result, data, output, body (dict ou string JSON)
+        for key in ("result", "data", "output", "body", "response"):
+            raw = data.get(key)
+            if raw is None:
+                continue
+            if isinstance(raw, dict):
+                s = _extract_summary_text(raw)
+                if s:
+                    return s, _extract_meta(raw)
+            if isinstance(raw, str):
+                content, meta = _normalize_summarize_response(_safe_json_loads(raw))
+                if content:
+                    return content, meta
+        # Sem campo de texto no topo nem aninhado: gravar JSON formatado para exibir/editar no modal
+        try:
+            content = json.dumps(data, ensure_ascii=False, indent=2)
+            return content, _extract_meta(data)
+        except (TypeError, ValueError):
+            pass
+    return "", {}
+
+
+def _safe_json_loads(s):
+    try:
+        return json.loads(s) if s and s.strip() else None
+    except (json.JSONDecodeError, TypeError):
+        return None
 
 
 def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
@@ -104,7 +184,8 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
                 resp = requests.post(summarize_url, json=summarize_payload, timeout=SUMMARIZE_TIMEOUT)
                 resp.raise_for_status()
                 summarize_response_data = resp.json() if resp.content else {}
-                summary = (summarize_response_data.get("summary") or "").strip()
+                summary, extracted_meta = _normalize_summarize_response(summarize_response_data)
+                summary = (summary or "").strip()
                 break
             except Exception as e:
                 logger.warning(
@@ -116,13 +197,14 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
                     time.sleep(RETRY_DELAY)
                 else:
                     return
-        if not summary:
+        if not summary or summary.strip() == "{}":
             logger.warning("[CONVERSATION SUMMARY] Resposta summarize sem summary: %s", conversation_id)
             return
 
-        subject = summarize_response_data.get("subject")
-        sentiment = summarize_response_data.get("sentiment")
-        satisfaction = summarize_response_data.get("satisfaction")
+        subject = extracted_meta.get("subject") if extracted_meta else summarize_response_data.get("subject")
+        sentiment = extracted_meta.get("sentiment") if extracted_meta else summarize_response_data.get("sentiment")
+        satisfaction = extracted_meta.get("satisfaction") if extracted_meta else summarize_response_data.get("satisfaction")
+        confidence = extracted_meta.get("confidence") if extracted_meta else summarize_response_data.get("confidence")
         if subject is None:
             subject = ""
         if sentiment is None:
@@ -139,7 +221,6 @@ def _run_conversation_summary_pipeline_impl(conversation_id: str) -> None:
             ) or getattr(conversation.assigned_to, "name", None) or ""
         department_name = (conversation.department.name if conversation.department else None) or ""
 
-        confidence = summarize_response_data.get("confidence")
         summary_metadata = {
             "contact_phone": contact_phone_normalized,
             "conversation_id": str(conversation.id),
