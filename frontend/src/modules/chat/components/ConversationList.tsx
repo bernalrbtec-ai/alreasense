@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente otimizado com memoização
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Plus, User, Eye, Clock } from 'lucide-react';
+import { Search, Plus, User, Eye, CircleDot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { shallow } from 'zustand/shallow';
@@ -387,7 +387,7 @@ export function ConversationList() {
     }
   }, []);
 
-  // Tempo de espera (modo Aguardando Resposta): ícone Clock + "Xh Ymin" ou "Xmin"
+  // Tempo de espera (modo Aguardando Resposta): ícone CircleDot (pendente) + "Xh Ymin" ou "Xmin"
   const formatWaitingTime = useCallback((dateString: string | undefined) => {
     if (!dateString) return '';
     try {
@@ -561,7 +561,7 @@ export function ConversationList() {
                   <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0 flex items-center gap-1">
                     {waitingForResponseMode ? (
                       <>
-                        <Clock className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+                        <CircleDot className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
                         {formatWaitingTime(conversationItem.last_message_at)}
                       </>
                     ) : (

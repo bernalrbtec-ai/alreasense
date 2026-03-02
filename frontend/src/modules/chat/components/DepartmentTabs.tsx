@@ -2,7 +2,7 @@
  * Tabs de departamentos - Estilo WhatsApp Web
  */
 import React, { useEffect, useMemo } from 'react';
-import { Inbox, User, Clock } from 'lucide-react';
+import { Inbox, User, CircleDot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Department } from '../types';
@@ -251,7 +251,7 @@ export function DepartmentTabs() {
               : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}
           `}
         >
-          <Clock className="w-5 h-5" aria-hidden />
+          <CircleDot className="w-5 h-5" aria-hidden />
           {waitingForResponseMode && waitingCount > 0 && (
             <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-green-500" aria-hidden />
           )}
