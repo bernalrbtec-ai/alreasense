@@ -162,11 +162,11 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
       <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-          <h2 className="text-lg font-semibold text-white">Transferir Conversa</h2>
+          <h2 id="transfer-modal-title" className="text-lg font-semibold text-white">Transferir Conversa</h2>
           <button
             onClick={onClose}
             className="p-1 hover:bg-gray-700 rounded transition-colors"

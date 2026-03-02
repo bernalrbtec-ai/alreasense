@@ -46,6 +46,7 @@ export function ChatWindow() {
   const [isReady, setIsReady] = useState(false);
   const [loadingStart, setLoadingStart] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
@@ -57,6 +58,21 @@ export function ChatWindow() {
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
   
+  // ✅ ESC: sair da conversa ao pressionar Escape somente quando o foco está dentro do painel da conversa (incl. estado de loading)
+  useEffect(() => {
+    if (!activeConversation) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as Node | null;
+      if (target instanceof HTMLElement && target.closest('[role="dialog"], [role="menu"]')) return;
+      if (!chatPanelRef.current || target == null || !chatPanelRef.current.contains(target)) return;
+      e.preventDefault();
+      setActiveConversation(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeConversation, setActiveConversation]);
+
   // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name) - DEPOIS de hooks
   useEffect(() => {
     if (activeConversation) {
@@ -691,7 +707,7 @@ export function ChatWindow() {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
     if (activeConversation && activeConversation.id && conversationId) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
+        <div ref={chatPanelRef} className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversa...</p>
@@ -708,7 +724,7 @@ export function ChatWindow() {
               <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
             </svg>
           </div>
-          <h2 className="text-2xl font-light text-gray-700 dark:text-gray-300 mb-2">Flow Chat Web</h2>
+          <h2 className="text-2xl font-light text-gray-700 dark:text-gray-300 mb-2">Alrea SENSE</h2>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
             Envie e receba mensagens sem manter seu celular conectado.<br/>
             Selecione uma conversa para começar.
@@ -719,7 +735,7 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex h-full w-full bg-[#efeae2] dark:bg-gray-900 animate-fade-in overflow-hidden">
+    <div ref={chatPanelRef} className="flex h-full w-full bg-[#efeae2] dark:bg-gray-900 animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
@@ -1052,10 +1068,10 @@ export function ChatWindow() {
 
       {/* Modal de Informações do Grupo */}
       {showGroupInfo && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="group-info-modal-title">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações do Grupo</h2>
+              <h2 id="group-info-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações do Grupo</h2>
               <button
                 onClick={() => {
                   setShowGroupInfo(false);
