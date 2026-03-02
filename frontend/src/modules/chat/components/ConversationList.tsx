@@ -387,25 +387,21 @@ export function ConversationList() {
     }
   }, []);
 
-  // Tempo de espera (modo Aguardando Resposta): "Zzz : Xh Ymin" ou "Zzz : Xmin"
+  // Tempo de espera (modo Aguardando Resposta): ícone Clock + "Xh Ymin" ou "Xmin"
   const formatWaitingTime = useCallback((dateString: string | undefined) => {
     if (!dateString) return '';
     try {
       const diffMs = Date.now() - new Date(dateString).getTime();
-      if (Number.isNaN(diffMs) || diffMs < 0) return 'Zzz : 0min';
+      if (Number.isNaN(diffMs) || diffMs < 0) return '0min';
       const totalMins = Math.floor(diffMs / 60_000);
       const hours = Math.floor(totalMins / 60);
       const mins = totalMins % 60;
-      if (hours === 0) return `Zzz : ${mins}min`;
-      return mins === 0 ? `Zzz : ${hours}h` : `Zzz : ${hours}h ${mins}min`;
+      if (hours === 0) return `${mins}min`;
+      return mins === 0 ? `${hours}h` : `${hours}h ${mins}min`;
     } catch {
       return '';
     }
   }, []);
-
-  const waitingCount = waitingForResponseMode
-    ? filteredConversations.filter((c) => c.last_message?.direction === 'incoming').length
-    : 0;
 
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
@@ -434,35 +430,6 @@ export function ConversationList() {
           title="Nova conversa"
         >
           <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-        </button>
-      </div>
-
-      {/* Toggle Aguardando Resposta */}
-      <div className="flex-shrink-0 flex items-center gap-2 px-2 sm:px-3 pb-2">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={waitingForResponseMode}
-          aria-label="Filtrar por conversas aguardando resposta"
-          title="Mostrar só conversas em que o cliente respondeu por último, ordenadas pela mais antiga no topo"
-          onClick={() => setWaitingForResponseMode(!waitingForResponseMode)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setWaitingForResponseMode(!waitingForResponseMode);
-            }
-          }}
-          className={`min-h-[44px] min-w-[44px] flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            waitingForResponseMode
-              ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-          }`}
-        >
-          <Clock className="w-4 h-4 flex-shrink-0" aria-hidden />
-          <span>Aguardando Resposta</span>
-          {waitingForResponseMode && (
-            <span className="text-xs opacity-90">({waitingCount} aguardando)</span>
-          )}
         </button>
       </div>
 

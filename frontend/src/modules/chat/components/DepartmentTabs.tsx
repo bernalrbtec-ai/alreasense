@@ -2,7 +2,7 @@
  * Tabs de departamentos - Estilo WhatsApp Web
  */
 import React, { useEffect, useMemo } from 'react';
-import { Inbox, User } from 'lucide-react';
+import { Inbox, User, Clock } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Department } from '../types';
@@ -11,7 +11,8 @@ import { NotificationToggle } from './NotificationToggle';
 import { useAuthStore } from '@/stores/authStore';
 
 export function DepartmentTabs() {
-  const { departments, activeDepartment, setDepartments, setActiveDepartment, conversations } = useChatStore();
+  const { departments, activeDepartment, setDepartments, setActiveDepartment, conversations, waitingForResponseMode, setWaitingForResponseMode } = useChatStore();
+  const { user } = useAuthStore();
   const { can_access_all_departments, departmentIds } = usePermissions();
   
   // ✅ FIX: Filtrar departamentos sempre baseado nas permissões do usuário
@@ -73,6 +74,26 @@ export function DepartmentTabs() {
       conv.status === 'open'
     ).length;
   };
+
+  const waitingCount = useMemo(() => {
+    if (!waitingForResponseMode) return 0;
+    const incoming = (c: typeof conversations[0]) => c.last_message?.direction === 'incoming';
+    if (!activeDepartment) return conversations.filter(incoming).length;
+    if (activeDepartment.id === 'inbox') {
+      return conversations.filter((c) => {
+        const deptId = typeof c.department === 'string' ? c.department : c.department?.id ?? null;
+        return !deptId && c.status === 'pending' && incoming(c);
+      }).length;
+    }
+    if (activeDepartment.id === 'my_conversations') {
+      if (!user) return 0;
+      return conversations.filter((c) => c.assigned_to === user.id && c.status === 'open' && incoming(c)).length;
+    }
+    return conversations.filter((c) => {
+      const deptId = typeof c.department === 'string' ? c.department : c.department?.id;
+      return deptId === activeDepartment.id && c.status !== 'closed' && incoming(c);
+    }).length;
+  }, [waitingForResponseMode, conversations, activeDepartment, user?.id]);
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -206,8 +227,35 @@ export function DepartmentTabs() {
         })}
       </div>
 
-      {/* Botão de Notificações */}
-      <div className="flex-shrink-0 ml-auto">
+      {/* Aguardando Resposta + Notificações */}
+      <div className="flex-shrink-0 ml-auto flex items-center gap-0.5">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={waitingForResponseMode}
+          aria-label="Filtrar por conversas aguardando resposta"
+          title={waitingForResponseMode
+            ? `Aguardando Resposta (${waitingCount} aguardando) - Clique para desativar`
+            : 'Mostrar só conversas em que o cliente respondeu por último, ordenadas pela mais antiga no topo'}
+          onClick={() => setWaitingForResponseMode(!waitingForResponseMode)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setWaitingForResponseMode(!waitingForResponseMode);
+            }
+          }}
+          className={`
+            relative min-h-[44px] min-w-[44px] p-2 rounded-full transition-colors flex items-center justify-center
+            ${waitingForResponseMode
+              ? 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/40 hover:bg-green-200 dark:hover:bg-green-900/60'
+              : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}
+          `}
+        >
+          <Clock className="w-5 h-5" aria-hidden />
+          {waitingForResponseMode && waitingCount > 0 && (
+            <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-green-500" aria-hidden />
+          )}
+        </button>
         <NotificationToggle />
       </div>
     </div>
