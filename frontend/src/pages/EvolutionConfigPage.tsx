@@ -46,8 +46,8 @@ export default function EvolutionConfigPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Negado</h2>
-          <p className="text-gray-600">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Acesso Negado</h2>
+          <p className="text-gray-600 dark:text-gray-400">
             Apenas administradores podem visualizar o servidor Evolution API.
           </p>
         </div>
@@ -106,8 +106,8 @@ export default function EvolutionConfigPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Sem Dados</h2>
-          <p className="text-gray-600 mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Sem Dados</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
             Não foi possível carregar as estatísticas.
           </p>
           <Button onClick={fetchStats}>
@@ -124,8 +124,8 @@ export default function EvolutionConfigPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Servidor de Instância Evolution</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Servidor de Instância Evolution</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Monitoramento e estatísticas das instâncias WhatsApp conectadas
           </p>
         </div>
@@ -153,17 +153,17 @@ export default function EvolutionConfigPage() {
               'bg-red-500'
             }`} />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 {stats.status === 'active' ? '🟢 Conectado' :
                  stats.status === 'inactive' ? '⚪ Desconectado' :
                  '🔴 Erro de Conexão'}
               </h3>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Verificado em: {new Date(stats.last_check).toLocaleString('pt-BR')}
               </p>
             </div>
           </div>
-          <Server className="h-8 w-8 text-gray-400" />
+          <Server className="h-8 w-8 text-gray-400 dark:text-gray-500" />
         </div>
 
         {/* Error Message */}
@@ -186,8 +186,8 @@ export default function EvolutionConfigPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Total de Instâncias</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total de Instâncias</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-gray-100 mt-2">
                 {stats.statistics.total}
               </p>
             </div>
@@ -201,7 +201,7 @@ export default function EvolutionConfigPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Conectadas</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Conectadas</p>
               <p className="text-3xl font-bold text-green-600 mt-2">
                 {stats.statistics.connected}
               </p>
@@ -228,7 +228,7 @@ export default function EvolutionConfigPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600">Desconectadas</p>
+              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Desconectadas</p>
               <p className="text-3xl font-bold text-red-600 mt-2">
                 {stats.statistics.disconnected}
               </p>
@@ -256,7 +256,7 @@ export default function EvolutionConfigPage() {
       <Card className="p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
               Webhook URL
             </label>
             <div className="flex items-center gap-2">
@@ -278,7 +278,7 @@ export default function EvolutionConfigPage() {
                 )}
               </Button>
             </div>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
               Configure esta URL no servidor Evolution API para receber eventos de mensagens
             </p>
           </div>
@@ -295,8 +295,8 @@ export default function EvolutionConfigPage() {
           <Card className="p-8">
             <div className="text-center">
               <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">Nenhuma instância encontrada</p>
-              <p className="text-sm text-gray-500 mt-1">
+              <p className="text-gray-600 dark:text-gray-400">Nenhuma instância encontrada</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 As instâncias aparecerão aqui quando forem configuradas no Evolution API
               </p>
             </div>

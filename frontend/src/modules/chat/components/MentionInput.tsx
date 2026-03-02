@@ -694,7 +694,7 @@ export function MentionInput({
                   </div>
                   {/* ✅ Mostrar telefone apenas se não for contato cadastrado OU se tiver nome adicional */}
                   {(hasAnyName && !hasContactName) || hasContactName ? (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
                     </div>
                   ) : null}

@@ -144,7 +144,7 @@ export default function BillingApiPage() {
           <Link to="/billing-api/keys" className="block p-6">
             <div className="flex items-center justify-between mb-4">
               <Key className="h-8 w-8 text-brand-500" />
-              <ArrowRight className="h-5 w-5 text-gray-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               API Keys
@@ -159,7 +159,7 @@ export default function BillingApiPage() {
           <Link to="/billing-api/templates" className="block p-6">
             <div className="flex items-center justify-between mb-4">
               <FileText className="h-8 w-8 text-brand-500" />
-              <ArrowRight className="h-5 w-5 text-gray-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Templates
@@ -174,7 +174,7 @@ export default function BillingApiPage() {
           <Link to="/billing-api/campaigns" className="block p-6">
             <div className="flex items-center justify-between mb-4">
               <Send className="h-8 w-8 text-brand-500" />
-              <ArrowRight className="h-5 w-5 text-gray-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Campanhas
@@ -189,7 +189,7 @@ export default function BillingApiPage() {
           <Link to="/billing-api/settings" className="block p-6">
             <div className="flex items-center justify-between mb-4">
               <Settings className="h-8 w-8 text-brand-500" />
-              <ArrowRight className="h-5 w-5 text-gray-400" />
+              <ArrowRight className="h-5 w-5 text-gray-400 dark:text-gray-500" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Configurações

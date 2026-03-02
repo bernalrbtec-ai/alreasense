@@ -171,7 +171,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
             onClick={onClose}
             className="p-1 hover:bg-gray-700 rounded transition-colors"
           >
-            <X className="w-5 h-5 text-gray-400" />
+            <X className="w-5 h-5 text-gray-400 dark:text-gray-500" />
           </button>
         </div>
 

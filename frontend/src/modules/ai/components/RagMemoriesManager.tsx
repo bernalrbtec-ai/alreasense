@@ -505,7 +505,7 @@ export function RagMemoriesManager() {
         <button
           type="button"
           onClick={() => setAutoApproveOpen((o) => !o)}
-          className="flex items-center gap-2 w-full text-left font-medium text-gray-900"
+          className="flex items-center gap-2 w-full text-left font-medium text-gray-900 dark:text-gray-100"
         >
           {autoApproveOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           Fluxo de Controle
@@ -643,7 +643,7 @@ export function RagMemoriesManager() {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-gray-500">Não foi possível carregar a configuração.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Não foi possível carregar a configuração.</p>
             )}
           </div>
         )}
@@ -652,7 +652,7 @@ export function RagMemoriesManager() {
       <Card className="p-6">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-medium text-gray-900">Contexto</h3>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Contexto</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
             </p>
@@ -688,7 +688,7 @@ export function RagMemoriesManager() {
               </Button>
             </div>
             {reprocessJobId && reprocessJobData?.status === 'running' && reprocessProgressDismissed && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
                 Reprocessando em background ({reprocessJobData.processed} de {reprocessJobData.total})…
               </p>
             )}
@@ -1017,7 +1017,7 @@ export function RagMemoriesManager() {
                   </div>
                 )}
                 <div className="border-t border-gray-200 pt-3 mt-3 space-y-3">
-                  <p className="text-sm font-medium text-gray-700">Notificar quando concluir (opcional)</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Notificar quando concluir (opcional)</p>
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <input
@@ -1254,7 +1254,7 @@ export function RagMemoriesManager() {
                   <h3 className="text-lg font-medium text-gray-900 mb-4">Reprocessamento concluído</h3>
                   <div className="grid grid-cols-2 gap-3 mb-6">
                     <div className="bg-gray-50 rounded-lg p-3 text-center">
-                      <div className="text-2xl font-bold text-gray-900">{reprocessJobData.total}</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{reprocessJobData.total}</div>
                       <div className="text-xs text-gray-500 mt-1">Total processado</div>
                     </div>
                     <div className="bg-green-50 rounded-lg p-3 text-center">

@@ -101,7 +101,7 @@ export default function BillingApiCampaignsPage() {
       case 'paused':
         return <Clock className="h-5 w-5 text-yellow-500" />
       default:
-        return <AlertCircle className="h-5 w-5 text-gray-500" />
+        return <AlertCircle className="h-5 w-5 text-gray-500 dark:text-gray-400" />
     }
   }
 
@@ -135,7 +135,7 @@ export default function BillingApiCampaignsPage() {
       {campaigns.length === 0 ? (
         <Card>
           <div className="p-12 text-center">
-            <Send className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <Send className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
               Nenhuma campanha encontrada
             </h3>

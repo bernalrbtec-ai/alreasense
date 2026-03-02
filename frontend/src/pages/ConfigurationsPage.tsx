@@ -2124,7 +2124,7 @@ export default function ConfigurationsPage() {
               <button
                 type="button"
                 onClick={() => { setShowMetaTemplatesListModal(false); setMetaTemplatesModalInstanceId(null) }}
-                className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
                 aria-label="Fechar"
               >
                 <X className="h-5 w-5" />
@@ -2685,7 +2685,7 @@ export default function ConfigurationsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base font-semibold">Ativar IA</Label>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                         Controla o uso de recursos de IA para este tenant.
                       </p>
                     </div>
@@ -2716,7 +2716,7 @@ export default function ConfigurationsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base font-semibold">Transcrição automática</Label>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                         Executa transcrição automaticamente ao receber áudios.
                       </p>
                     </div>
@@ -2735,7 +2735,7 @@ export default function ConfigurationsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label className="text-base font-semibold">Transcrição de áudio</Label>
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                         Habilita o fluxo de transcrição de áudio.
                       </p>
                     </div>
@@ -2762,7 +2762,7 @@ export default function ConfigurationsPage() {
                         className={`mt-1 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500' : ''}`}
                         disabled={!aiSettings.ai_enabled}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Evita transcrever áudios curtos.
                       </p>
                     </div>
@@ -2776,7 +2776,7 @@ export default function ConfigurationsPage() {
                         className={`mt-1 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500' : ''}`}
                         disabled={!aiSettings.ai_enabled}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Limite de tamanho por arquivo de áudio.
                       </p>
                     </div>
@@ -2815,7 +2815,7 @@ export default function ConfigurationsPage() {
                       {aiSettingsErrors.agent_model && (
                         <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.agent_model}</p>
                       )}
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                         Use um modelo instalado no Ollama.
                       </p>
                     </div>
@@ -2917,7 +2917,7 @@ export default function ConfigurationsPage() {
                             </option>
                           ))}
                         </select>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Se não escolher, a BIA usa o mesmo modelo do agente.
                         </p>
                       </div>
@@ -2972,7 +2972,7 @@ export default function ConfigurationsPage() {
 
             <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
                   Gateways e Webhooks
                 </h3>
                 <div className="space-y-5">
@@ -3158,7 +3158,7 @@ export default function ConfigurationsPage() {
                   
                   <div className="space-y-4">
                     <div>
-                      <label htmlFor="integration_type" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="integration_type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Tipo de conexão
                       </label>
                       <select
@@ -3170,7 +3170,7 @@ export default function ConfigurationsPage() {
                         <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
                         <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
                       </select>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {instanceFormData.integration_type === INTEGRATION_META_CLOUD
                           ? 'Conexão via WhatsApp Cloud API. Requer Phone Number ID e Access Token.'
                           : 'Conexão via API não oficial. Após salvar, use Gerar QR Code para conectar.'}
@@ -3178,7 +3178,7 @@ export default function ConfigurationsPage() {
                     </div>
 
                     <div>
-                      <label htmlFor="friendly_name" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="friendly_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Nome da Instância *
                       </label>
                       <input
@@ -3190,7 +3190,7 @@ export default function ConfigurationsPage() {
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="Ex: WhatsApp Principal"
                       />
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Nome de exibição para identificar esta instância
                       </p>
                     </div>
@@ -3198,7 +3198,7 @@ export default function ConfigurationsPage() {
                     {instanceFormData.integration_type === INTEGRATION_META_CLOUD ? (
                       <>
                         <div>
-                          <label htmlFor="phone_number_id" className="block text-sm font-medium text-gray-700">
+                          <label htmlFor="phone_number_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             Phone Number ID *
                           </label>
                           <input
@@ -3210,10 +3210,10 @@ export default function ConfigurationsPage() {
                             className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                             placeholder="ID do número no Meta Business"
                           />
-                          <p className="mt-1 text-xs text-gray-500">ID do número no Meta (não alterável após criar)</p>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">ID do número no Meta (não alterável após criar)</p>
                         </div>
                         <div>
-                          <label htmlFor="access_token" className="block text-sm font-medium text-gray-700">
+                          <label htmlFor="access_token" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             Access Token *
                           </label>
                           <input
@@ -3226,7 +3226,7 @@ export default function ConfigurationsPage() {
                           />
                         </div>
                         <div>
-                          <label htmlFor="business_account_id" className="block text-sm font-medium text-gray-700">
+                          <label htmlFor="business_account_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                             Business Account ID (opcional)
                           </label>
                           <input
@@ -3251,7 +3251,7 @@ export default function ConfigurationsPage() {
                     )}
 
                     <div>
-                      <label htmlFor="default_department" className="block text-sm font-medium text-gray-700">
+                      <label htmlFor="default_department" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                         Departamento Padrão
                       </label>
                       <select
@@ -3267,7 +3267,7 @@ export default function ConfigurationsPage() {
                           </option>
                         ))}
                       </select>
-                      <p className="mt-1 text-xs text-gray-500">
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         Novas conversas desta instância irão automaticamente para este departamento. Deixe em branco para ir para Inbox.
                       </p>
                     </div>
@@ -3308,10 +3308,10 @@ export default function ConfigurationsPage() {
                       <Mail className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                         {editingSmtp ? 'Editar Configuração SMTP' : 'Nova Configuração SMTP'}
                       </h3>
-                      <p className="text-sm text-gray-500 mt-0.5">
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                         Configure servidor e autenticação para envio de emails
                       </p>
                     </div>
@@ -3321,7 +3321,7 @@ export default function ConfigurationsPage() {
                 <div className="px-5 py-5 sm:px-6 space-y-6">
                   {/* Identificação */}
                   <div>
-                    <label htmlFor="smtp_name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                    <label htmlFor="smtp_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                       Nome da configuração <span className="text-red-500">*</span>
                     </label>
                     <input
@@ -3337,10 +3337,10 @@ export default function ConfigurationsPage() {
 
                   {/* Servidor */}
                   <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Servidor</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Servidor</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-4">
                       <div className="sm:col-span-2">
-                        <label htmlFor="smtp_host" className="block text-sm font-medium text-gray-700 mb-1.5">Servidor SMTP <span className="text-red-500">*</span></label>
+                        <label htmlFor="smtp_host" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Servidor SMTP <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           id="smtp_host"
@@ -3352,7 +3352,7 @@ export default function ConfigurationsPage() {
                         />
                       </div>
                       <div>
-                        <label htmlFor="smtp_port" className="block text-sm font-medium text-gray-700 mb-1.5">Porta <span className="text-red-500">*</span></label>
+                        <label htmlFor="smtp_port" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Porta <span className="text-red-500">*</span></label>
                         <input
                           type="number"
                           id="smtp_port"
@@ -3368,10 +3368,10 @@ export default function ConfigurationsPage() {
 
                   {/* Autenticação */}
                   <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Autenticação</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Autenticação</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="smtp_username" className="block text-sm font-medium text-gray-700 mb-1.5">Usuário / e-mail <span className="text-red-500">*</span></label>
+                        <label htmlFor="smtp_username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Usuário / e-mail <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           id="smtp_username"
@@ -3383,8 +3383,8 @@ export default function ConfigurationsPage() {
                         />
                       </div>
                       <div>
-                        <label htmlFor="smtp_password" className="block text-sm font-medium text-gray-700 mb-1.5">
-                          Senha {editingSmtp && <span className="font-normal text-gray-500">(em branco = manter)</span>}
+                        <label htmlFor="smtp_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                          Senha {editingSmtp && <span className="font-normal text-gray-500 dark:text-gray-400">(em branco = manter)</span>}
                           {!editingSmtp && <span className="text-red-500"> *</span>}
                         </label>
                         <div className="flex rounded-lg border border-border bg-background overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500">
@@ -3412,10 +3412,10 @@ export default function ConfigurationsPage() {
 
                   {/* Remetente */}
                   <div className="rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50 p-4 space-y-4">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Remetente</p>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Remetente</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label htmlFor="from_email" className="block text-sm font-medium text-gray-700 mb-1.5">E-mail de origem <span className="text-red-500">*</span></label>
+                        <label htmlFor="from_email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">E-mail de origem <span className="text-red-500">*</span></label>
                         <input
                           type="email"
                           id="from_email"
@@ -3427,7 +3427,7 @@ export default function ConfigurationsPage() {
                         />
                       </div>
                       <div>
-                        <label htmlFor="from_name" className="block text-sm font-medium text-gray-700 mb-1.5">Nome de origem <span className="text-red-500">*</span></label>
+                        <label htmlFor="from_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Nome de origem <span className="text-red-500">*</span></label>
                         <input
                           type="text"
                           id="from_name"
@@ -3451,7 +3451,7 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setSmtpFormData({ ...smtpFormData, use_tls: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                       />
-                      <label htmlFor="smtp_use_tls" className="text-sm text-gray-700">TLS (587)</label>
+                      <label htmlFor="smtp_use_tls" className="text-sm text-gray-700 dark:text-gray-300">TLS (587)</label>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -3461,7 +3461,7 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setSmtpFormData({ ...smtpFormData, use_ssl: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                       />
-                      <label htmlFor="smtp_use_ssl" className="text-sm text-gray-700">SSL (465)</label>
+                      <label htmlFor="smtp_use_ssl" className="text-sm text-gray-700 dark:text-gray-300">SSL (465)</label>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -3471,7 +3471,7 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setSmtpFormData({ ...smtpFormData, verify_ssl: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                       />
-                      <label htmlFor="smtp_verify_ssl" className="text-sm text-gray-700">Verificar SSL</label>
+                      <label htmlFor="smtp_verify_ssl" className="text-sm text-gray-700 dark:text-gray-300">Verificar SSL</label>
                     </div>
                     <div className="flex items-center gap-2 ml-auto sm:ml-0">
                       <input
@@ -3481,7 +3481,7 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setSmtpFormData({ ...smtpFormData, is_active: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                       />
-                      <label htmlFor="smtp_is_active" className="text-sm text-gray-700">Ativar</label>
+                      <label htmlFor="smtp_is_active" className="text-sm text-gray-700 dark:text-gray-300">Ativar</label>
                     </div>
                     <div className="flex items-center gap-2">
                       <input
@@ -3491,7 +3491,7 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setSmtpFormData({ ...smtpFormData, is_default: e.target.checked })}
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500/20"
                       />
-                      <label htmlFor="smtp_is_default" className="text-sm text-gray-700">Usar como padrão</label>
+                      <label htmlFor="smtp_is_default" className="text-sm text-gray-700 dark:text-gray-300">Usar como padrão</label>
                     </div>
                   </div>
                 </div>
@@ -3523,14 +3523,14 @@ export default function ConfigurationsPage() {
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <TestTube className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900">
+                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
                     Enviar email de teste
                   </h3>
                 </div>
-                <p className="text-sm text-gray-600 mb-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                   Configuração: <strong>{smtpTestConfig.name}</strong>
                 </p>
-                <label htmlFor="smtp_test_email" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="smtp_test_email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email para receber o teste *
                 </label>
                 <input
@@ -3576,12 +3576,12 @@ export default function ConfigurationsPage() {
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <TestTube className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900">
+                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
                     Teste de Transcrição
                   </h3>
                 </div>
 
-                <p className="text-sm text-gray-600 mb-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                   Grave um áudio e veja o retorno da transcrição.
                 </p>
 
@@ -3599,7 +3599,7 @@ export default function ConfigurationsPage() {
                     >
                       <Mic className="h-5 w-5" />
                     </button>
-                    <div className="flex-1 px-3 text-sm text-gray-700">
+                    <div className="flex-1 px-3 text-sm text-gray-700 dark:text-gray-300">
                       {isAudioRecording ? `Gravando... ${formatAudioTime(audioRecordingTime)}` : 'Clique no microfone para gravar'}
                     </div>
                     {isAudioRecording && (
@@ -3658,7 +3658,7 @@ export default function ConfigurationsPage() {
             
             <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
               <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
                   QR Code - {qrCodeInstance.friendly_name}
                 </h3>
                 
@@ -3669,7 +3669,7 @@ export default function ConfigurationsPage() {
                       alt="QR Code WhatsApp" 
                       className="mx-auto max-w-full h-auto"
                     />
-                    <p className="mt-4 text-sm text-gray-600">
+                    <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
                       Escaneie este QR Code com seu WhatsApp para conectar a instância
                     </p>
                   </div>
@@ -3701,18 +3701,18 @@ export default function ConfigurationsPage() {
                   <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
                     <Send className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900">
+                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
                     Enviar Mensagem de Teste
                   </h3>
                 </div>
                 
                 <div className="mt-4">
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Envie uma mensagem de teste de <strong>{testInstance.friendly_name}</strong> para validar a conexão.
                   </p>
                   
                   <div>
-                    <label htmlFor="test_phone" className="block text-sm font-medium text-gray-700 mb-1">
+                    <label htmlFor="test_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Número do WhatsApp (com DDD)
                     </label>
                     <input
@@ -3723,7 +3723,7 @@ export default function ConfigurationsPage() {
                       placeholder="5511999999999"
                       className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       Formato: Código do país + DDD + Número (ex: 5511999999999)
                     </p>
                   </div>
@@ -3775,7 +3775,7 @@ export default function ConfigurationsPage() {
                 ))}
               </select>
               <div className="flex-1" />
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-gray-500 dark:text-gray-400">
                 {selectedBusinessHoursDept
                   ? `Configurando para: ${businessHoursDepts.find(d => d.id === selectedBusinessHoursDept)?.name || 'Departamento'}`
                   : 'Configurando para: Geral (todos os departamentos)'}
@@ -3791,7 +3791,7 @@ export default function ConfigurationsPage() {
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                   businessHoursSubTab === 'hours'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <Clock className="h-4 w-4" />
@@ -3802,7 +3802,7 @@ export default function ConfigurationsPage() {
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                   businessHoursSubTab === 'message'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <MessageSquare className="h-4 w-4" />
@@ -3813,7 +3813,7 @@ export default function ConfigurationsPage() {
                 className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
                   businessHoursSubTab === 'tasks'
                     ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
                 }`}
               >
                 <Calendar className="h-4 w-4" />
@@ -3871,7 +3871,7 @@ export default function ConfigurationsPage() {
                               onChange={(e) => updateDayHours(day.key, 'start', e.target.value)}
                               className="w-32"
                             />
-                            <span className="text-gray-500">até</span>
+                            <span className="text-gray-500 dark:text-gray-400">até</span>
                             <Input
                               type="time"
                               value={end}
@@ -3895,7 +3895,7 @@ export default function ConfigurationsPage() {
                     rows={4}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
                   />
-                  <p className="mt-1 text-sm text-gray-500">
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     Exemplo: 2025-12-25 (Natal), 2026-01-01 (Ano Novo)
                   </p>
                 </div>
@@ -4016,7 +4016,7 @@ export default function ConfigurationsPage() {
                         className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Cliente entrou em contato fora do horário..."
                       />
-                      <p className="mt-1 text-sm text-gray-500">
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         Variáveis: <code>&#123;contact_name&#125;</code>, <code>&#123;contact_phone&#125;</code>, <code>&#123;message_time&#125;</code>, <code>&#123;message_content&#125;</code>, <code>&#123;next_open_time&#125;</code>
                       </p>
                     </div>
@@ -4079,7 +4079,7 @@ export default function ConfigurationsPage() {
                             </option>
                           ))}
                         </select>
-                        <p className="mt-1 text-sm text-gray-500">
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                           Se não selecionar, a tarefa será criada no departamento da conversa
                         </p>
                       </div>
@@ -4192,7 +4192,7 @@ export default function ConfigurationsPage() {
                     maxLength={500}
                     className="mt-1"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Mensagem exibida antes do menu.
                   </p>
                 </div>
@@ -4414,7 +4414,7 @@ export default function ConfigurationsPage() {
                     onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, template_id: e.target.value })}
                     placeholder="Ex: hello_world"
                   />
-                  <p className="text-xs text-gray-500 mt-1">Igual ao nome do template no Meta Business (ex.: hello_world)</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Igual ao nome do template no Meta Business (ex.: hello_world)</p>
                 </div>
                 <div>
                   <Label htmlFor="meta_template_lang">Código do idioma</Label>

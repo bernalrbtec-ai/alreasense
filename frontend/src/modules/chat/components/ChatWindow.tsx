@@ -697,7 +697,7 @@ export function ChatWindow() {
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
         <div className="max-w-md text-center">
           <div className="w-64 h-64 mx-auto mb-8 opacity-20">
-            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
+            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400 dark:text-gray-500">
               <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
             </svg>
           </div>
@@ -1106,9 +1106,9 @@ export function ChatWindow() {
                         {groupInfo.admins.map((admin: any, index: number) => (
                           admin && (
                             <div key={admin.id || admin.phone || index} className="flex items-center gap-2 p-2 bg-blue-50 rounded">
-                              <span className="text-sm font-medium text-gray-900">{admin?.name || admin?.phone || 'Admin'}</span>
+                              <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{admin?.name || admin?.phone || 'Admin'}</span>
                               {admin?.phone && admin?.name && (
-                                <span className="text-xs text-gray-500">({admin.phone})</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">({admin.phone})</span>
                               )}
                             </div>
                           )
@@ -1132,7 +1132,7 @@ export function ChatWindow() {
                                 {participant?.name || participant?.phone || 'Participante'}
                               </span>
                               {participant?.phone && participant?.name && (
-                                <span className="text-xs text-gray-500">{participant.phone}</span>
+                                <span className="text-xs text-gray-500 dark:text-gray-400">{participant.phone}</span>
                               )}
                               {participant?.is_admin && (
                                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Admin</span>
@@ -1151,7 +1151,7 @@ export function ChatWindow() {
                   )}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                   Nenhuma informação disponível
                 </div>
               )}

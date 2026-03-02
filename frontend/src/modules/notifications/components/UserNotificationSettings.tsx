@@ -207,7 +207,7 @@ export const UserNotificationSettings: React.FC = () => {
                 required
               />
               {preferences.daily_summary_time && (
-                <p className="mt-2 text-xs text-gray-500">
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                   Você receberá o resumo todos os dias às {preferences.daily_summary_time}
                 </p>
               )}
@@ -231,7 +231,7 @@ export const UserNotificationSettings: React.FC = () => {
                   </>
                 )}
               </Button>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 Envie o resumo diário manualmente para testar ou quando necessário
               </p>
             </div>

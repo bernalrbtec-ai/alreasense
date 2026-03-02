@@ -179,7 +179,7 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
     return (
       <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
         <div className="flex items-center gap-1 mb-0.5">
-          <Reply className="w-3 h-3 text-gray-500" />
+          <Reply className="w-3 h-3 text-gray-500 dark:text-gray-400" />
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
             Mensagem não encontrada
           </p>
@@ -196,7 +196,7 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
     return (
       <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
         <div className="flex items-center gap-1 mb-0.5">
-          <Reply className="w-3 h-3 text-gray-500" />
+          <Reply className="w-3 h-3 text-gray-500 dark:text-gray-400" />
           <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
             Mensagem apagada
           </p>
@@ -769,7 +769,7 @@ export function MessageList() {
       case 'sent':
         return <Check className="w-4 h-4 text-gray-400" title="Enviada" />;
       case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-500" title="Entregue" />;
+        return <CheckCheck className="w-4 h-4 text-gray-500 dark:text-gray-400" title="Entregue" />;
       case 'seen':
         return <CheckCheck className="w-4 h-4 text-blue-500" title="Vista" />;
       case 'failed':
@@ -840,7 +840,7 @@ export function MessageList() {
               {attachment.original_filename}
             </p>
           )}
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {isDownloading ? 'Baixando...' : (
               attachment.size_bytes > 0 
                 ? formatFileSize(attachment.size_bytes) 
@@ -936,7 +936,7 @@ export function MessageList() {
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
             </div>
-            <p className="text-sm text-gray-500">Carregando mensagens...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Carregando mensagens...</p>
           </div>
         </div>
       ) : safeMessages.length === 0 ? (
@@ -1012,7 +1012,7 @@ export function MessageList() {
           
           {loadingOlder && (
             <div className="flex justify-center mb-2">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <div className="flex gap-1">
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                   <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
@@ -1232,11 +1232,11 @@ export function MessageList() {
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   {messageItem.is_edited && (
-                    <span className="text-xs text-gray-500 italic">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 italic">
                       Editada
                     </span>
                   )}
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
                     {formatTime(messageItem.created_at)}
                   </span>
                   {messageItem.direction === 'outgoing' && !isSystemNotification && (

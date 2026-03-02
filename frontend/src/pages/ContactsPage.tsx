@@ -550,10 +550,10 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <UsersIcon className="h-5 w-5 sm:h-6 sm:w-6" /> Contatos
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Gerencie sua base de contatos enriquecidos
           </p>
         </div>
@@ -607,7 +607,7 @@ export default function ContactsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Busca por texto */}
         <div className="md:col-span-2 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Buscar por nome, telefone ou email..."
@@ -618,7 +618,7 @@ export default function ContactsPage() {
           {searchTerm && !isLoading && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600"
               title="Limpar busca"
             >
               <X className="h-4 w-4" />
@@ -717,33 +717,33 @@ export default function ContactsPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Total de Contatos</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Total de Contatos</div>
           <div className="text-2xl font-bold">{stats.total}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             {selectedTag || selectedState || searchTerm ? 'Filtrados' : 'Base completa'}
           </div>
         </Card>
         
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Ativos</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Ativos</div>
           <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos ativos
           </div>
         </Card>
         
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Opt-out</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Opt-out</div>
           <div className="text-2xl font-bold text-red-600">{stats.opted_out}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos que saíram
           </div>
         </Card>
         
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Problemas de Entrega</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Problemas de Entrega</div>
           <div className="text-2xl font-bold text-orange-600">{stats.delivery_problems}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Mensagens não entregues
           </div>
         </Card>
@@ -752,17 +752,17 @@ export default function ContactsPage() {
       {/* Stats Detalhadas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Leads</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Leads</div>
           <div className="text-xl font-bold text-blue-600">{stats.leads}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos sem compras
           </div>
         </Card>
         
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Clientes</div>
+          <div className="text-sm text-gray-500 dark:text-gray-400">Clientes</div>
           <div className="text-xl font-bold text-green-600">{stats.customers}</div>
-          <div className="text-xs text-gray-400 mt-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos com compras
           </div>
         </Card>
@@ -836,7 +836,7 @@ export default function ContactsPage() {
           </div>
           <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-gray-700">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
                 Mostrando <span className="font-medium">{(currentPage - 1) * pageSize + 1}</span> até{' '}
                 <span className="font-medium">{Math.min(currentPage * pageSize, totalCount)}</span> de{' '}
                 <span className="font-medium">{totalCount}</span> contatos
@@ -897,9 +897,9 @@ export default function ContactsPage() {
 
       {contacts.length === 0 && (
         <div className="text-center py-12">
-          <UsersIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum contato</h3>
-          <p className="mt-1 text-sm text-gray-500">Comece adicionando um novo contato</p>
+          <UsersIcon className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">Nenhum contato</h3>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Comece adicionando um novo contato</p>
           <div className="mt-6">
             <Button onClick={() => setIsModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -918,7 +918,7 @@ export default function ContactsPage() {
                 <h2 className="text-xl font-bold">
                   {editingContact ? 'Editar Contato' : 'Novo Contato'}
                 </h2>
-                <button onClick={handleCloseModal} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
+                <button onClick={handleCloseModal} className="text-gray-500 dark:text-gray-400 dark:text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-300">
                   <X className="h-5 w-5" />
                 </button>
               </div>
@@ -1030,7 +1030,7 @@ export default function ContactsPage() {
 
                 {/* Tags */}
                 <div data-tags-section>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Tags
                   </label>
                   
@@ -1082,7 +1082,7 @@ export default function ContactsPage() {
                       )
                     })}
                     {tags.length === 0 && (
-                      <p className="text-sm text-gray-500">Nenhuma tag cadastrada</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Nenhuma tag cadastrada</p>
                     )}
                   </div>
                   
@@ -1115,7 +1115,7 @@ export default function ContactsPage() {
                     </div>
                   </div>
                   
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Clique nas tags para selecionar/remover • Crie novas tags conforme necessário
                   </p>
                 </div>
@@ -1174,7 +1174,7 @@ export default function ContactsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-gray-900">Histórico do Contato</h2>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Histórico do Contato</h2>
               <button
                 onClick={() => {
                   setShowHistoryModal(false)
@@ -1182,7 +1182,7 @@ export default function ContactsPage() {
                 }}
                 className="p-2 hover:bg-gray-100 rounded transition-colors"
               >
-                <X className="w-5 h-5 text-gray-600" />
+                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">

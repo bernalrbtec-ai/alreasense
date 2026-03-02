@@ -541,7 +541,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors flex-shrink-0"
               title="Cancelar resposta"
             >
-              <X className="w-4 h-4 text-gray-500" />
+              <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             </button>
           </div>
         </div>

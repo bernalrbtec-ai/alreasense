@@ -130,7 +130,7 @@ export default function QuickRepliesPage() {
         <div className="flex gap-4">
           <div className="flex-1">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
               <Input
                 type="text"
                 value={search}
@@ -160,7 +160,7 @@ export default function QuickRepliesPage() {
         </div>
       ) : filteredReplies.length === 0 ? (
         <Card className="p-12 text-center">
-          <Zap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <Zap className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
           <p className="text-gray-600 dark:text-gray-400">
             {search ? 'Nenhuma resposta encontrada' : 'Nenhuma resposta rápida cadastrada'}
           </p>
@@ -263,7 +263,7 @@ export default function QuickRepliesPage() {
                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                              focus:outline-none focus:ring-2 focus:ring-[#00a884] resize-none"
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {formData.content.length}/4000 caracteres
                   </p>
                 </div>

@@ -256,7 +256,7 @@ const CampaignsPage: React.FC = () => {
       case 'completed':
         return <CheckCircle className="h-4 w-4 text-purple-500" />
       default:
-        return <FileText className="h-4 w-4 text-gray-500" />
+        return <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
     }
   }
 
@@ -343,7 +343,7 @@ const CampaignsPage: React.FC = () => {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Carregando campanhas...</p>
+          <p className="text-gray-600 dark:text-gray-400">Carregando campanhas...</p>
         </div>
       </div>
     )
@@ -355,7 +355,7 @@ const CampaignsPage: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">📱 Campanhas</h1>
-          <p className="text-gray-600">Gerencie suas campanhas de WhatsApp</p>
+          <p className="text-gray-600 dark:text-gray-400">Gerencie suas campanhas de WhatsApp</p>
         </div>
         <Button onClick={() => setShowModal(true)}>
           <Plus className="h-4 w-4 mr-2" />
@@ -523,7 +523,7 @@ const CampaignsPage: React.FC = () => {
               {logs.length === 0 ? (
                 <div className="text-center py-6 sm:py-8 text-gray-500">
                   <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-600">Nenhum log encontrado</p>
+                  <p className="text-gray-600 dark:text-gray-400">Nenhum log encontrado</p>
                   <p className="text-sm text-gray-500">Esta campanha ainda não possui logs</p>
                 </div>
               ) : (

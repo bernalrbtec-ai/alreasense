@@ -164,7 +164,7 @@ export default function WelcomeMenuPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600">Erro ao carregar configuração</p>
+          <p className="text-gray-600 dark:text-gray-400">Erro ao carregar configuração</p>
         </div>
       </div>
     )

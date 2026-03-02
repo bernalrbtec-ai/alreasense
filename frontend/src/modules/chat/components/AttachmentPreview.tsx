@@ -640,7 +640,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
             </div>
             
             {/* Tempo atual / total - ajustado para mobile */}
-            <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-500">
+            <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
               <span>{isAudioReady ? formatTime(currentTime) : 'Baixando...'}</span>
               <span>{isAudioReady ? formatTime(duration) : '--:--'}</span>
             </div>
@@ -696,9 +696,9 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
               title={isTranscriptionCollapsed ? "Expandir transcrição" : "Recolher transcrição"}
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-700">📝 Transcrição</span>
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">📝 Transcrição</span>
                 {attachment.transcription_language && (
-                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
                     {attachment.transcription_language.toUpperCase()}
                   </span>
                 )}
@@ -718,20 +718,20 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
             {/* Conteúdo da transcrição (expandido) */}
             {!isTranscriptionCollapsed && (
               <div className="px-3 pb-3 border-t border-gray-100">
-                <div className="pt-3 text-sm text-gray-600">
+                <div className="pt-3 text-sm text-gray-600 dark:text-gray-400">
                   {attachment.transcription ? (
                     <>
                       <p className="mb-3 leading-relaxed">{attachment.transcription}</p>
                       {/* Feedback de qualidade */}
                       {transcriptionQuality ? (
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             Qualidade: {transcriptionQuality === 'correct' ? '✓ Correta' : '✗ Incorreta'}
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
-                          <span className="text-xs text-gray-500">A transcrição está correta?</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">A transcrição está correta?</span>
                           <button
                             type="button"
                             onClick={async () => {
@@ -928,15 +928,15 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
   if (isProcessing) {
     return (
       <div className="attachment-preview document max-w-[280px] rounded-lg border border-gray-200 bg-gray-50 p-2.5">
-        <div className="flex items-center gap-3 text-gray-500">
+        <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
           <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
             <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
           </div>
           <div className="flex-1 min-w-0">
             {filename && filename !== 'document' && (
-              <p className="text-sm font-medium text-gray-700 truncate" title={filename}>{filename}</p>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate" title={filename}>{filename}</p>
             )}
-            <p className="text-xs text-gray-500">Processando...</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Processando...</p>
           </div>
         </div>
       </div>
@@ -1156,7 +1156,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
           <p className="text-sm font-medium text-gray-800 truncate" title={filename}>
             {filename}
           </p>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             {typeLabel} • {sizeStr}
           </p>
         </div>

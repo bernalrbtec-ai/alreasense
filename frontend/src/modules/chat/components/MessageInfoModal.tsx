@@ -273,7 +273,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                       <div key={reaction.id} className="flex items-center gap-1 text-sm">
                         <span>{reaction.emoji}</span>
                         {reaction.user_data && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
                             {reaction.user_data.first_name || reaction.user_data.email}
                           </span>
                         )}

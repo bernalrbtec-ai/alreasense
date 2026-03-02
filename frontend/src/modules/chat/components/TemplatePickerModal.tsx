@@ -84,7 +84,7 @@ export function TemplatePickerModal({
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+            className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
           >
             <X className="w-5 h-5" />
           </button>

@@ -121,11 +121,11 @@ export default function SystemStatusPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Status do Sistema</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Status do Sistema</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Monitore a saúde e performance da plataforma
           </p>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
             Última atualização: {lastUpdate.toLocaleTimeString()}
           </p>
         </div>
@@ -141,8 +141,8 @@ export default function SystemStatusPage() {
           <div className="flex items-center gap-3">
             <Activity className="h-8 w-8 text-blue-600" />
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Status Geral</h3>
-              <p className="text-sm text-gray-500">Alrea Sense Platform</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Status Geral</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Alrea Sense Platform</p>
             </div>
           </div>
           <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${getStatusBadge(status?.status || 'degraded')}`}>
@@ -159,8 +159,8 @@ export default function SystemStatusPage() {
             <div className="flex items-center gap-3">
               <Database className={`h-8 w-8 ${getStatusColor(status?.database?.status || 'unhealthy')}`} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">PostgreSQL</h3>
-                <p className="text-sm text-gray-500">Banco de Dados</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">PostgreSQL</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Banco de Dados</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.database?.status || 'unhealthy')}`}>
@@ -168,7 +168,7 @@ export default function SystemStatusPage() {
             </span>
           </div>
           {status?.database && (
-            <div className="mt-4 space-y-2 text-sm text-gray-600">
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               {status.database.connection_count !== undefined && (
                 <p>Conexões ativas: {status.database.connection_count}</p>
               )}
@@ -185,8 +185,8 @@ export default function SystemStatusPage() {
             <div className="flex items-center gap-3">
               <Server className={`h-8 w-8 ${getStatusColor(status?.redis?.status || 'unhealthy')}`} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Redis</h3>
-                <p className="text-sm text-gray-500">Cache & Message Broker</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Redis</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Cache & Message Broker</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.redis?.status || 'unhealthy')}`}>
@@ -212,7 +212,7 @@ export default function SystemStatusPage() {
               <Rabbit className={`h-8 w-8 ${getStatusColor(status?.rabbitmq?.status || 'unhealthy')}`} />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">RabbitMQ</h3>
-                <p className="text-sm text-gray-500">Message Broker / Campanhas</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Message Broker / Campanhas</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.rabbitmq?.status || 'unhealthy')}`}>
@@ -240,7 +240,7 @@ export default function SystemStatusPage() {
               }`} />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Evolution API</h3>
-                <p className="text-sm text-gray-500">WhatsApp Integration</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">WhatsApp Integration</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -280,7 +280,7 @@ export default function SystemStatusPage() {
               <Box className={`h-8 w-8 ${getStatusColor(status?.minio?.status || 'unhealthy')}`} />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">MinIO</h3>
-                <p className="text-sm text-gray-500">Object Storage (S3)</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">Object Storage (S3)</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.minio?.status || 'unhealthy')}`}>

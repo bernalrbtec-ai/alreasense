@@ -487,7 +487,7 @@ function ExamplesTab({ copyToClipboard }: { copyToClipboard: (text: string) => v
 
             <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm overflow-x-auto">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-gray-400">cURL</span>
+                <span className="text-gray-400 dark:text-gray-500">cURL</span>
                 <Button
                   variant="ghost"
                   size="sm"

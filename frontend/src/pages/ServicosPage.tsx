@@ -386,9 +386,9 @@ export default function ServicosPage() {
                                 aria-label={expandedLogId === log.id ? 'Recolher detalhes' : 'Expandir detalhes'}
                               >
                                 {expandedLogId === log.id ? (
-                                  <ChevronDown className="h-4 w-4 text-gray-500" />
+                                  <ChevronDown className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                 ) : (
-                                  <ChevronRight className="h-4 w-4 text-gray-500" />
+                                  <ChevronRight className="h-4 w-4 text-gray-500 dark:text-gray-400" />
                                 )}
                               </button>
                             ) : (

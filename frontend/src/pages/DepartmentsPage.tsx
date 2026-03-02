@@ -219,8 +219,8 @@ export default function DepartmentsPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nome do Departamento
+<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Nome do Departamento
                 </label>
                 <input
                   type="text"
@@ -233,8 +233,8 @@ export default function DepartmentsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Cor
+<label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Cor
                 </label>
                 <div className="flex items-center gap-3">
                   <input

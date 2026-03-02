@@ -288,7 +288,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           onClick={handleInfo}
           className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
         >
-          <Info className="w-4 h-4 text-gray-500" />
+          <Info className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <span>Dados da mensagem</span>
         </button>
 
@@ -298,7 +298,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
             onClick={handleReply}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
           >
-            <Reply className="w-4 h-4 text-gray-500" />
+            <Reply className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span>Responder</span>
           </button>
         )}
@@ -309,7 +309,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
             onClick={handleCopy}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
           >
-            <Copy className="w-4 h-4 text-gray-500" />
+            <Copy className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span>Copiar</span>
           </button>
         )}
@@ -319,7 +319,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           onClick={handleReact}
           className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
         >
-          <Smile className="w-4 h-4 text-gray-500" />
+          <Smile className="w-4 h-4 text-gray-500 dark:text-gray-400" />
           <span>Reagir</span>
         </button>
 
@@ -329,7 +329,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
             onClick={handleDownload}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
           >
-            <Download className="w-4 h-4 text-gray-500" />
+            <Download className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span>Baixar</span>
           </button>
         )}
@@ -340,7 +340,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
             onClick={handleForward}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
           >
-            <Forward className="w-4 h-4 text-gray-500" />
+            <Forward className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span>Encaminhar</span>
           </button>
         )}
@@ -351,7 +351,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
             onClick={handleEdit}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
           >
-            <Edit className="w-4 h-4 text-gray-500" />
+            <Edit className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span>Editar</span>
           </button>
         )}
