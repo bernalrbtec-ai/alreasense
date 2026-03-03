@@ -6,6 +6,7 @@ from rest_framework import serializers
 from django.db import models
 from django.db.models import Q
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction, QuickReply
+from apps.chat.instance_resolution import get_effective_wa_instance_for_conversation
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
 
@@ -741,58 +742,43 @@ class ConversationSerializer(serializers.ModelSerializer):
     
     def get_instance_friendly_name(self, obj):
         """Retorna nome amigável da instância.
-        Prioridade: 1) instance_friendly_name salvo no modelo, 2) lookup no banco, 3) instance_name (UUID).
+        Prioridade: 1) instance_friendly_name salvo no modelo, 2) instância efetiva (lookup + fallback
+        quando tenant tem só uma instância e a conversa referencia instância removida), 3) instance_name (UUID).
         """
-        if not obj.instance_name:
-            return None
-        
-        # 1) Usar valor salvo no modelo (webhook grava quando tem wa_instance)
+        # 1) Valor salvo no modelo (webhook grava quando tem wa_instance)
         if getattr(obj, 'instance_friendly_name', None) and obj.instance_friendly_name.strip():
             return obj.instance_friendly_name
-        
-        # 2) Lookup no banco (fallback para conversas antigas)
+
+        # 2) Instância efetiva (inclui fallback: se tenant tem 1 instância, ela assume conversas órfãs)
+        effective = get_effective_wa_instance_for_conversation(obj)
+        if effective:
+            return (getattr(effective, 'friendly_name', None) or '').strip() or effective.instance_name
+
+        # 3) Conversa sem instance_name ou instância não encontrada (ex.: órfã com 2+ instâncias no tenant)
+        tenant_id = getattr(obj, "tenant_id", None)
+        inst_name = getattr(obj, "instance_name", None) or ""
+        if not inst_name or not tenant_id:
+            return None
         from django.core.cache import cache
-        from django.db.models import Q
-        cache_key = f"instance_friendly_name:v2:{obj.instance_name}"
+        from apps.notifications.models import WhatsAppInstance
+        cache_key = f"instance_friendly_name:v2:{tenant_id}:{inst_name}"
         friendly_name = cache.get(cache_key)
-        
         if friendly_name is None:
-            from apps.notifications.models import WhatsAppInstance
             instance = WhatsAppInstance.objects.filter(
-                Q(instance_name=obj.instance_name) | Q(evolution_instance_name=obj.instance_name)
-            ).values('friendly_name').first()
-            
-            friendly_name = instance['friendly_name'] if instance else obj.instance_name
+                Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
+                tenant_id=tenant_id,
+                is_active=True,
+            ).values("friendly_name").first()
+            friendly_name = (instance["friendly_name"] if instance else None) or inst_name
             cache.set(cache_key, friendly_name, 300)
-        
         return friendly_name
     
     def get_integration_type(self, obj):
         """Fase 7: Retorna 'meta_cloud' ou 'evolution' para o frontend (edição desabilitada para Meta)."""
-        if not obj.instance_name:
-            return 'evolution'
-        from django.core.cache import cache
-        from apps.notifications.models import WhatsAppInstance
-        inst_name = str(obj.instance_name).strip()
-        cache_key = f"conv_integration_type:{obj.tenant_id}:{inst_name}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            return cached
-        if inst_name.isdigit():
-            wa = WhatsAppInstance.objects.filter(
-                phone_number_id=inst_name,
-                tenant=obj.tenant,
-                integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
-            ).values('integration_type').first()
-            value = (wa or {}).get('integration_type') or 'evolution'
-        else:
-            wa = WhatsAppInstance.objects.filter(
-                models.Q(instance_name=inst_name) | models.Q(evolution_instance_name=inst_name),
-                tenant=obj.tenant,
-            ).values('integration_type').first()
-            value = (wa or {}).get('integration_type') or 'evolution'
-        cache.set(cache_key, value, 120)
-        return value
+        effective = get_effective_wa_instance_for_conversation(obj)
+        if effective:
+            return getattr(effective, "integration_type", None) or "evolution"
+        return "evolution"
     
     def get_contact_tags(self, obj):
         """Busca as tags do contato pelo telefone (com cache)."""

@@ -22,6 +22,7 @@ from django.utils.dateparse import parse_datetime
 import time
 
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
+from apps.chat.instance_resolution import get_effective_wa_instance_for_conversation
 from apps.chat.api.serializers import (
     ConversationSerializer,
     ConversationDetailSerializer,
@@ -1226,14 +1227,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from apps.notifications.models import WhatsAppTemplate
         from apps.notifications.serializers import WhatsAppTemplateSerializer
         conversation = self.get_object()
-        if not conversation.instance_name:
-            return Response({'results': []}, status=status.HTTP_200_OK)
-        inst_name = str(conversation.instance_name).strip()
-        wa = WhatsAppInstance.objects.filter(
-            Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name) | Q(phone_number_id=inst_name),
-            tenant=request.user.tenant,
-            is_active=True,
-        ).first()
+        wa = get_effective_wa_instance_for_conversation(conversation)
         if not wa:
             return Response({'results': []}, status=status.HTTP_200_OK)
         templates = WhatsAppTemplate.objects.filter(

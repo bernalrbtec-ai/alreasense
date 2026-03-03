@@ -758,6 +758,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                     is_active=True,
                 ).first
             )()
+        # Fallback: conversa referencia instância removida mas tenant tem só uma ativa → ela assume
+        if not instance and conversation_bound_to_instance:
+            from apps.chat.instance_resolution import get_effective_wa_instance_for_conversation
+            instance = await database_sync_to_async(
+                get_effective_wa_instance_for_conversation
+            )(message.conversation)
         
         if not instance:
             message.status = 'failed'
