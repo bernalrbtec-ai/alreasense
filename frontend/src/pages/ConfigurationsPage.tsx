@@ -1557,7 +1557,7 @@ export default function ConfigurationsPage() {
 
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
-      // Persistir também o modelo da BIA: enviar o valor atual do select (não limpar se não estiver em aiModelOptions, para não sobrescrever com vazio).
+      // Persistir também o modelo do assistente: enviar o valor atual do select (não limpar se não estiver em aiModelOptions, para não sobrescrever com vazio).
       if (aiSettings) {
         try {
           const secretaryModel = (aiSettings.secretary_model ?? '').trim()
@@ -1568,8 +1568,8 @@ export default function ConfigurationsPage() {
           })
           if (settingsRes?.data) setAiSettings(settingsRes.data)
         } catch (settingsErr: any) {
-          console.error('Erro ao salvar modelo da BIA:', settingsErr)
-          showErrorToast('salvar', 'Modelo da BIA', settingsErr)
+          console.error('Erro ao salvar modelo do assistente:', settingsErr)
+          showErrorToast('salvar', 'Modelo do assistente', settingsErr)
         }
       }
     } catch (error: any) {
@@ -2443,7 +2443,125 @@ export default function ConfigurationsPage() {
           {aiSubTab === 'rag-memories' ? (
             <RagMemoriesManager />
           ) : aiSubTab === 'ia-assistente' ? (
-            <BiaAdminPage />
+            <>
+              <BiaAdminPage />
+              {/* Configurações do assistente (ativar, modelo, etc.) – exibido após a autenticação da aba Secretária */}
+              {(() => {
+                const assistantDisplayName = (secretaryProfile?.signature_name ?? '').trim() || 'Secretária IA'
+                return (
+                  <Card className="p-6 mt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Secretária IA – {assistantDisplayName}</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
+                        </p>
+                      </div>
+                      {secretaryProfileLoading || secretaryProfile === null ? (
+                        <LoadingSpinner />
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          {secretaryProfile.is_active && (
+                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                              Ativa
+                            </span>
+                          )}
+                          <Link to="/billing/company">
+                            <Button variant="outline">
+                              <Edit className="h-4 w-4 mr-2" />
+                              Editar dados da empresa
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                    {secretaryProfile && !secretaryProfileLoading && (
+                      <div className="mt-4 space-y-4">
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                          <div>
+                            <Label className="text-base font-semibold">Ativar assistente</Label>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              A secretária responderá em conversas do Inbox quando habilitada.
+                            </p>
+                          </div>
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={secretaryProfile.is_active}
+                              disabled={secretaryProfileSaving}
+                              onChange={(e) => {
+                                const isActive = e.target.checked
+                                setSecretaryProfile((prev) => (prev ? { ...prev, is_active: isActive } : prev))
+                                handleSaveSecretaryProfile({ is_active: isActive })
+                              }}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <Label htmlFor="secretary_model">Modelo do assistente</Label>
+                            <select
+                              id="secretary_model"
+                              value={aiSettings?.secretary_model ?? ''}
+                              onChange={(e) => setAiSettings((prev) => (prev ? { ...prev, secretary_model: e.target.value } : prev))}
+                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                              disabled={!aiSettings || aiModelOptions.length === 0}
+                            >
+                              <option value="">Padrão (modelo do agente)</option>
+                              {aiSettings?.secretary_model && !aiModelOptions.includes(aiSettings.secretary_model) && (
+                                <option value={aiSettings.secretary_model}>{aiSettings.secretary_model}</option>
+                              )}
+                              {aiModelOptions.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              Se não escolher, o assistente usa o mesmo modelo do agente.
+                            </p>
+                          </div>
+                          <div>
+                            <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (min)</Label>
+                            <Input
+                              id="secretary_inbox_idle_minutes"
+                              type="number"
+                              min={0}
+                              max={1440}
+                              value={secretaryProfile.inbox_idle_minutes ?? 0}
+                              onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
+                              className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
+                            />
+                            {secretaryProfileErrors.inbox_idle_minutes && (
+                              <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center pt-6">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={secretaryProfile.use_memory}
+                                onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
+                                className="rounded border-gray-300"
+                              />
+                              <span className="text-sm">Usar memória por contato</span>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretaryProfileSaving}>
+                            <Save className="h-4 w-4 mr-2" />
+                            {secretaryProfileSaving ? 'Salvando...' : 'Salvar'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                )
+              })()}
+            </>
           ) : aiSubTab === 'auditoria-ia' ? (
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
@@ -2847,117 +2965,6 @@ export default function ConfigurationsPage() {
                 </div>
               </Card>
 
-              {/* Secretária IA (Bia) – simplificado (Fase 0: formulário de dados da empresa em Planos > Dados da Empresa) */}
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">Secretária IA (Bia)</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
-                    </p>
-                  </div>
-                  {secretaryProfileLoading || secretaryProfile === null ? (
-                    <LoadingSpinner />
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      {secretaryProfile.is_active && (
-                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
-                          Ativa
-                        </span>
-                      )}
-                      <Link to="/billing/company">
-                        <Button variant="outline">
-                          <Edit className="h-4 w-4 mr-2" />
-                          Editar dados da empresa
-                        </Button>
-                      </Link>
-                    </div>
-                  )}
-                </div>
-                {secretaryProfile && !secretaryProfileLoading && (
-                  <div className="mt-4 space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div>
-                        <Label className="text-base font-semibold">Ativar BIA</Label>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                          A secretária responderá em conversas do Inbox quando habilitada.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={secretaryProfile.is_active}
-                          disabled={secretaryProfileSaving}
-                          onChange={(e) => {
-                            const isActive = e.target.checked
-                            setSecretaryProfile((prev) => (prev ? { ...prev, is_active: isActive } : prev))
-                            handleSaveSecretaryProfile({ is_active: isActive })
-                          }}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <Label htmlFor="secretary_model">Modelo da BIA</Label>
-                        <select
-                          id="secretary_model"
-                          value={aiSettings?.secretary_model ?? ''}
-                          onChange={(e) => setAiSettings((prev) => (prev ? { ...prev, secretary_model: e.target.value } : prev))}
-                          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          disabled={!aiSettings || aiModelOptions.length === 0}
-                        >
-                          <option value="">Padrão (modelo do agente)</option>
-                          {aiSettings?.secretary_model && !aiModelOptions.includes(aiSettings.secretary_model) && (
-                            <option value={aiSettings.secretary_model}>{aiSettings.secretary_model}</option>
-                          )}
-                          {aiModelOptions.map((option) => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Se não escolher, a BIA usa o mesmo modelo do agente.
-                        </p>
-                      </div>
-                      <div>
-                        <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (min)</Label>
-                        <Input
-                          id="secretary_inbox_idle_minutes"
-                          type="number"
-                          min={0}
-                          max={1440}
-                          value={secretaryProfile.inbox_idle_minutes ?? 0}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
-                          className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
-                        />
-                        {secretaryProfileErrors.inbox_idle_minutes && (
-                          <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center pt-6">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={secretaryProfile.use_memory}
-                            onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
-                            className="rounded border-gray-300"
-                          />
-                          <span className="text-sm">Usar memória por contato</span>
-                        </label>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretaryProfileSaving}>
-                        <Save className="h-4 w-4 mr-2" />
-                        {secretaryProfileSaving ? 'Salvando...' : 'Salvar'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </Card>
             </>
           )}
         </div>

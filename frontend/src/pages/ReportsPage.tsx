@@ -409,15 +409,15 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Cards por departamento + BIA (quando secretary_enabled) */}
+                  {/* Cards por departamento + Secretária (quando secretary_enabled) */}
                   {((messageMetrics.by_department_summary?.length ?? 0) > 0 || messageMetrics.secretary_metrics) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {messageMetrics.secretary_metrics && (
-                        <Card key="bia" className="p-5 border-l-4 border-l-violet-500">
+                        <Card key="secretary" className="p-5 border-l-4 border-l-violet-500">
                           <div className="flex items-center gap-2 mb-4">
                             <div className="w-3 h-3 rounded-sm shrink-0 bg-violet-500" />
                             <h3 className="font-semibold text-gray-900 dark:text-white">
-                              BIA (Secretária IA)
+                              Secretária
                             </h3>
                           </div>
                           <div className="space-y-3 text-sm">
@@ -498,7 +498,7 @@ export default function ReportsPage() {
                           Média de Mensagens por Hora do Dia
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                          Por departamento{messageMetrics.secretary_metrics ? ' e BIA' : ''} ({messageMetrics.range.from} a {messageMetrics.range.to} — {messageMetrics.num_days ?? 1} dia(s))
+                          Por departamento{messageMetrics.secretary_metrics ? ' e Secretária' : ''} ({messageMetrics.range.from} a {messageMetrics.range.to} — {messageMetrics.num_days ?? 1} dia(s))
                         </p>
                         <div className="h-80">
                           <ResponsiveContainer width="100%" height="100%">
@@ -511,7 +511,7 @@ export default function ReportsPage() {
                                 })
                                 if (messageMetrics.secretary_metrics) {
                                   const bh = messageMetrics.secretary_metrics.by_hour.find((b) => b.hour === h)
-                                  row['BIA'] = bh ? Math.round(bh.avg * 100) / 100 : 0
+                                  row['Secretária'] = bh ? Math.round(bh.avg * 100) / 100 : 0
                                 }
                                 return row
                               })}
@@ -551,9 +551,9 @@ export default function ReportsPage() {
                               <Legend wrapperStyle={{ paddingTop: 8 }} />
                               {messageMetrics.secretary_metrics && (
                                 <Area
-                                  key="bia"
+                                  key="secretary"
                                   type="monotone"
-                                  dataKey="BIA"
+                                  dataKey="Secretária"
                                   stroke="#8b5cf6"
                                   strokeWidth={2}
                                   fill="url(#grad-hour-bia)"

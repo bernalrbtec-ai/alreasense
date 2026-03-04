@@ -416,10 +416,10 @@ export default function BiaAdminPage() {
         <Card className="p-6">
           <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-4">
             <Lock className="h-5 w-5" />
-            <h1 className="text-xl font-semibold">Acesso à página BIA</h1>
+            <h1 className="text-xl font-semibold">Acesso à página Secretária</h1>
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-            Esta página é restrita. Digite a chave de acesso para configurar o prompt e testar a BIA.
+            Esta página é restrita. Digite a chave de acesso para configurar o prompt e testar a Secretária.
           </p>
           <Label htmlFor="bia-key">Chave de acesso</Label>
           <Input
@@ -519,7 +519,7 @@ export default function BiaAdminPage() {
                   : 'mr-auto bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600'
               }`}
             >
-              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'Secretária'}</span>
               <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
             </div>
           ))
@@ -579,7 +579,7 @@ export default function BiaAdminPage() {
                   : 'mr-auto bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600'
               }`}
             >
-              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'BIA'}</span>
+              <span className="font-medium text-gray-600 dark:text-gray-400 block text-xs mb-0.5">{m.role === 'user' ? 'Você' : 'Secretária'}</span>
               <pre className="whitespace-pre-wrap font-sans text-left">{m.content}</pre>
             </div>
           ))
@@ -588,7 +588,7 @@ export default function BiaAdminPage() {
     </div>
   )
 
-  /** Área de teste na Config: só modelo + chat (usa sempre o prompt da BIA). */
+  /** Área de teste na Config: só modelo + chat (usa sempre o prompt da Secretária). */
   const testAreaConfig = (
     <div className="space-y-4">
       {modelSelect}
@@ -621,12 +621,12 @@ export default function BiaAdminPage() {
     <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">BIA – Configuração e Homologação</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Secretária – Configuração e Homologação</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
             Configure o prompt e o modelo na aba Configuração. Use Homologação para testar com conversa real.
           </p>
         </div>
-        <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-1" role="tablist" aria-label="Abas BIA">
+        <div className="flex rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 p-1" role="tablist" aria-label="Abas Secretária">
           <button
             type="button"
             role="tab"
@@ -665,7 +665,7 @@ export default function BiaAdminPage() {
       {activeTab === 'config' && (
         <div id="bia-tab-config" role="tabpanel" aria-labelledby="bia-tab-config-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da BIA</h2>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da Secretária</h2>
             {secretaryLoading || aiSettingsLoading ? (
               <LoadingSpinner />
             ) : (
@@ -681,7 +681,7 @@ export default function BiaAdminPage() {
                     }}
                     rows={12}
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Instruções do sistema para a BIA..."
+                    placeholder="Instruções do sistema para a Secretária..."
                   />
                   <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
                     {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}

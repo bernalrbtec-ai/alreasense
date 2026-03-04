@@ -295,7 +295,7 @@ export default function CompanyProfilePage() {
           Dados da Empresa
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          Preencha os dados usados para cobrança, faturamento e contexto da BIA (secretária virtual).
+          Preencha os dados usados para cobrança, faturamento e contexto da Secretária (secretária virtual).
         </p>
 
         <div className="space-y-6">

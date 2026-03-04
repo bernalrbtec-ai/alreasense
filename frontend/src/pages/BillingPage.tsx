@@ -144,7 +144,7 @@ export default function BillingPage() {
                 Dados da Empresa
               </h3>
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                Razão social, CNPJ, endereço e produtos. Usado para cobrança e contexto da BIA.
+                Razão social, CNPJ, endereço e produtos. Usado para cobrança e contexto da Secretária.
               </p>
             </div>
             <Link to="/billing/company">

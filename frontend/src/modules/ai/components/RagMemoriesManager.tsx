@@ -705,7 +705,7 @@ export function RagMemoriesManager() {
           <div>
             <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Contexto</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Bia). Reprovar remove da memória se já estava aprovado.
+              Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Secretária). Reprovar remove da memória se já estava aprovado.
             </p>
           </div>
           <div className="flex flex-col gap-1 ml-4 shrink-0">
