@@ -848,7 +848,7 @@ export default function BiaAdminPage() {
                       placeholder="Instruções do sistema para a Secretária..."
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Use <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">{'{{nome}}'}</code> no texto para inserir o nome da secretária (ex: &quot;Você se chama {{nome}}.&quot;).
+                      Use <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">{'{{nome}}'}</code> no texto para inserir o nome da secretária (ex: &quot;Você se chama {'{{nome}}'}.&quot;).
                     </p>
                     <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
                       {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
