@@ -1142,17 +1142,58 @@ export function MessageList() {
                   </div>
                 )}
                 
-                {/* ✅ NOVO: Contato compartilhado */}
-                {(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) && (
-                  <SharedContactCard
-                    contactData={messageItem.metadata?.contact_message || {}}
-                    content={messageItem.content}
-                    onAddContact={(contactItem) => {
-                      setContactToAdd(contactItem);
-                      setShowContactModal(true);
-                    }}
-                  />
-                )}
+                {/* ✅ Contato(s) compartilhado(s) - um ou vários */}
+                {(() => {
+                  const cm = messageItem.metadata?.contact_message;
+                  const rawContent = messageItem.content?.trim() ?? '';
+                  const isContactMsg =
+                    (cm != null && typeof cm === 'object') ||
+                    (messageItem.content?.includes('📇') ?? false) ||
+                    (messageItem.content?.includes('Compartilhou contato') ?? false) ||
+                    rawContent === '[contactsArrayMessage]';
+                  if (!isContactMsg) return null;
+                  // Formatos: { contacts: [...] } (múltiplos) | { name, phone, ... } (único) | array direto (legado)
+                  let contactsList: { name?: string; phone?: string; display_name?: string }[];
+                  if (Array.isArray(cm)) {
+                    contactsList = cm;
+                  } else if (cm && typeof cm === 'object' && Array.isArray((cm as { contacts?: unknown[] }).contacts)) {
+                    contactsList = (cm as { contacts: { name?: string; phone?: string; display_name?: string }[] }).contacts;
+                  } else if (cm && typeof cm === 'object' && !Array.isArray(cm)) {
+                    contactsList = [cm as { name?: string; phone?: string; display_name?: string }];
+                  } else {
+                    contactsList = [];
+                  }
+                  const validContacts = contactsList.filter(
+                    (c): c is { name?: string; phone?: string; display_name?: string } =>
+                      c != null && typeof c === 'object'
+                  );
+                  if (validContacts.length === 0) {
+                    const fallbackText =
+                      rawContent === '[contactsArrayMessage]'
+                        ? '📇 Contato(s) compartilhado(s)'
+                        : rawContent || '📇 Contato compartilhado';
+                    return (
+                      <div className="text-sm text-gray-600 dark:text-gray-400 py-1">
+                        {fallbackText}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {validContacts.map((contactItem, idx) => (
+                        <SharedContactCard
+                          key={`${String(contactItem.phone).slice(-6)}-${String(contactItem.name).slice(0, 20)}-${idx}`}
+                          contactData={contactItem}
+                          content={messageItem.content}
+                          onAddContact={(c) => {
+                            setContactToAdd(c);
+                            setShowContactModal(true);
+                          }}
+                        />
+                      ))}
+                    </div>
+                  );
+                })()}
                 
                 {/* ✅ NOVO: Localização compartilhada */}
                 {messageItem.metadata?.location_message && (
@@ -1186,6 +1227,7 @@ export function MessageList() {
                 {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
                 {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() &&
                  !/^\[(document|image|video|audio)\]$/i.test(messageItem.content.trim()) &&
+                 messageItem.content.trim() !== '[contactsArrayMessage]' &&
                  !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) &&
                  !messageItem.metadata?.location_message && (
                   <>

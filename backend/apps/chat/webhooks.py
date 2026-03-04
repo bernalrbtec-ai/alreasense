@@ -1449,97 +1449,89 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             logger.info(f"🎨 [WEBHOOK] Sticker recebido - processando como imagem")
         elif message_type == 'contactMessage':
-            # ✅ NOVO: Extrair dados do contato compartilhado
+            # ✅ Extrair dados do(s) contato(s) compartilhado(s) - suporta um ou vários
+            import re
             contact_data = message_info.get('contactMessage', {})
             
-            # ✅ FIX: Suportar dois formatos:
-            # Formato 1: contactMessage.contactsArray[] (formato antigo)
-            # Formato 2: contactMessage.displayName e contactMessage.vcard (formato novo)
+            # Formato 1: contactMessage.contactsArray[] (vários ou um)
+            # Formato 2: contactMessage.displayName e contactMessage.vcard (um contato direto)
             contacts_array = contact_data.get('contactsArray', [])
-            
-            # Se não tem contactsArray, tentar formato direto
+            if not isinstance(contacts_array, list):
+                contacts_array = [contacts_array] if isinstance(contacts_array, dict) else []
+
             if not contacts_array or len(contacts_array) == 0:
-                # Formato novo: dados diretos em contactMessage
-                display_name = contact_data.get('displayName', '')
-                vcard = contact_data.get('vcard', '')
-                contact_id = contact_data.get('contactId', '')
-                
-                logger.info(f"📇 [CONTACT MESSAGE] Formato novo detectado - displayName: {display_name}, vcard: {vcard[:100] if vcard else 'N/A'}")
-                
+                _dn = contact_data.get('displayName')
+                _vc = contact_data.get('vcard')
+                _cid = contact_data.get('contactId')
+                display_name = str(_dn) if _dn is not None else ''
+                vcard = str(_vc) if _vc is not None else ''
+                contact_id = str(_cid) if _cid is not None else ''
                 if display_name or vcard:
-                    # Processar como se fosse um contato único
                     contacts_array = [{
                         'displayName': display_name,
                         'vcard': vcard,
                         'contactId': contact_id
                     }]
-                    logger.info(f"📇 [CONTACT MESSAGE] Array criado com {len(contacts_array)} contato(s)")
+                    logger.info(f"📇 [CONTACT MESSAGE] Formato direto - 1 contato")
+            
+            def _parse_one_contact(item):
+                """Extrai name, phone, display_name, vcard de um item do contactsArray."""
+                if not isinstance(item, dict):
+                    return {'name': 'Contato', 'phone': '', 'display_name': '', 'vcard': None}
+                raw_dn = item.get('displayName')
+                raw_vc = item.get('vcard')
+                raw_cid = item.get('contactId')
+                dn = (str(raw_dn).strip() if raw_dn is not None else '') or 'Contato'
+                vc = str(raw_vc) if raw_vc is not None else ''
+                cid = str(raw_cid) if raw_cid is not None else ''
+                phone = None
+                if cid and '@' in cid:
+                    phone = cid.split('@')[0].strip()
+                    if phone and not phone.startswith('+'):
+                        phone = f'+{phone}'
+                if not phone and vc:
+                    tel_patterns = [
+                        r'item\d+\.TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',
+                        r'item\d+\.TEL[;:]?([+\d\s\-\(\)]+)',
+                        r'TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',
+                        r'TEL[;:]?([+\d\s\-\(\)]+)',
+                    ]
+                    for pattern in tel_patterns:
+                        m = re.search(pattern, vc, re.IGNORECASE)
+                        if m:
+                            raw_phone = m.group(1).strip()
+                            digits = ''.join(c for c in raw_phone if c.isdigit())
+                            if len(digits) >= 10:
+                                phone = '+' + digits if digits.startswith('55') else f'+55{digits}'
+                            elif digits:
+                                phone = raw_phone
+                            break
+                return {
+                    'name': dn,
+                    'phone': phone or '',
+                    'display_name': dn,
+                    'vcard': (vc[:500] if (vc and isinstance(vc, str)) else None),
+                }
             
             if contacts_array and len(contacts_array) > 0:
-                # Pegar primeiro contato (geralmente só vem um)
-                first_contact = contacts_array[0]
-                display_name = first_contact.get('displayName', '')
-                vcard = first_contact.get('vcard', '')
-                contact_id = first_contact.get('contactId', '')
-                
-                # Extrair telefone do vCard ou contactId
-                phone_from_contact = None
-                if contact_id and '@' in contact_id:
-                    # Formato: 5511999999999@s.whatsapp.net
-                    phone_from_contact = contact_id.split('@')[0]
-                    if not phone_from_contact.startswith('+'):
-                        phone_from_contact = f'+{phone_from_contact}'
-                
-                # Tentar extrair telefone do vCard se não tiver no contactId
-                if not phone_from_contact and vcard:
-                    import re
-                    # ✅ FIX: Melhorar regex para pegar telefone do vCard
-                    # Formato: item1.TEL;waid=5517996555683:+55 17 99655-5683
-                    # Ou: TEL:+5517996555683
-                    # Ou: item1.TEL:+55 17 99655-5683
-                    # Tentar múltiplos padrões
-                    tel_patterns = [
-                        r'item\d+\.TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',  # item1.TEL;waid=...:+55 17...
-                        r'item\d+\.TEL[;:]?([+\d\s\-\(\)]+)',  # item1.TEL:+55 17...
-                        r'TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',  # TEL;waid=...:+55 17...
-                        r'TEL[;:]?([+\d\s\-\(\)]+)',  # TEL:+55 17...
-                    ]
-                    
-                    phone_from_contact = None
-                    for pattern in tel_patterns:
-                        tel_match = re.search(pattern, vcard, re.IGNORECASE)
-                        if tel_match:
-                            phone_from_contact = tel_match.group(1).strip()
-                            break
-                    
-                    if phone_from_contact:
-                        # Normalizar telefone - remover espaços, parênteses, hífens
-                        phone_from_contact = ''.join(c for c in phone_from_contact if c.isdigit() or c == '+')
-                        if phone_from_contact and not phone_from_contact.startswith('+'):
-                            if phone_from_contact.startswith('55'):
-                                phone_from_contact = '+' + phone_from_contact
-                            else:
-                                phone_from_contact = '+55' + phone_from_contact
-                
-                # Salvar dados do contato no metadata
-                contact_message_data = {
-                    'name': display_name or 'Contato',
-                    'phone': phone_from_contact or '',
-                    'display_name': display_name,
-                    'vcard': vcard[:500] if vcard else None  # Limitar tamanho do vCard
-                }
-                
-                # Conteúdo amigável para exibição
-                if display_name and phone_from_contact:
-                    content = f"📇 Compartilhou contato: {display_name}"
-                elif display_name:
-                    content = f"📇 Compartilhou contato: {display_name}"
-                elif phone_from_contact:
-                    content = f"📇 Compartilhou contato: {phone_from_contact}"
+                parsed_contacts = [_parse_one_contact(c) for c in contacts_array]
+                if len(parsed_contacts) == 1:
+                    # Compatibilidade: um contato no mesmo formato de antes
+                    contact_message_data = parsed_contacts[0]
+                    c0 = parsed_contacts[0]
+                    if c0.get('display_name') and c0.get('phone'):
+                        content = f"📇 Compartilhou contato: {c0['display_name']}"
+                    elif c0.get('display_name'):
+                        content = f"📇 Compartilhou contato: {c0['display_name']}"
+                    elif c0.get('phone'):
+                        content = f"📇 Compartilhou contato: {c0['phone']}"
+                    else:
+                        content = "📇 Contato compartilhado"
                 else:
-                    content = "📇 Contato compartilhado"
-                
-                logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}, vCard: {vcard[:100] if vcard else 'N/A'}")
+                    # Vários contatos: metadata.contact_message = { contacts: [...] }
+                    contact_message_data = {'contacts': parsed_contacts}
+                    content = f"📇 Compartilhou {len(parsed_contacts)} contatos"
+                logger.info(f"📇 [CONTACT MESSAGE] Processados {len(parsed_contacts)} contato(s)")
             else:
                 content = "📇 Contato compartilhado"
         elif message_type == 'locationMessage':

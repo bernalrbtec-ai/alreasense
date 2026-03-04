@@ -19,9 +19,14 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
   const navigate = useNavigate();
   const { setActiveConversation, addConversation } = useChatStore();
   
-  // Extrair dados do contato
-  let phone = contactData?.phone || '';
-  let name = contactData?.name || contactData?.display_name || '';
+  // Extrair dados do contato (garantir string para evitar erro em .replace/.slice)
+  let phone = contactData?.phone != null ? String(contactData.phone) : '';
+  let name =
+    contactData?.name != null
+      ? String(contactData.name)
+      : contactData?.display_name != null
+        ? String(contactData.display_name)
+        : '';
   
   // Se não tem dados no metadata, tentar extrair do conteúdo
   // O backend pode não preencher contact_message em alguns formatos de webhook
