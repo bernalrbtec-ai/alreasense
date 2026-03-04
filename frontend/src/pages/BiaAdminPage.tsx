@@ -1,10 +1,11 @@
 /**
- * Página admin da BIA: Configuração (prompt, modelo, teste) e Homologação (conversa real + teste).
- * Acesso travado por chave única (BIA_ADMIN_ACCESS_KEY).
+ * Página admin da Secretária: Configuração (prompt, modelo, teste) e Homologação (conversa real + teste).
+ * Acesso travado por chave única (variável de ambiente no backend).
  * Modelo é definido apenas na aba Configuração (fonte da verdade).
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2, Edit } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Label } from '../components/ui/Label'
@@ -22,11 +23,14 @@ interface SecretaryProfile {
   prompt: string
   use_memory: boolean
   inbox_idle_minutes: number
+  form_data?: Record<string, unknown>
 }
 
 interface AiSettings {
   n8n_ai_webhook_url: string
   agent_model?: string
+  secretary_model?: string
+  secretary_enabled?: boolean
 }
 
 interface ConversationOption {
@@ -59,6 +63,7 @@ export default function BiaAdminPage() {
   const [secretaryLoading, setSecretaryLoading] = useState(false)
   const [secretarySaving, setSecretarySaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
 
@@ -293,6 +298,36 @@ export default function BiaAdminPage() {
     }
   }
 
+  const handleSaveSecretaryProfile = async (override?: Partial<SecretaryProfile> | null) => {
+    if (!secretaryProfile) return
+    const toSave = override != null ? { ...secretaryProfile, ...override } : secretaryProfile
+    const errors: Record<string, string> = {}
+    const mins = toSave.inbox_idle_minutes ?? 0
+    if (mins < 0 || mins > 1440) errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
+    setSecretaryProfileErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    setSecretarySaving(true)
+    try {
+      const res = await api.put('/ai/secretary/profile/', toSave)
+      setSecretaryProfile(res.data)
+      if (aiSettings) {
+        const secretaryModel = (aiSettings.secretary_model ?? '').trim()
+        await api.put('/ai/settings/', {
+          ...aiSettings,
+          secretary_model: secretaryModel,
+          secretary_enabled: toSave.is_active,
+        })
+        const settingsRes = await api.get('/ai/settings/')
+        if (settingsRes?.data) setAiSettings(settingsRes.data)
+      }
+    } catch (e: any) {
+      const apiErrors = e.response?.data?.errors || {}
+      if (apiErrors && typeof apiErrors === 'object') setSecretaryProfileErrors(apiErrors)
+    } finally {
+      setSecretarySaving(false)
+    }
+  }
+
   const POLL_INTERVAL_MS = 2500
   const POLL_MAX_MS = 5 * 60 * 1000 // 5 min
 
@@ -421,9 +456,9 @@ export default function BiaAdminPage() {
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             Esta página é restrita. Digite a chave de acesso para configurar o prompt e testar a Secretária.
           </p>
-          <Label htmlFor="bia-key">Chave de acesso</Label>
+          <Label htmlFor="secretary-key">Chave de acesso</Label>
           <Input
-            id="bia-key"
+            id="secretary-key"
             type="password"
             value={accessKey}
             onChange={(e) => setAccessKey(e.target.value)}
@@ -445,9 +480,9 @@ export default function BiaAdminPage() {
 
   const modelSelect = (
     <div>
-      <Label htmlFor="bia-test-model">Modelo</Label>
+      <Label htmlFor="secretary-test-model">Modelo</Label>
       <select
-        id="bia-test-model"
+        id="secretary-test-model"
         value={effectiveModel}
         onChange={(e) => setTestSelectedModel(e.target.value)}
         className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800"
@@ -631,8 +666,8 @@ export default function BiaAdminPage() {
             type="button"
             role="tab"
             aria-selected={activeTab === 'config'}
-            aria-controls="bia-tab-config"
-            id="bia-tab-config-trigger"
+            aria-controls="secretary-tab-config"
+            id="secretary-tab-config-trigger"
             onClick={() => setActiveTab('config')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'config'
@@ -647,8 +682,8 @@ export default function BiaAdminPage() {
             type="button"
             role="tab"
             aria-selected={activeTab === 'homolog'}
-            aria-controls="bia-tab-homolog"
-            id="bia-tab-homolog-trigger"
+            aria-controls="secretary-tab-homolog"
+            id="secretary-tab-homolog-trigger"
             onClick={() => setActiveTab('homolog')}
             className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === 'homolog'
@@ -663,51 +698,166 @@ export default function BiaAdminPage() {
       </div>
 
       {activeTab === 'config' && (
-        <div id="bia-tab-config" role="tabpanel" aria-labelledby="bia-tab-config-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div id="secretary-tab-config" role="tabpanel" aria-labelledby="secretary-tab-config-trigger" className="space-y-6">
+          {/* Card Secretária IA em primeiro */}
           <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da Secretária</h2>
-            {secretaryLoading || aiSettingsLoading ? (
-              <LoadingSpinner />
-            ) : (
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="bia-prompt">Instruções do sistema</Label>
-                  <textarea
-                    id="bia-prompt"
-                    value={promptDraft}
-                    onChange={(e) => {
-                      setPromptDraft(e.target.value)
-                      if (saveError) setSaveError(null)
-                    }}
-                    rows={12}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="Instruções do sistema para a Secretária..."
-                  />
-                  <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
-                    {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                    Salvar prompt
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">
+                  Secretária IA – {(secretaryProfile?.signature_name ?? '').trim() || 'Secretária IA'}
+                </h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
+                </p>
+              </div>
+              {secretaryLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <div className="flex items-center gap-3">
+                  {secretaryProfile?.is_active && (
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                      Ativa
+                    </span>
+                  )}
+                  <Link to="/billing/company">
+                    <Button variant="outline">
+                      <Edit className="h-4 w-4 mr-2" />
+                      Editar dados da empresa
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+            {secretaryProfile && !secretaryLoading && (
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div>
+                    <Label className="text-base font-semibold">Ativar assistente</Label>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      A secretária responderá em conversas do Inbox quando habilitada.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={secretaryProfile.is_active}
+                      disabled={secretarySaving}
+                      onChange={(e) => {
+                        const isActive = e.target.checked
+                        setSecretaryProfile((prev) => (prev ? { ...prev, is_active: isActive } : prev))
+                        handleSaveSecretaryProfile({ is_active: isActive })
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="secretary_model">Modelo do assistente</Label>
+                    <select
+                      id="secretary_model"
+                      value={aiSettings?.secretary_model ?? ''}
+                      onChange={(e) => setAiSettings((prev) => (prev ? { ...prev, secretary_model: e.target.value } : prev))}
+                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:border-blue-500 focus:ring-blue-500"
+                      disabled={!aiSettings || aiModelOptions.length === 0}
+                    >
+                      <option value="">Padrão (modelo do agente)</option>
+                      {aiSettings?.secretary_model && !aiModelOptions.includes(aiSettings.secretary_model) && (
+                        <option value={aiSettings.secretary_model}>{aiSettings.secretary_model}</option>
+                      )}
+                      {aiModelOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Se não escolher, o assistente usa o mesmo modelo do agente.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (min)</Label>
+                    <Input
+                      id="secretary_inbox_idle_minutes"
+                      type="number"
+                      min={0}
+                      max={1440}
+                      value={secretaryProfile.inbox_idle_minutes ?? 0}
+                      onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
+                      className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
+                    />
+                    {secretaryProfileErrors.inbox_idle_minutes && (
+                      <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center pt-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={secretaryProfile.use_memory}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm">Usar memória por contato</span>
+                    </label>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretarySaving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {secretarySaving ? 'Salvando...' : 'Salvar'}
                   </Button>
-                  {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
                 </div>
               </div>
             )}
           </Card>
-          <Card className="p-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">AREA DE TESTE DO MODELO</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              O teste usa o webhook definido em Configurações &gt; IA.
-            </p>
-            {aiSettingsLoading ? (
-              <LoadingSpinner />
-            ) : (
-              testAreaConfig
-            )}
-          </Card>
+
+          {/* Prompt da Secretária e área de teste abaixo */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="p-6">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da Secretária</h2>
+              {secretaryLoading || aiSettingsLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="secretary-prompt">Instruções do sistema</Label>
+                    <textarea
+                      id="secretary-prompt"
+                      value={promptDraft}
+                      onChange={(e) => {
+                        setPromptDraft(e.target.value)
+                        if (saveError) setSaveError(null)
+                      }}
+                      rows={12}
+                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:border-blue-500 focus:ring-blue-500"
+                      placeholder="Instruções do sistema para a Secretária..."
+                    />
+                    <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
+                      {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                      Salvar prompt
+                    </Button>
+                    {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
+                  </div>
+                </div>
+              )}
+            </Card>
+            <Card className="p-6">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">AREA DE TESTE DO MODELO</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                O teste usa o webhook definido em Configurações &gt; IA.
+              </p>
+              {aiSettingsLoading ? (
+                <LoadingSpinner />
+              ) : (
+                testAreaConfig
+              )}
+            </Card>
+          </div>
         </div>
       )}
 
       {activeTab === 'homolog' && (
-        <div id="bia-tab-homolog" role="tabpanel" aria-labelledby="bia-tab-homolog-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div id="secretary-tab-homolog" role="tabpanel" aria-labelledby="secretary-tab-homolog-trigger" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="p-6">
             <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Testar com contexto</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
