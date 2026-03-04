@@ -1792,9 +1792,85 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             if existing_conversation and instance_name and str(instance_name).strip():
                 logger.info(f"🔄 [MULTI-INST] Conversa legada encontrada (sem instance_name), atribuindo: {instance_name}")
                 existing_conversation.instance_name = instance_name.strip()
-                if correct_friendly_name:
-                    existing_conversation.instance_friendly_name = correct_friendly_name
+                existing_conversation.instance_friendly_name = (
+                    (correct_friendly_name or "").strip()
+                    or (wa_instance and (getattr(wa_instance, "friendly_name", None) or "").strip())
+                    or (wa_instance and wa_instance.instance_name)
+                    or ""
+                )
                 existing_conversation.save(update_fields=['instance_name', 'instance_friendly_name'])
+        
+        # 3. Fallback órfã: instance_name preenchido mas com instância que não existe mais (removida/trocada)
+        # Mesmo contato entrando pela instância atual → reutilizar conversa e atualizar instance_name
+        if not existing_conversation and instance_name and str(instance_name).strip() and wa_instance and tenant:
+            valid_instance_names = set()
+            valid_evolution_names = set()
+            valid_phone_number_ids = set()
+            for row in WhatsAppInstance.objects.filter(tenant=tenant, is_active=True).values_list(
+                "instance_name", "evolution_instance_name", "phone_number_id"
+            ):
+                if row[0]:
+                    valid_instance_names.add(str(row[0]).strip())
+                if row[1]:
+                    valid_evolution_names.add(str(row[1]).strip())
+                if row[2]:
+                    valid_phone_number_ids.add(str(row[2]).strip())
+
+            def _is_orphan(conv):
+                iname = (conv.instance_name or "").strip()
+                if not iname:
+                    return False
+                if iname in valid_instance_names or iname in valid_evolution_names:
+                    return False
+                if iname.isdigit() and iname in valid_phone_number_ids:
+                    return False
+                return True
+
+            # Só considerar órfãs quando há pelo menos um identificador válido (evita tratar todas como órfã se instâncias sem nome)
+            has_valid_ids = bool(valid_instance_names or valid_evolution_names or valid_phone_number_ids)
+            if has_valid_ids:
+                orphan_candidates = list(
+                    Conversation.objects.filter(base_filter)
+                    .exclude(instance_name__isnull=True)
+                    .exclude(instance_name="")
+                    .order_by("-last_message_at", "-created_at")[:50]
+                )
+                for conv in orphan_candidates:
+                    if _is_orphan(conv):
+                        existing_conversation = conv
+                        logger.info(
+                            f"🔄 [TROCA-INST] Reutilizando conversa órfã (instance_name=instância inexistente): "
+                            f"{conv.id} instance_name={conv.instance_name!r} → {instance_name.strip()!r}"
+                        )
+                        existing_conversation.instance_name = instance_name.strip()
+                        existing_conversation.instance_friendly_name = (
+                            (correct_friendly_name or "").strip()
+                            or (getattr(wa_instance, "friendly_name", None) or "").strip()
+                            or wa_instance.instance_name
+                        )
+                        existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                        break
+        
+        # 4. Fallback tenant com uma única instância ativa: qualquer conversa (tenant+phone) é a mesma
+        if not existing_conversation and instance_name and str(instance_name).strip() and wa_instance and tenant:
+            if WhatsAppInstance.objects.filter(tenant=tenant, is_active=True).count() == 1:
+                existing_conversation = (
+                    Conversation.objects.filter(base_filter)
+                    .order_by("-last_message_at", "-created_at")
+                    .first()
+                )
+                if existing_conversation:
+                    logger.info(
+                        f"🔄 [TROCA-INST] Reutilizando conversa (tenant 1 instância): {existing_conversation.id} "
+                        f"→ instance_name={instance_name.strip()!r}"
+                    )
+                    existing_conversation.instance_name = instance_name.strip()
+                    existing_conversation.instance_friendly_name = (
+                        (correct_friendly_name or "").strip()
+                        or (getattr(wa_instance, "friendly_name", None) or "").strip()
+                        or wa_instance.instance_name
+                    )
+                    existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
         
         if existing_conversation:
             # Conversa existe - usar telefone normalizado para garantir consistência

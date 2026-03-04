@@ -756,7 +756,8 @@ class ConversationSerializer(serializers.ModelSerializer):
 
         # 3) Conversa sem instance_name ou instância não encontrada (ex.: órfã com 2+ instâncias no tenant)
         tenant_id = getattr(obj, "tenant_id", None)
-        inst_name = getattr(obj, "instance_name", None) or ""
+        inst_name = (getattr(obj, "instance_name", None) or "")
+        inst_name = str(inst_name).strip() if inst_name else ""
         if not inst_name or not tenant_id:
             return None
         from django.core.cache import cache
