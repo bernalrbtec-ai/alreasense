@@ -730,6 +730,8 @@ def gateway_test(request):
         logger.info(
             "[GATEWAY TEST] simulate_production=true: enviando payload secretary (RAG, business_hours, company_context)"
         )
+        secretary_profile = TenantSecretaryProfile.objects.filter(tenant=request.user.tenant).first()
+        signature_name = getattr(secretary_profile, "signature_name", None) if secretary_profile else None
         payload = build_secretary_payload_for_test(
             tenant=request.user.tenant,
             message_text=message_text,
@@ -740,6 +742,7 @@ def gateway_test(request):
             message_id=str(message_id),
             request_id=str(request_id),
             trace_id=str(trace_id),
+            signature_name=signature_name,
         )
     else:
         payload = {

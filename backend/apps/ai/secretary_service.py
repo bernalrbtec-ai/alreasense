@@ -73,6 +73,14 @@ SECRETARY_N8N_RETRY_DELAY = 2
 SECRETARY_TYPING_DELAY_SECONDS = 8  # Tempo que o indicador "digitando" fica ativo
 
 
+def _apply_prompt_name_variable(prompt_text: str, signature_name: Optional[str]) -> str:
+    """Substitui {{nome}} no prompt pelo nome da secretária (ex: no prompt do usuário)."""
+    if not prompt_text:
+        return prompt_text
+    name = (signature_name or "").strip() or "Secretária IA"
+    return prompt_text.replace("{{nome}}", name)
+
+
 def build_secretary_context_text(form_data: Dict[str, Any]) -> str:
     """
     Monta o texto de contexto a partir do form_data do perfil (empresa).
@@ -422,6 +430,9 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
             contact_context_lines.append(f"Data do último contato: {last_contact_date_readable}.")
         contact_context_lines.append("=== FIM ===\n")
         prompt_with_data = prompt_with_data + "\n".join(contact_context_lines)
+    # Variável {{nome}} no prompt: substituir pelo nome da secretária
+    signature_name = getattr(profile, "signature_name", None) or ""
+    prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
 
     return {
         "agent_type": "secretary",
@@ -469,6 +480,7 @@ def build_secretary_payload_for_test(
     message_id: str,
     request_id: str,
     trace_id: str,
+    signature_name: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Monta o payload no mesmo formato da produção (action=secretary) para o teste
@@ -555,6 +567,7 @@ def build_secretary_payload_for_test(
     prompt_with_data = _build_system_data_block(
         tenant_name, business_hours_info, server_time_utc
     ) + (prompt or "").strip()
+    prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
     payload = {
         "protocol_version": "v1",
         "action": "secretary",

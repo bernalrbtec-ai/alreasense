@@ -730,6 +730,21 @@ export default function BiaAdminPage() {
             </div>
             {secretaryProfile && !secretaryLoading && (
               <div className="mt-4 space-y-4">
+                <div>
+                  <Label htmlFor="secretary_signature_name">Nome da secretária</Label>
+                  <Input
+                    id="secretary_signature_name"
+                    type="text"
+                    value={secretaryProfile.signature_name ?? ''}
+                    onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
+                    placeholder="Ex: Bia, Ana, Assistente"
+                    maxLength={100}
+                    className="mt-1 max-w-xs"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Nome exibido nas mensagens. Use <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">{'{{nome}}'}</code> no prompt para referenciar esse nome.
+                  </p>
+                </div>
                 <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                   <div>
                     <Label className="text-base font-semibold">Ativar assistente</Label>
@@ -832,6 +847,9 @@ export default function BiaAdminPage() {
                       className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:border-blue-500 focus:ring-blue-500"
                       placeholder="Instruções do sistema para a Secretária..."
                     />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Use <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded">{'{{nome}}'}</code> no texto para inserir o nome da secretária (ex: &quot;Você se chama {{nome}}.&quot;).
+                    </p>
                     <Button onClick={handleSavePrompt} disabled={secretarySaving} className="mt-2">
                       {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                       Salvar prompt
