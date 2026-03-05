@@ -28,6 +28,10 @@ from apps.ai.vector_store import search_knowledge, search_memory_for_contact
 
 logger = logging.getLogger(__name__)
 
+# Delay na primeira interação: timers por conversation_id (só quando response_delay_seconds > 0)
+_pending_secretary_timers = {}
+_pending_secretary_lock = threading.Lock()
+
 
 def _server_time_utc_iso() -> str:
     """Data/hora atual em UTC (ISO 8601). Enviada em todos os payloads ao n8n para o fluxo não perder contexto de tempo."""
@@ -264,7 +268,9 @@ def _message_content_for_secretary(msg) -> str:
 
 
 def _build_secretary_context(conversation, message, profile: TenantSecretaryProfile) -> Dict[str, Any]:
-    """Monta contexto para a Secretária: mensagens recentes (texto ou transcrição), RAG source=secretary, memória por contato."""
+    """Monta contexto para a Secretária: mensagens recentes (texto ou transcrição), RAG source=secretary, memória por contato.
+    Usa conversation.messages (sem filtro de data); quando chamado após o delay da primeira interação,
+    todas as mensagens recebidas durante o período já estão na conversa e entram no contexto enviado à IA."""
     from apps.chat.services.business_hours_service import BusinessHoursService
     from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 
@@ -1021,10 +1027,69 @@ def _secretary_worker(conversation, message) -> None:
         close_old_connections()
 
 
+def _run_secretary_after_delay(conversation_id: str) -> None:
+    """
+    Callback do timer: após o delay, carrega a conversa e a última mensagem incoming,
+    revalida condições e dispara o worker uma vez (só se ainda for primeira interação).
+    Todas as mensagens recebidas durante o delay já estão salvas na conversa pelo webhook;
+    o worker monta o contexto a partir de conversation.messages, então a assistente recebe
+    o histórico completo (ex.: "oi" + "bom dia") em uma única chamada.
+    """
+    from apps.chat.models import Conversation
+    with _pending_secretary_lock:
+        _pending_secretary_timers.pop(conversation_id, None)
+    try:
+        conversation = (
+            Conversation.objects.filter(id=conversation_id)
+            .select_related("tenant")
+            .first()
+        )
+        if not conversation or conversation.department_id is not None:
+            return
+        if conversation.messages.filter(direction="outgoing", is_internal=False).exists():
+            return
+        last_incoming = (
+            conversation.messages.filter(direction="incoming")
+            .prefetch_related("attachments")
+            .order_by("-created_at")
+            .first()
+        )
+        if not last_incoming:
+            return
+        settings_obj = TenantAiSettings.objects.filter(tenant=conversation.tenant).first()
+        if not settings_obj or not getattr(settings_obj, "secretary_enabled", False):
+            return
+        profile = TenantSecretaryProfile.objects.filter(tenant=conversation.tenant).first()
+        if not profile or not profile.is_active:
+            return
+        if not _resolve_n8n_ai_url(conversation.tenant):
+            return
+        if "g.us" in (conversation.contact_phone or ""):
+            return
+        logger.info(
+            "[SECRETARY] Timer disparou: conv=%s, executando worker com última mensagem",
+            conversation_id,
+        )
+        thread = threading.Thread(
+            target=_secretary_worker,
+            args=(conversation, last_incoming),
+            daemon=True,
+        )
+        thread.start()
+    except Exception as e:
+        logger.warning(
+            "[SECRETARY] Erro no callback do delay conv=%s: %s",
+            conversation_id, e, exc_info=True,
+        )
+
+
 def dispatch_secretary_async(conversation, message) -> None:
     """
     Dispara o worker da Secretária em thread (Inbox + secretary_enabled).
     Chamar apenas quando conversa está no Inbox (department is None) e mensagem é incoming.
+    Se response_delay_seconds > 0 e for primeira interação (nenhuma mensagem outgoing visível),
+    agenda um timer; mensagens seguintes na mesma conversa reiniciam o timer; ao disparar,
+    responde uma vez com todo o contexto.
     """
     logger.info(
         "[SECRETARY] Avaliando: conv=%s dept_id=%s msg=%s",
@@ -1062,11 +1127,36 @@ def dispatch_secretary_async(conversation, message) -> None:
     except Exception as e:
         logger.warning("[SECRETARY] Skip: exceção ao checar condições: %s", e, exc_info=True)
         return
+
+    delay_seconds = getattr(profile, "response_delay_seconds", 0) or 0
+    is_first_interaction = not conversation.messages.filter(
+        direction="outgoing", is_internal=False
+    ).exists()
+
+    if delay_seconds <= 0 or not is_first_interaction:
+        logger.info(
+            "[SECRETARY] Disparando worker para conversation_id=%s message_id=%s tenant_id=%s",
+            conversation.id, message.id, conversation.tenant_id,
+        )
+        thread = threading.Thread(target=_secretary_worker, args=(conversation, message), daemon=True)
+        thread.start()
+        return
+
+    with _pending_secretary_lock:
+        old_timer = _pending_secretary_timers.pop(conversation.id, None)
+        if old_timer is not None:
+            try:
+                old_timer.cancel()
+            except Exception:
+                pass
+        timer = threading.Timer(
+            delay_seconds,
+            _run_secretary_after_delay,
+            args=(str(conversation.id),),
+        )
+        _pending_secretary_timers[conversation.id] = timer
+        timer.start()
     logger.info(
-        "[SECRETARY] Disparando worker para conversation_id=%s message_id=%s tenant_id=%s",
-        conversation.id,
-        message.id,
-        conversation.tenant_id,
+        "[SECRETARY] Delay ativo (primeira interação): conv=%s, aguardando %s s",
+        conversation.id, delay_seconds,
     )
-    thread = threading.Thread(target=_secretary_worker, args=(conversation, message), daemon=True)
-    thread.start()

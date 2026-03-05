@@ -23,6 +23,7 @@ interface SecretaryProfile {
   prompt: string
   use_memory: boolean
   inbox_idle_minutes: number
+  response_delay_seconds?: number
   form_data?: Record<string, unknown>
 }
 
@@ -304,6 +305,8 @@ export default function BiaAdminPage() {
     const errors: Record<string, string> = {}
     const mins = toSave.inbox_idle_minutes ?? 0
     if (mins < 0 || mins > 1440) errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
+    const delaySec = toSave.response_delay_seconds ?? 0
+    if (delaySec < 0 || delaySec > 120) errors.response_delay_seconds = 'Valor entre 0 e 120.'
     setSecretaryProfileErrors(errors)
     if (Object.keys(errors).length > 0) return
     setSecretarySaving(true)
@@ -804,6 +807,24 @@ export default function BiaAdminPage() {
                     />
                     {secretaryProfileErrors.inbox_idle_minutes && (
                       <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="secretary_response_delay_seconds">Aguardar antes de responder – primeira interação (segundos)</Label>
+                    <Input
+                      id="secretary_response_delay_seconds"
+                      type="number"
+                      min={0}
+                      max={120}
+                      value={secretaryProfile.response_delay_seconds ?? 0}
+                      onChange={(e) => setSecretaryProfile({ ...secretaryProfile, response_delay_seconds: Number(e.target.value) || 0 })}
+                      className={`mt-1 ${secretaryProfileErrors.response_delay_seconds ? 'border-red-500' : ''}`}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      0 = imediato. Só na primeira vez: se o cliente enviar várias mensagens seguidas, aguarda esse tempo e responde uma vez. Depois disso, as respostas são imediatas.
+                    </p>
+                    {secretaryProfileErrors.response_delay_seconds && (
+                      <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.response_delay_seconds}</p>
                     )}
                   </div>
                   <div className="flex items-center pt-6">

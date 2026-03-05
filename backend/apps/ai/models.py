@@ -297,6 +297,11 @@ class TenantSecretaryProfile(models.Model):
         blank=True,
         help_text='Minutos sem interação no Inbox para fechar conversa (0=desativado, máx. 1440=24h).',
     )
+    response_delay_seconds = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        help_text='Segundos para aguardar antes de responder na primeira interação; se o cliente enviar mais mensagens nesse período, o tempo é reiniciado e a resposta é única. Após a primeira resposta, as demais são imediatas. 0 = sempre responder na hora.',
+    )
     summary_auto_approve_config = models.JSONField(
         default=dict,
         blank=True,

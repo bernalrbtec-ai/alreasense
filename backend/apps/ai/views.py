@@ -1174,6 +1174,7 @@ def secretary_profile(request):
             "use_memory": profile.use_memory,
             "is_active": profile.is_active,
             "inbox_idle_minutes": getattr(profile, 'inbox_idle_minutes', 0) or 0,
+            "response_delay_seconds": getattr(profile, 'response_delay_seconds', 0) or 0,
             "created_at": timezone.localtime(profile.created_at).isoformat(),
             "updated_at": timezone.localtime(profile.updated_at).isoformat(),
         })
@@ -1240,6 +1241,16 @@ def secretary_profile(request):
         except (TypeError, ValueError):
             errors['inbox_idle_minutes'] = 'Valor inválido.'
 
+    if 'response_delay_seconds' in data:
+        try:
+            val = int(data.get('response_delay_seconds'))
+            if val < 0 or val > 120:
+                errors['response_delay_seconds'] = 'Valor entre 0 e 120.'
+            else:
+                profile.response_delay_seconds = val
+        except (TypeError, ValueError):
+            errors['response_delay_seconds'] = 'Valor inválido.'
+
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1271,6 +1282,7 @@ def secretary_profile(request):
         "use_memory": profile.use_memory,
         "is_active": profile.is_active,
         "inbox_idle_minutes": getattr(profile, 'inbox_idle_minutes', 0) or 0,
+        "response_delay_seconds": getattr(profile, 'response_delay_seconds', 0) or 0,
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
     })
 
