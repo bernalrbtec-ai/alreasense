@@ -1,6 +1,7 @@
 import json
 import logging
 import socket
+from django.db import close_old_connections
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -51,6 +52,10 @@ class EvolutionWebhookView(APIView):
     
     def post(self, request):
         try:
+            try:
+                close_old_connections()
+            except Exception:
+                logger.warning("close_old_connections() no início do webhook falhou", exc_info=True)
             # ✅ LOG CRÍTICO: Log imediatamente quando webhook chega
             logger.info(f"📥 [EVOLUTION WEBHOOK] ====== WEBHOOK RECEBIDO ======")
             logger.info(f"📥 [EVOLUTION WEBHOOK] Método: {request.method}")
@@ -122,7 +127,12 @@ class EvolutionWebhookView(APIView):
             logger.error(f"❌ [EVOLUTION WEBHOOK] Erro ao processar webhook: {str(e)}", exc_info=True)
             logger.error(f"   Body recebido: {request.body[:500] if request.body else 'None'}")
             return JsonResponse({'error': 'Internal server error'}, status=500)
-    
+        finally:
+            try:
+                close_old_connections()
+            except Exception:
+                logger.warning("close_old_connections() no webhook falhou (resposta já enviada)", exc_info=True)
+
     def get(self, request):
         """Endpoint GET para evitar erro 403 no redirecionamento"""
         try:
