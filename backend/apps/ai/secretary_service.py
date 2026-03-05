@@ -39,6 +39,11 @@ SECRETARY_DELAY_LOCK_TTL = 5
 SECRETARY_DELAY_KEY_TTL_MARGIN = 120
 SECRETARY_DELAY_RUNNER_INTERVAL = 2.5
 
+# Idempotência na primeira resposta (evitar duas mensagens com múltiplos workers/delay 0).
+# TTL 60s: após expirar, conversa reaberta pode ter nova "primeira resposta".
+SECRETARY_FIRST_REPLY_KEY_PREFIX = "secretary_first_reply:"
+SECRETARY_FIRST_REPLY_TTL = 60
+
 # Lua: claim atômico (ler e apagar se run_at <= now); retorna valor ou nil
 _SECRETARY_DELAY_CLAIM_LUA = """
 local v = redis.call('GET', KEYS[1])
@@ -98,6 +103,8 @@ def _secretary_delay_executor_loop() -> None:
                         claimed = script(keys=[key], args=[str(now)])
                         if claimed is not None:
                             conv_id = key[len(SECRETARY_DELAY_KEY_PREFIX):]
+                            if isinstance(conv_id, bytes):
+                                conv_id = conv_id.decode("utf-8", errors="replace")
                             _run_secretary_after_delay(conv_id)
                     except Exception as e:
                         logger.warning(
@@ -787,6 +794,9 @@ def _secretary_worker(conversation, message) -> None:
     from asgiref.sync import async_to_sync
     from channels.layers import get_channel_layer
 
+    if not conversation or not message:
+        logger.warning("[SECRETARY] Worker ignorado: conversation ou message ausente")
+        return
     close_old_connections()
     start_time = time.time()
     tenant = conversation.tenant
@@ -863,6 +873,7 @@ def _secretary_worker(conversation, message) -> None:
         # Primeira resposta = ainda não existe mensagem outgoing visível (evita dois balões: resposta + transferência)
         had_outgoing = conversation.messages.filter(direction="outgoing", is_internal=False).exists()
         is_first_response = not had_outgoing
+        apply_transfer = suggested_department_id and (not is_first_response or no_reply_from_model)
 
         latency_ms = int((time.time() - start_time) * 1000)
         request_id = data.get("request_id")
@@ -875,6 +886,26 @@ def _secretary_worker(conversation, message) -> None:
         room_group_name = f"chat_tenant_{tenant_id}_conversation_{conversation.id}"
         tenant_group = f"chat_tenant_{tenant_id}"
         channel_layer = get_channel_layer()
+
+        # Idempotência na primeira resposta: só um processo envia; os outros saem ao falhar SET NX
+        will_send = is_first_response and (not no_reply_from_model or apply_transfer)
+        if will_send:
+            try:
+                from apps.connections.webhook_cache import get_redis_client
+                client = get_redis_client()
+                if client is not None:
+                    key = f"{SECRETARY_FIRST_REPLY_KEY_PREFIX}{str(conversation.id)}"
+                    if not client.set(key, "1", nx=True, ex=SECRETARY_FIRST_REPLY_TTL):
+                        logger.info(
+                            "[SECRETARY] Primeira resposta já enviada por outro processo (conv=%s), ignorando.",
+                            conversation.id,
+                        )
+                        return
+            except Exception as e:
+                logger.warning(
+                    "[SECRETARY] Redis claim primeira resposta falhou (conv=%s): %s",
+                    conversation.id, e, exc_info=True,
+                )
 
         # Criar mensagem de resposta só quando o modelo devolveu texto válido
         if not no_reply_from_model:
@@ -940,7 +971,6 @@ def _secretary_worker(conversation, message) -> None:
                 conversation.id, suggested_department_id,
             )
         # Fallback: quando vamos aplicar transferência e a IA não enviou resumo, usar mensagem que disparou
-        apply_transfer = suggested_department_id and (not is_first_response or no_reply_from_model)
         if apply_transfer and not summary_for_department:
             trigger_content = (_message_content_for_secretary(message) or "").strip()
             # Placeholders de mídia sem texto não servem como resumo; usar mensagem fixa
@@ -1217,15 +1247,25 @@ def dispatch_secretary_async(conversation, message) -> None:
         logger.warning("[SECRETARY] Skip: exceção ao checar condições: %s", e, exc_info=True)
         return
 
-    delay_seconds = getattr(profile, "response_delay_seconds", 0) or 0
+    raw_delay = getattr(profile, "response_delay_seconds", 0) or 0
+    try:
+        delay_seconds = max(0, min(int(raw_delay), 3600))
+    except (TypeError, ValueError):
+        delay_seconds = 0
     is_first_interaction = not conversation.messages.filter(
         direction="outgoing", is_internal=False
     ).exists()
 
     if delay_seconds <= 0 or not is_first_interaction:
+        reasons = []
+        if delay_seconds <= 0:
+            reasons.append("delay_seconds=0")
+        if not is_first_interaction:
+            reasons.append("is_first_interaction=False")
+        reason = ",".join(reasons) or "unknown"
         logger.info(
-            "[SECRETARY] Disparando worker para conversation_id=%s message_id=%s tenant_id=%s",
-            conversation.id, message.id, conversation.tenant_id,
+            "[SECRETARY] Disparando worker para conversation_id=%s message_id=%s tenant_id=%s reason=%s",
+            conversation.id, message.id, conversation.tenant_id, reason,
         )
         thread = threading.Thread(target=_secretary_worker, args=(conversation, message), daemon=True)
         thread.start()
@@ -1241,7 +1281,7 @@ def dispatch_secretary_async(conversation, message) -> None:
 
     logger.warning("[SECRETARY] Redis indisponível, usando timer em memória (conv=%s)", conversation.id)
     with _pending_secretary_lock:
-        old_timer = _pending_secretary_timers.pop(conversation.id, None)
+        old_timer = _pending_secretary_timers.pop(conv_id_str, None)
         if old_timer is not None:
             try:
                 old_timer.cancel()
@@ -1252,7 +1292,7 @@ def dispatch_secretary_async(conversation, message) -> None:
             _run_secretary_after_delay,
             args=(conv_id_str,),
         )
-        _pending_secretary_timers[conversation.id] = timer
+        _pending_secretary_timers[conv_id_str] = timer
         timer.start()
     logger.info(
         "[SECRETARY] Delay ativo (memória, primeira interação): conv=%s, aguardando %s s",
