@@ -895,7 +895,7 @@ def _secretary_worker(conversation, message) -> None:
                     conversation.save(update_fields=update_fields)
 
                     # Mensagem interna para o departamento (resumo visível no chat)
-                    internal_content = f"Conversa transferida para {dept.name} ({sender_name}). Resumo: {summary_for_department[:500] if summary_for_department else '—'}"
+                    internal_content = f"Conversa transferida para {dept.name} ({sender_name}).\nResumo: {summary_for_department[:500] if summary_for_department else '—'}"
                     ChatMessage.objects.create(
                         conversation=conversation,
                         sender=None,
