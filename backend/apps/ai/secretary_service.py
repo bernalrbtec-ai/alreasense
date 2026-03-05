@@ -765,9 +765,11 @@ def _secretary_worker(conversation, message) -> None:
                 raise last_error
             return
 
-        reply_text = (data.get("reply_text") or "").strip()
-        # Não criar mensagem se o modelo não respondeu (fallback do n8n)
-        if not reply_text or reply_text == "(Sem resposta do modelo.)":
+        reply_text = str(data.get("reply_text") or "").strip()
+        no_reply_from_model = not reply_text or reply_text == "(Sem resposta do modelo.)"
+        suggested_department_id = data.get("suggested_department_id")
+        # Se não há resposta nem transferência, não há nada a fazer
+        if no_reply_from_model and not suggested_department_id:
             return
 
         latency_ms = int((time.time() - start_time) * 1000)
@@ -778,67 +780,67 @@ def _secretary_worker(conversation, message) -> None:
         output_tokens = meta.get("output_tokens") if isinstance(meta.get("output_tokens"), int) else None
 
         sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Assistente"
-        message_obj = ChatMessage.objects.create(
-            conversation=conversation,
-            sender=None,
-            sender_name=sender_name,
-            content=reply_text,
-            direction="outgoing",
-            status="pending",
-            is_internal=False,
-        )
         room_group_name = f"chat_tenant_{tenant_id}_conversation_{conversation.id}"
         tenant_group = f"chat_tenant_{tenant_id}"
         channel_layer = get_channel_layer()
-        msg_data = serialize_message_for_ws(message_obj)
-        conv_data = serialize_conversation_for_ws(conversation)
-        async_to_sync(channel_layer.group_send)(
-            room_group_name,
-            {"type": "message_received", "message": msg_data},
-        )
-        async_to_sync(channel_layer.group_send)(
-            tenant_group,
-            {"type": "message_received", "message": msg_data, "conversation": conv_data},
-        )
-        from apps.chat.tasks import send_message_to_evolution
-        send_message_to_evolution.delay(str(message_obj.id))
 
-        # ✅ NOVO: Marcar mensagens do cliente como recebidas e lidas quando a secretária responde
-        try:
-            from apps.chat.webhooks import send_delivery_receipt, send_read_receipt
-            unread_messages = ChatMessage.objects.filter(
+        # Criar mensagem de resposta só quando o modelo devolveu texto válido
+        if not no_reply_from_model:
+            message_obj = ChatMessage.objects.create(
                 conversation=conversation,
-                direction='incoming',
-                status__in=['sent', 'delivered']  # Mensagens ainda não lidas
-            ).order_by('created_at')
-            
-            for unread_msg in unread_messages:
-                if unread_msg.message_id:  # Só marcar se tiver message_id da Evolution
-                    # Marcar como entregue (✓✓ cinza)
-                    send_delivery_receipt(conversation, unread_msg)
-                    # Pequeno delay antes de marcar como lida (simula leitura humana)
-                    time.sleep(0.5)
-                    # Marcar como lida (✓✓ azul)
-                    read_success = send_read_receipt(conversation, unread_msg, max_retries=2)
-                    if read_success:
-                        # Atualizar status no banco para 'seen'
-                        unread_msg.status = 'seen'
-                        unread_msg.save(update_fields=['status'])
-                        logger.info(
-                            "[SECRETARY] Mensagem marcada como recebida e lida: message_id=%s",
-                            unread_msg.message_id
-                        )
-                    else:
-                        logger.warning(
-                            "[SECRETARY] Falha ao marcar mensagem como lida: message_id=%s",
-                            unread_msg.message_id
-                        )
-        except Exception as e:
-            # Não bloquear o processamento se falhar ao marcar como lida
-            logger.warning("[SECRETARY] Erro ao marcar mensagens como lidas: %s", e, exc_info=True)
+                sender=None,
+                sender_name=sender_name,
+                content=reply_text,
+                direction="outgoing",
+                status="pending",
+                is_internal=False,
+            )
+            msg_data = serialize_message_for_ws(message_obj)
+            conv_data = serialize_conversation_for_ws(conversation)
+            async_to_sync(channel_layer.group_send)(
+                room_group_name,
+                {"type": "message_received", "message": msg_data},
+            )
+            async_to_sync(channel_layer.group_send)(
+                tenant_group,
+                {"type": "message_received", "message": msg_data, "conversation": conv_data},
+            )
+            from apps.chat.tasks import send_message_to_evolution
+            send_message_to_evolution.delay(str(message_obj.id))
 
-        suggested_department_id = data.get("suggested_department_id")
-        summary_for_department = (data.get("summary_for_department") or "").strip()
+            # Marcar mensagens do cliente como recebidas e lidas quando a secretária responde
+            try:
+                from apps.chat.webhooks import send_delivery_receipt, send_read_receipt
+                unread_messages = ChatMessage.objects.filter(
+                    conversation=conversation,
+                    direction='incoming',
+                    status__in=['sent', 'delivered']
+                ).order_by('created_at')
+                for unread_msg in unread_messages:
+                    if unread_msg.message_id:
+                        send_delivery_receipt(conversation, unread_msg)
+                        time.sleep(0.5)
+                        read_success = send_read_receipt(conversation, unread_msg, max_retries=2)
+                        if read_success:
+                            unread_msg.status = 'seen'
+                            unread_msg.save(update_fields=['status'])
+                            logger.info(
+                                "[SECRETARY] Mensagem marcada como recebida e lida: message_id=%s",
+                                unread_msg.message_id
+                            )
+                        else:
+                            logger.warning(
+                                "[SECRETARY] Falha ao marcar mensagem como lida: message_id=%s",
+                                unread_msg.message_id
+                            )
+            except Exception as e:
+                logger.warning("[SECRETARY] Erro ao marcar mensagens como lidas: %s", e, exc_info=True)
+        elif suggested_department_id:
+            logger.info(
+                "[SECRETARY] reply_text inválido mas há transferência; executando transferência (conv=%s, dept=%s)",
+                conversation.id, suggested_department_id,
+            )
+        summary_for_department = str(data.get("summary_for_department") or "").strip()
         # Fallback: quando há transferência mas a IA não enviou resumo, usar mensagem que disparou
         if suggested_department_id and not summary_for_department:
             trigger_content = (_message_content_for_secretary(message) or "").strip()
@@ -863,6 +865,11 @@ def _secretary_worker(conversation, message) -> None:
                     tenant=tenant,
                     id=suggested_department_id,
                 ).first()
+                if not dept:
+                    logger.warning(
+                        "[SECRETARY] suggested_department_id não encontrado (tenant=%s, id=%s); ignorando transferência",
+                        tenant_id, suggested_department_id,
+                    )
                 if dept:
                     conversation.department = dept
                     conversation.status = "open"
@@ -996,7 +1003,7 @@ def _secretary_worker(conversation, message) -> None:
                 latency_ms=latency_ms,
                 handoff=bool(suggested_department_id),
                 input_summary="",  # Não logar conteúdo completo (segurança)
-                output_summary=reply_text[:200] if reply_text else "",
+                output_summary=(reply_text[:200] if (reply_text and not no_reply_from_model) else ""),
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
                 agent_type="bia",
