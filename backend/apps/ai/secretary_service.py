@@ -77,7 +77,7 @@ def _apply_prompt_name_variable(prompt_text: str, signature_name: Optional[str])
     """Substitui {{nome}} no prompt pelo nome da secretária (ex: no prompt do usuário)."""
     if not prompt_text:
         return prompt_text
-    name = (signature_name or "").strip() or "Secretária IA"
+    name = (signature_name or "").strip() or "Assistente"
     return prompt_text.replace("{{nome}}", name)
 
 
@@ -430,6 +430,8 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
             contact_context_lines.append(f"Data do último contato: {last_contact_date_readable}.")
         contact_context_lines.append("=== FIM ===\n")
         prompt_with_data = prompt_with_data + "\n".join(contact_context_lines)
+    # Instrução: ao encaminhar, a IA deve incluir obrigatoriamente o resumo na mesma linha
+    prompt_with_data = prompt_with_data + "\n\nAo encaminhar (SUGERIR_DEPARTAMENTO), inclua obrigatoriamente na mesma linha: RESUMO_PARA_DEPARTAMENTO: <resumo em uma frase>."
     # Variável {{nome}} no prompt: substituir pelo nome da secretária
     signature_name = getattr(profile, "signature_name", None) or ""
     prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
@@ -775,7 +777,7 @@ def _secretary_worker(conversation, message) -> None:
         input_tokens = meta.get("input_tokens") if isinstance(meta.get("input_tokens"), int) else None
         output_tokens = meta.get("output_tokens") if isinstance(meta.get("output_tokens"), int) else None
 
-        sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Secretária IA"
+        sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Assistente"
         message_obj = ChatMessage.objects.create(
             conversation=conversation,
             sender=None,
@@ -837,6 +839,23 @@ def _secretary_worker(conversation, message) -> None:
 
         suggested_department_id = data.get("suggested_department_id")
         summary_for_department = (data.get("summary_for_department") or "").strip()
+        # Fallback: quando há transferência mas a IA não enviou resumo, usar mensagem que disparou
+        if suggested_department_id and not summary_for_department:
+            trigger_content = (_message_content_for_secretary(message) or "").strip()
+            # Placeholders de mídia sem texto não servem como resumo; usar mensagem fixa
+            uninformative = (
+                not trigger_content
+                or trigger_content == "[Áudio em processamento]"
+                or trigger_content in ("[Imagem]", "[Vídeo]", "[Imagem e vídeo]")
+            )
+            if uninformative:
+                summary_for_department = "Solicitação do cliente (resumo não disponível)."
+            else:
+                summary_for_department = (trigger_content[:300] + ("…" if len(trigger_content) > 300 else ""))
+            logger.info(
+                "[SECRETARY] Resumo não veio do N8N; usando fallback (conv=%s, len=%s)",
+                conversation.id, len(summary_for_department),
+            )
         if suggested_department_id:
             try:
                 from apps.authn.models import Department
@@ -858,7 +877,7 @@ def _secretary_worker(conversation, message) -> None:
                     conversation.save(update_fields=update_fields)
 
                     # Mensagem interna para o departamento (resumo visível no chat)
-                    internal_content = f"Conversa transferida para {dept.name} (Secretária IA). Resumo: {summary_for_department[:500] if summary_for_department else '—'}"
+                    internal_content = f"Conversa transferida para {dept.name} ({sender_name}). Resumo: {summary_for_department[:500] if summary_for_department else '—'}"
                     ChatMessage.objects.create(
                         conversation=conversation,
                         sender=None,

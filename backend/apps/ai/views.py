@@ -41,7 +41,11 @@ from apps.ai.transcription_metrics import (
 )
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.ai.throttling import GatewayReplyThrottle, GatewayTestThrottle
-from apps.ai.secretary_service import build_secretary_payload_for_test, _server_time_utc_iso
+from apps.ai.secretary_service import (
+    build_secretary_payload_for_test,
+    _message_content_for_secretary,
+    _server_time_utc_iso,
+)
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
 logger = logging.getLogger(__name__)
@@ -1040,6 +1044,26 @@ def gateway_reply(request):
     agent_type = str(request.data.get("agent_type") or "").strip()
     suggested_department_id = request.data.get("suggested_department_id")
     summary_for_department = (request.data.get("summary_for_department") or "").strip()[:2000]
+
+    # Fallback (callback assíncrono): quando há transferência sem resumo, usar última mensagem incoming
+    if suggested_department_id and not summary_for_department:
+        last_incoming = (
+            conversation.messages.filter(direction="incoming")
+            .prefetch_related("attachments")
+            .order_by("-created_at")
+            .first()
+        )
+        if last_incoming:
+            trigger_content = (_message_content_for_secretary(last_incoming) or "").strip()
+            uninformative = (
+                not trigger_content
+                or trigger_content == "[Áudio em processamento]"
+                or trigger_content in ("[Imagem]", "[Vídeo]", "[Imagem e vídeo]")
+            )
+            if uninformative:
+                summary_for_department = "Solicitação do cliente (resumo não disponível)."
+            else:
+                summary_for_department = (trigger_content[:300] + ("…" if len(trigger_content) > 300 else ""))[:2000]
 
     if suggested_department_id:
         try:

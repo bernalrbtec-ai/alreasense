@@ -282,7 +282,7 @@ class TenantSecretaryProfile(models.Model):
     signature_name = models.CharField(
         max_length=100,
         blank=True,
-        help_text='Nome exibido nas mensagens da secretária (ex: Bia). Se vazio, usa "Secretária IA".',
+        help_text='Nome exibido nas mensagens da secretária (ex: Bia). Se vazio, usa "Assistente".',
     )
     use_memory = models.BooleanField(
         default=True,

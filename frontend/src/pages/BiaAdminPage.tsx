@@ -704,7 +704,9 @@ export default function BiaAdminPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-1">
-                  Secretária IA – {(secretaryProfile?.signature_name ?? '').trim() || 'Secretária IA'}
+                  {secretaryProfile?.signature_name?.trim()
+                    ? `Assistente – ${secretaryProfile.signature_name.trim()}`
+                    : 'Assistente'}
                 </h2>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
