@@ -1677,11 +1677,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             elif wa_instance:
                 correct_friendly_name = wa_instance.friendly_name or ''
         
-        # ✅ CORREÇÃO CRÍTICA: Conversas INDIVIDUAIS vindas de fora (incoming) vão para INBOX
-        # Isso garante que apareçam na lista e no badge. Grupos mantêm default_department.
-        use_inbox_for_new = not from_me and conversation_type == 'individual'
+        # Só enviar conversas individuais incoming para INBOX quando a instância NÃO tem departamento padrão.
+        # Se a instância tem default_department (ex.: Suporte), respeitar e enviar para o departamento.
+        use_inbox_for_new = not from_me and conversation_type == 'individual' and (default_department is None)
         if use_inbox_for_new:
-            logger.info(f"📥 [ROUTING] Mensagem individual incoming → nova conversa vai para INBOX (department=null, status=pending)")
+            logger.info(f"📥 [ROUTING] Mensagem individual incoming → nova conversa vai para INBOX (sem departamento padrão)")
+        elif default_department and not from_me and conversation_type == 'individual':
+            logger.info(f"📥 [ROUTING] Mensagem individual incoming → nova conversa vai para departamento: {default_department.name} (instância com departamento padrão)")
         effective_department = None if use_inbox_for_new else default_department
         effective_status = 'pending' if use_inbox_for_new or not effective_department else 'open'
         
