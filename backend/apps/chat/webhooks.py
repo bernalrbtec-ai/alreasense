@@ -544,14 +544,16 @@ def evolution_webhook(request):
         try:
             # Buscar WhatsAppInstance pelo instance_name (UUID do webhook)
             # ✅ FIX: Incluir select_related('default_department') para evitar query extra
+            # Aceitar is_active=True sem exigir status='active' (alinhado ao fluxo connections),
+            # para que default_department seja aplicado mesmo com instância connecting/inactive.
+            # Excluir status='error' para não rotear para instância em falha.
             wa_instance = WhatsAppInstance.objects.select_related(
                 'tenant', 
                 'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
             ).filter(
                 instance_name=instance_name,
                 is_active=True,
-                status='active'
-            ).first()
+            ).exclude(status='error').first()
             
             # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name
             if not wa_instance:
@@ -562,8 +564,7 @@ def evolution_webhook(request):
                 ).filter(
                     evolution_instance_name=instance_name,
                     is_active=True,
-                    status='active'
-                ).first()
+                ).exclude(status='error').first()
             
             # ✅ FALLBACK 2: Se ainda não encontrou, tentar buscar instância padrão do tenant
             # Primeiro tentar buscar pelo tenant do connection (se existir)
@@ -576,8 +577,7 @@ def evolution_webhook(request):
                 ).filter(
                     tenant=connection.tenant,
                     is_active=True,
-                    status='active'
-                ).first()
+                ).exclude(status='error').first()
                 
                 if wa_instance:
                     logger.warning(f"⚠️ [WEBHOOK] Usando instância padrão do tenant: {wa_instance.friendly_name}")
@@ -590,8 +590,7 @@ def evolution_webhook(request):
                     'default_department'
                 ).filter(
                     is_active=True,
-                    status='active'
-                ).first()
+                ).exclude(status='error').first()
                 
                 if wa_instance:
                     logger.warning(f"⚠️ [WEBHOOK] Usando primeira instância ativa encontrada: {wa_instance.friendly_name} (tenant: {wa_instance.tenant.name if wa_instance.tenant else 'None'})")
@@ -671,8 +670,7 @@ def evolution_webhook(request):
                 ).filter(
                     tenant=tenant,
                     is_active=True,
-                    status='active'
-                ).first()
+                ).exclude(status='error').first()
                 
                 if wa_instance:
                     logger.info(f"✅ [WEBHOOK] Instância encontrada pelo tenant: {wa_instance.friendly_name}")
@@ -1670,8 +1668,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             correct_wa_instance = WAInstanceModel.objects.filter(
                 Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
                 is_active=True,
-                status='active'
-            ).first()
+            ).exclude(status='error').first()
             if correct_wa_instance:
                 correct_friendly_name = correct_wa_instance.friendly_name or ''
             elif wa_instance:
