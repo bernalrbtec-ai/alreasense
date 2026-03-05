@@ -1043,7 +1043,7 @@ def gateway_reply(request):
     metadata = request.data.get("metadata") or {}
     agent_type = str(request.data.get("agent_type") or "").strip()
     suggested_department_id = request.data.get("suggested_department_id")
-    summary_for_department = (request.data.get("summary_for_department") or "").strip()[:2000]
+    summary_for_department = str(request.data.get("summary_for_department") or "").strip()[:2000]
 
     # Fallback (callback assíncrono): quando há transferência sem resumo, usar última mensagem incoming
     if suggested_department_id and not summary_for_department:

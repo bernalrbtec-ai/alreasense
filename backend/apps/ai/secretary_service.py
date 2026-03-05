@@ -430,8 +430,13 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
             contact_context_lines.append(f"Data do último contato: {last_contact_date_readable}.")
         contact_context_lines.append("=== FIM ===\n")
         prompt_with_data = prompt_with_data + "\n".join(contact_context_lines)
-    # Instrução: ao encaminhar, a IA deve incluir obrigatoriamente o resumo na mesma linha
-    prompt_with_data = prompt_with_data + "\n\nAo encaminhar (SUGERIR_DEPARTAMENTO), inclua obrigatoriamente na mesma linha: RESUMO_PARA_DEPARTAMENTO: <resumo em uma frase>."
+    # Instrução: ordem obrigatória — primeiro a mensagem ao usuário, depois as linhas internas (evita reply vazio)
+    prompt_with_data = prompt_with_data + """
+
+IMPORTANTE — Ao encaminhar: a mensagem ao cliente vem SEMPRE primeiro; as linhas SUGERIR_DEPARTAMENTO e RESUMO_PARA_DEPARTAMENTO vêm por último (o sistema as remove antes de enviar).
+1) Escreva PRIMEIRO o texto que o cliente vê no chat (ex.: avisar que está encaminhando para o departamento X e que em breve será atendido).
+2) Só no final da resposta, em linhas separadas: SUGERIR_DEPARTAMENTO: <uuid> e RESUMO_PARA_DEPARTAMENTO: <resumo em uma frase>. O resumo é só para o departamento; o cliente não vê.
+Nunca envie apenas as linhas internas sem a mensagem ao cliente antes."""
     # Variável {{nome}} no prompt: substituir pelo nome da secretária
     signature_name = getattr(profile, "signature_name", None) or ""
     prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
