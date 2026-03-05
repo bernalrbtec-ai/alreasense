@@ -2064,7 +2064,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   🔍 wa_instance.default_department_id: {wa_instance.default_department_id}")
         
         # ✅ FIX CRÍTICO: Se conversa já existia mas não tem departamento E instância tem default_department,
-        # atualizar conversa para usar o departamento padrão
+        # atualizar conversa para usar o departamento padrão apenas quando a mensagem é INCOMING.
+        # Não aplicar ao processar mensagem enviada por nós (from_me): evita mover conversa para o departamento
+        # quando o webhook processa a resposta da BIA (que não é transferência).
         # IMPORTANTE: get_or_create só usa defaults na criação, não atualiza existentes!
         needs_update = False
         update_fields_list = []
@@ -2076,8 +2078,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             update_fields_list.append('instance_friendly_name')
             needs_update = True
         
-        if not created and default_department and not conversation.department:
-            logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name}")
+        if not created and default_department and not conversation.department and not from_me:
+            logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name} (mensagem incoming)")
             conversation.department = default_department
             update_fields_list.append('department')
             needs_update = True
