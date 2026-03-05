@@ -55,14 +55,15 @@ export function useChatSocket(conversationId?: string) {
   useEffect(() => {
     if (!user?.tenant_id) return;
     let cancelled = false;
-    api.get<{ results?: Array<{ connection_state?: string; integration_type?: string; id?: string; instance_name?: string; friendly_name?: string; status?: string; last_error?: string }> }>('/notifications/whatsapp-instances/', { params: { page_size: 100 } })
+    api.get<{ results?: Array<{ connection_state?: string; integration_type?: string; id?: string; instance_name?: string; friendly_name?: string; status?: string; last_error?: string; phone_number?: string }> }>('/notifications/whatsapp-instances/', { params: { page_size: 100 } })
       .then((res) => {
         if (cancelled) return;
         const list = res.data?.results ?? Array.isArray(res.data) ? res.data : [];
         const withProblem = list.find(
           (inst) =>
             (inst.connection_state ?? '') !== 'open' &&
-            (inst.integration_type === 'evolution' || !inst.integration_type)
+            (inst.integration_type === 'evolution' || !inst.integration_type) &&
+            ((inst.phone_number ?? '').toString().trim() !== '')
         );
         if (withProblem) {
           setInstanceStatusAlert({
@@ -320,6 +321,8 @@ export function useChatSocket(conversationId?: string) {
         setInstanceStatusAlert(null);
         return;
       }
+      const phone = (instance.phone_number as string) ?? '';
+      if (typeof phone !== 'string' || phone.trim() === '') return;
       setInstanceStatusAlert({
         instance_id: String(instance.instance_id ?? ''),
         instance_name: String(instance.instance_name ?? ''),

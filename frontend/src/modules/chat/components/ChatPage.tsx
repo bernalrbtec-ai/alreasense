@@ -15,25 +15,39 @@ import { useChatStore } from '../store/chatStore';
 
 export function ChatPage() {
   const { activeConversation, instanceStatusAlert } = useChatStore();
-  const showBanner = instanceStatusAlert && instanceStatusAlert.connection_state !== 'open';
+  const connectionState = instanceStatusAlert?.connection_state ?? '';
+  const showBanner = instanceStatusAlert && connectionState !== 'open' && connectionState !== '';
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#f0f2f5] dark:bg-gray-900">
-      {/* Alerta quando a instância Evolution está conectando ou desconectada */}
-      {showBanner && (
-        <div className="flex-shrink-0 px-3 py-2 bg-amber-100 dark:bg-amber-900/40 border-b border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-sm flex items-center gap-2">
-          <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">
-            {instanceStatusAlert.connection_state === 'connecting'
-              ? 'WhatsApp está conectando… Pode levar alguns segundos. Se demorar, verifique em Configurações.'
-              : 'WhatsApp está desconectado. Mensagens podem não ser enviadas nem recebidas. Reconecte em Configurações.'}
-          </span>
+      {/* Aviso bem visível quando WhatsApp está conectando ou desconectado */}
+      {showBanner && instanceStatusAlert && (
+        <div
+          className={`flex-shrink-0 w-full px-4 py-4 border-b-4 flex items-center gap-4 ${
+            connectionState === 'connecting'
+              ? 'bg-amber-50 dark:bg-amber-950/50 border-amber-500 text-amber-900 dark:text-amber-100'
+              : 'bg-red-50 dark:bg-red-950/50 border-red-500 text-red-900 dark:text-red-100'
+          }`}
+        >
+          <AlertCircle className="h-10 w-10 flex-shrink-0 opacity-90" />
+          <div className="flex-1 min-w-0">
+            <p className="text-lg font-semibold leading-tight">
+              {connectionState === 'connecting'
+                ? 'WhatsApp está conectando'
+                : 'WhatsApp está desconectado'}
+            </p>
+            <p className="mt-1 text-base">
+              {connectionState === 'connecting'
+                ? 'Pode levar alguns segundos. Se demorar, use Verificar Status em Conexões.'
+                : 'Mensagens podem não ser enviadas nem recebidas. Reconecte em Conexões ou use Verificar Status.'}
+            </p>
+          </div>
           <Link
             to="/connections"
-            className="flex items-center gap-1 text-amber-800 dark:text-amber-300 font-medium hover:underline"
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 rounded-lg font-semibold bg-white/80 dark:bg-black/30 hover:bg-white dark:hover:bg-black/50 border-2 border-current shadow-sm transition-colors"
           >
-            <Wifi className="h-4 w-4" />
-            Conexões
+            <Wifi className="h-5 w-5" />
+            Ir para Conexões
           </Link>
         </div>
       )}

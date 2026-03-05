@@ -10,7 +10,7 @@ import { useConfirm } from '../hooks/useConfirm'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown, AlertTriangle } from 'lucide-react'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -509,6 +509,20 @@ export default function ConnectionsPage() {
     }
   }
 
+  const isEvolutionNotOpen = (i: WhatsAppInstance) =>
+    i.integration_type !== INTEGRATION_META_CLOUD &&
+    (i.connection_state === 'connecting' || i.connection_state === 'close' || i.connection_state === 'closed') &&
+    (i.phone_number ?? '').trim() !== ''
+  const hasConnectingOrDisconnected = Array.isArray(instances) && instances.some(isEvolutionNotOpen)
+  const hasConnecting =
+    Array.isArray(instances) &&
+    instances.some(
+      (i) =>
+        i.integration_type !== INTEGRATION_META_CLOUD &&
+        i.connection_state === 'connecting' &&
+        (i.phone_number ?? '').trim() !== ''
+    )
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -539,6 +553,29 @@ export default function ConnectionsPage() {
           Nova Instância WhatsApp
         </Button>
       </div>
+
+      {/* Aviso bem visível quando alguma instância Evolution está conectando ou desconectada */}
+      {hasConnectingOrDisconnected && (
+        <div
+          className={`rounded-xl border-4 p-5 flex items-start gap-4 ${
+            hasConnecting
+              ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100'
+              : 'bg-red-50 dark:bg-red-950/40 border-red-500 text-red-900 dark:text-red-100'
+          }`}
+        >
+          <AlertTriangle className="h-12 w-12 flex-shrink-0 mt-0.5 opacity-90" />
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xl font-bold leading-tight">
+              {hasConnecting ? 'WhatsApp está conectando' : 'WhatsApp está desconectado'}
+            </h2>
+            <p className="mt-2 text-base">
+              {hasConnecting
+                ? 'Pode levar alguns segundos. Se demorar, use o botão "Verificar Status" (ícone de check) na instância abaixo.'
+                : 'Mensagens podem não ser enviadas nem recebidas. Reconecte a instância ou use "Verificar Status" na instância abaixo.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* WhatsApp Instances Section */}
       <div className="space-y-4">

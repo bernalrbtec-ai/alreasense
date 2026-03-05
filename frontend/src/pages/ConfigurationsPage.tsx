@@ -36,7 +36,8 @@ import {
   FileText,
   Sparkles,
   RefreshCw,
-  ShieldCheck
+  ShieldCheck,
+  AlertTriangle
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -1901,6 +1902,47 @@ export default function ConfigurationsPage() {
       {/* Tab Content - Instâncias WhatsApp */}
       {activeTab === 'instances' && (
         <div className="space-y-6">
+          {/* Aviso bem visível quando alguma instância Evolution está conectando ou desconectada */}
+          {(() => {
+            const list = Array.isArray(instances) ? instances : []
+            const hasConnectingOrDisconnected = list.some(
+              (i: WhatsAppInstance) =>
+                i.integration_type !== INTEGRATION_META_CLOUD &&
+                (i.connection_state === 'connecting' || i.connection_state === 'close' || i.connection_state === 'closed') &&
+                (i.phone_number ?? '').trim() !== ''
+            )
+            const hasConnecting = list.some(
+              (i: WhatsAppInstance) =>
+                i.integration_type !== INTEGRATION_META_CLOUD &&
+                i.connection_state === 'connecting' &&
+                (i.phone_number ?? '').trim() !== ''
+            )
+            return hasConnectingOrDisconnected ? (
+              <div
+                className={`rounded-xl border-4 p-5 flex items-start gap-4 ${
+                  hasConnecting
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-100'
+                    : 'bg-red-50 dark:bg-red-950/40 border-red-500 text-red-900 dark:text-red-100'
+                }`}
+              >
+                <AlertTriangle className="h-12 w-12 flex-shrink-0 mt-0.5 opacity-90" />
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-bold leading-tight">
+                    {hasConnecting ? 'WhatsApp está conectando' : 'WhatsApp está desconectado'}
+                  </h2>
+                  <p className="mt-2 text-base">
+                    {hasConnecting
+                      ? 'Pode levar alguns segundos. Se demorar, use "Atualizar status" na instância abaixo.'
+                      : 'Mensagens podem não ser enviadas. Reconecte a instância ou use "Atualizar status" na instância abaixo.'}
+                  </p>
+                  <Link to="/connections" className="mt-3 inline-flex items-center gap-2 text-base font-semibold underline hover:no-underline">
+                    Ir para Conexões
+                  </Link>
+                </div>
+              </div>
+            ) : null
+          })()}
+
           {/* Limites do Plano */}
           {limits && (
             <Card className="p-6">

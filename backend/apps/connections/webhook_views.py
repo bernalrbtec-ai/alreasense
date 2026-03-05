@@ -1565,6 +1565,7 @@ class EvolutionWebhookView(APIView):
                             'connection_state': getattr(instance, 'connection_state', '') or '',
                             'status': getattr(instance, 'status', '') or '',
                             'last_error': (instance.last_error or '')[:500],
+                            'phone_number': (instance.phone_number or '').strip() or '',
                         }
                         try:
                             from channels.layers import get_channel_layer

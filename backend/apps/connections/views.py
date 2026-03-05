@@ -180,7 +180,33 @@ def evolution_config(request):
                     stats['connected'] += 1
                 else:
                     stats['disconnected'] += 1
-                    
+
+                # Sincronizar connection_state no banco com o que a Evolution retornou (evita "Conectando" preso)
+                state_lower = str(instance_status).lower().strip()
+                if state_lower in ('open', 'connecting', 'close', 'closed'):
+                    evo_id = (
+                        inst.get('id') or inst.get('name') or
+                        inst.get('instanceName') or (inst.get('instance') or {}).get('instanceName') or
+                        instance_name
+                    )
+                    evo_id_str = (evo_id.strip() if isinstance(evo_id, str) else str(evo_id)).strip()
+                    if evo_id_str and evo_id_str.lower() != 'unknown':
+                        connection_state = 'open' if state_lower == 'open' else ('connecting' if state_lower == 'connecting' else 'close')
+                        status_value = 'active' if state_lower == 'open' else 'inactive'
+                        update_kwargs = {
+                            'connection_state': connection_state,
+                            'status': status_value,
+                            'last_check': timezone.now(),
+                        }
+                        if state_lower == 'open':
+                            update_kwargs['last_error'] = ''
+                        updated = WhatsAppInstance.objects.filter(
+                            Q(instance_name__iexact=evo_id_str) | Q(evolution_instance_name__iexact=evo_id_str),
+                            integration_type=WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION,
+                        ).update(**update_kwargs)
+                        if updated:
+                            logger.info(f"🔄 [EVOLUTION CONFIG] Sync: {updated} instância(s) atualizada(s) para connection_state={connection_state}")
+
         elif response.status_code == 401:
             connection_status = 'error'
             last_error = 'Erro de autenticação (401) - Verifique EVOLUTION_API_KEY no .env'
