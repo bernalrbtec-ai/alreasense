@@ -28,9 +28,86 @@ from apps.ai.vector_store import search_knowledge, search_memory_for_contact
 
 logger = logging.getLogger(__name__)
 
-# Delay na primeira interação: timers por conversation_id (só quando response_delay_seconds > 0)
+# Delay na primeira interação: timers por conversation_id (fallback quando Redis indisponível)
 _pending_secretary_timers = {}
 _pending_secretary_lock = threading.Lock()
+
+# Redis: chave por conversa e lock do executor (uma única resposta após o delay em multi-worker)
+SECRETARY_DELAY_KEY_PREFIX = "secretary_delay:"
+SECRETARY_DELAY_RUNNER_LOCK = "secretary_delay_runner"
+SECRETARY_DELAY_LOCK_TTL = 5
+SECRETARY_DELAY_KEY_TTL_MARGIN = 120
+SECRETARY_DELAY_RUNNER_INTERVAL = 2.5
+
+# Lua: claim atômico (ler e apagar se run_at <= now); retorna valor ou nil
+_SECRETARY_DELAY_CLAIM_LUA = """
+local v = redis.call('GET', KEYS[1])
+if v and tonumber(v) <= tonumber(ARGV[1]) then
+  redis.call('DEL', KEYS[1])
+  return v
+end
+return nil
+"""
+
+
+def _secretary_delay_redis_set(conversation_id: str, delay_seconds: int) -> bool:
+    """Grava no Redis run_at = now + delay_seconds para a conversa. Retorna True se ok."""
+    try:
+        from apps.connections.webhook_cache import get_redis_client
+        client = get_redis_client()
+        if not client:
+            return False
+        key = f"{SECRETARY_DELAY_KEY_PREFIX}{conversation_id}"
+        run_at = time.time() + delay_seconds
+        ttl = delay_seconds + SECRETARY_DELAY_KEY_TTL_MARGIN
+        client.set(key, str(run_at), ex=int(ttl))
+        return True
+    except Exception as e:
+        logger.warning("[SECRETARY] Redis SET delay falhou conv=%s: %s", conversation_id, e)
+        return False
+
+
+def _secretary_delay_executor_loop() -> None:
+    """Loop do executor: a cada N s adquire lock Redis, varre chaves vencidas e chama _run_secretary_after_delay.
+    Só é iniciado por AiConfig.ready() quando não é migrate/setup e DISABLE_SECRETARY_DELAY_RUNNER != 1."""
+    try:
+        from apps.connections.webhook_cache import get_redis_client
+        client = get_redis_client()
+        if not client:
+            logger.debug("[SECRETARY] Executor delay: Redis indisponível, encerrando thread")
+            return
+    except Exception as e:
+        logger.warning("[SECRETARY] Executor delay: falha ao obter Redis: %s", e)
+        return
+    script = client.register_script(_SECRETARY_DELAY_CLAIM_LUA)
+    while True:
+        try:
+            time.sleep(SECRETARY_DELAY_RUNNER_INTERVAL)
+            acquired = client.set(
+                SECRETARY_DELAY_RUNNER_LOCK, "1",
+                nx=True, ex=SECRETARY_DELAY_LOCK_TTL
+            )
+            if not acquired:
+                continue
+            now = time.time()
+            cursor = 0
+            while True:
+                cursor, keys = client.scan(cursor, match=f"{SECRETARY_DELAY_KEY_PREFIX}*", count=100)
+                for key in keys:
+                    try:
+                        claimed = script(keys=[key], args=[str(now)])
+                        if claimed is not None:
+                            conv_id = key[len(SECRETARY_DELAY_KEY_PREFIX):]
+                            _run_secretary_after_delay(conv_id)
+                    except Exception as e:
+                        logger.warning(
+                            "[SECRETARY] Executor delay: erro ao processar key=%s: %s",
+                            key, e, exc_info=True,
+                        )
+                if cursor == 0:
+                    break
+        except Exception as e:
+            logger.warning("[SECRETARY] Executor delay: erro no loop: %s", e, exc_info=True)
 
 
 def _server_time_utc_iso() -> str:
@@ -1142,6 +1219,15 @@ def dispatch_secretary_async(conversation, message) -> None:
         thread.start()
         return
 
+    conv_id_str = str(conversation.id)
+    if _secretary_delay_redis_set(conv_id_str, delay_seconds):
+        logger.info(
+            "[SECRETARY] Delay ativo (Redis, primeira interação): conv=%s, aguardando %s s",
+            conversation.id, delay_seconds,
+        )
+        return
+
+    logger.warning("[SECRETARY] Redis indisponível, usando timer em memória (conv=%s)", conversation.id)
     with _pending_secretary_lock:
         old_timer = _pending_secretary_timers.pop(conversation.id, None)
         if old_timer is not None:
@@ -1152,11 +1238,11 @@ def dispatch_secretary_async(conversation, message) -> None:
         timer = threading.Timer(
             delay_seconds,
             _run_secretary_after_delay,
-            args=(str(conversation.id),),
+            args=(conv_id_str,),
         )
         _pending_secretary_timers[conversation.id] = timer
         timer.start()
     logger.info(
-        "[SECRETARY] Delay ativo (primeira interação): conv=%s, aguardando %s s",
+        "[SECRETARY] Delay ativo (memória, primeira interação): conv=%s, aguardando %s s",
         conversation.id, delay_seconds,
     )
