@@ -1766,15 +1766,53 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if is_group and normalized_phone_for_search:
             # ✅ Compatibilidade: localizar grupos antigos salvos como +55...
             phone_query |= Q(contact_phone=normalized_phone_for_search)
+        # ✅ FALLBACK: Para individuais, também buscar por apenas dígitos (evita conversas duplicadas
+        # quando o número foi salvo como 17991253112 ou 5517991253112 em outro fluxo).
+        # Só aplicamos sufixo sem 55 quando len >= 12 (formato BR: 55 + DDD + número) para evitar
+        # falso positivo com números de outros países.
+        if not is_group and normalized_phone:
+            digits_only = ''.join(c for c in normalized_phone if c.isdigit())
+            if digits_only and len(digits_only) >= 10:
+                phone_query |= Q(contact_phone=digits_only)
+                if digits_only.startswith('55') and len(digits_only) >= 12:
+                    phone_query |= Q(contact_phone=digits_only[2:])  # ex: 17991253112
+                if digits_only:
+                    phone_query |= Q(contact_phone='+' + digits_only)
         
         base_filter = Q(tenant=tenant) & phone_query
         
-        # 1. Prioridade: conversa com mesma instância (match exato)
+        # 1. Prioridade: conversa com mesma instância (match exato); se houver várias, preferir a mais antiga
         existing_conversation = None
         if instance_name and str(instance_name).strip():
-            existing_conversation = Conversation.objects.filter(
-                base_filter & Q(instance_name=instance_name.strip())
-            ).first()
+            existing_conversation = (
+                Conversation.objects.filter(base_filter & Q(instance_name=instance_name.strip()))
+                .order_by("created_at", "id")
+                .first()
+            )
+            # ✅ TROCA DE INSTÂNCIA: Se encontrou conversa pela instância atual mas existe outra do mesmo
+            # contato mais antiga (criada primeiro = com histórico), reutilizar a mais antiga e atualizar
+            # nela o instance_name — evita duplicar conversa quando a instância WhatsApp foi trocada.
+            if existing_conversation:
+                mais_antiga = (
+                    Conversation.objects.filter(base_filter)
+                    .order_by("created_at", "id")
+                    .first()
+                )
+                if mais_antiga and mais_antiga.id != existing_conversation.id:
+                    # Preferir a criada primeiro (conversa original do contato)
+                    logger.info(
+                        f"🔄 [TROCA-INST] Reutilizando conversa mais antiga (evitar duplicata): "
+                        f"conv_id={mais_antiga.id} (criada {mais_antiga.created_at}) em vez de {existing_conversation.id}; atualizando instance_name → {instance_name.strip()!r}"
+                    )
+                    existing_conversation = mais_antiga
+                    existing_conversation.instance_name = instance_name.strip()
+                    existing_conversation.instance_friendly_name = (
+                        (correct_friendly_name or "").strip()
+                        or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
+                        or (wa_instance and wa_instance.instance_name or "")
+                        or ""
+                    )
+                    existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
         
         # 2. Fallback: conversa legada sem instance_name (NULL ou vazio)
         if not existing_conversation:
@@ -1795,17 +1833,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # 3. Fallback órfã: instance_name preenchido mas com instância que não existe mais (removida/trocada)
         # Mesmo contato entrando pela instância atual → reutilizar conversa e atualizar instance_name
         if not existing_conversation and instance_name and str(instance_name).strip() and wa_instance and tenant:
+            # Import aqui evita UnboundLocalError (mais abaixo na função há outro import de WhatsAppInstance que torna o nome local)
+            from apps.notifications.models import WhatsAppInstance as _WAInstance
             valid_instance_names = set()
             valid_evolution_names = set()
             valid_phone_number_ids = set()
-            for row in WhatsAppInstance.objects.filter(tenant=tenant, is_active=True).values_list(
+            for row in _WAInstance.objects.filter(tenant=tenant, is_active=True).values_list(
                 "instance_name", "evolution_instance_name", "phone_number_id"
             ):
-                if row[0]:
+                if row[0] is not None and str(row[0]).strip():
                     valid_instance_names.add(str(row[0]).strip())
-                if row[1]:
+                if row[1] is not None and str(row[1]).strip():
                     valid_evolution_names.add(str(row[1]).strip())
-                if row[2]:
+                if row[2] is not None and str(row[2]).strip():
                     valid_phone_number_ids.add(str(row[2]).strip())
 
             def _is_orphan(conv):
@@ -1838,14 +1878,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         existing_conversation.instance_friendly_name = (
                             (correct_friendly_name or "").strip()
                             or (getattr(wa_instance, "friendly_name", None) or "").strip()
-                            or wa_instance.instance_name
+                            or (getattr(wa_instance, "instance_name", None) or "")
+                            or ""
                         )
                         existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
                         break
         
         # 4. Fallback tenant com uma única instância ativa: qualquer conversa (tenant+phone) é a mesma
         if not existing_conversation and instance_name and str(instance_name).strip() and wa_instance and tenant:
-            if WhatsAppInstance.objects.filter(tenant=tenant, is_active=True).count() == 1:
+            from apps.notifications.models import WhatsAppInstance as _WAInstance
+            if _WAInstance.objects.filter(tenant=tenant, is_active=True).count() == 1:
                 existing_conversation = (
                     Conversation.objects.filter(base_filter)
                     .order_by("-last_message_at", "-created_at")
@@ -1860,7 +1902,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     existing_conversation.instance_friendly_name = (
                         (correct_friendly_name or "").strip()
                         or (getattr(wa_instance, "friendly_name", None) or "").strip()
-                        or wa_instance.instance_name
+                        or (getattr(wa_instance, "instance_name", None) or "")
+                        or ""
                     )
                     existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
         
@@ -1906,78 +1949,109 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             conversation = existing_conversation
             created = False
         else:
-            # Criar nova conversa com telefone normalizado
-            logger.info(f"📋 [ROUTING] Criando nova conversa com defaults:")
-            logger.info(f"   📋 department no defaults: {defaults.get('department')} ({defaults.get('department').name if defaults.get('department') else 'None'})")
-            logger.info(f"   📋 department_id no defaults: {defaults.get('department').id if defaults.get('department') else 'None'}")
-            logger.info(f"   📊 status: {defaults.get('status')}")
-            logger.info(f"   📞 contact_phone: {normalized_phone}")
-            logger.info(f"   🔍 default_department disponível: {default_department.name if default_department else 'None'}")
-            
-            # ✅ VERIFICAÇÃO CRÍTICA: Garantir que department está nos defaults
-            if default_department and 'department' not in defaults:
-                logger.warning(f"⚠️ [ROUTING] default_department existe mas não está em defaults, adicionando...")
-                defaults['department'] = default_department
-            elif default_department and defaults.get('department') != default_department:
-                logger.warning(f"⚠️ [ROUTING] default_department diferente do que está em defaults, corrigindo...")
-                defaults['department'] = default_department
-            
-            try:
-                conversation = Conversation.objects.create(
-                    tenant=tenant,
-                    contact_phone=normalized_phone,
-                    **defaults
-                )
-            except Exception as create_err:
-                # ✅ Race condition: outro webhook criou primeiro. Buscar e usar.
-                from django.db import IntegrityError
-                if isinstance(create_err, IntegrityError) and 'idx_chat_conversation_unique' in str(create_err):
-                    logger.warning(f"⚠️ [WEBHOOK] Race: conversa já existe, buscando... ({create_err})")
-                    inst_key = (instance_name or '').strip() or ''
-                    existing_conversation = Conversation.objects.filter(
+            # ✅ Último fallback antes de criar: troca de instância — existe alguma conversa (tenant+phone)?
+            # Reutilizar a mais antiga e atualizar instance_name para não duplicar ao trocar instância WhatsApp.
+            # Só aplicar quando tenant tem 1 instância ativa (evita juntar conversas de Comercial/Suporte).
+            if instance_name and str(instance_name).strip() and not is_group and wa_instance:
+                from apps.notifications.models import WhatsAppInstance as _WAInstance
+                if _WAInstance.objects.filter(tenant=tenant, is_active=True).count() == 1:
+                    qualquer_conv = (
+                        Conversation.objects.filter(base_filter)
+                        .order_by("created_at", "id")
+                        .first()
+                    )
+                else:
+                    qualquer_conv = None
+                if qualquer_conv:
+                    inst_name = (instance_name or "").strip()
+                    logger.info(
+                        f"🔄 [TROCA-INST] Reutilizando única conversa existente (evitar duplicata): "
+                        f"conv_id={qualquer_conv.id}; atualizando instance_name → {inst_name!r}"
+                    )
+                    qualquer_conv.instance_name = inst_name
+                    qualquer_conv.instance_friendly_name = (
+                        (correct_friendly_name or "").strip()
+                        or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
+                        or (wa_instance and wa_instance.instance_name or "")
+                        or ""
+                    )
+                    qualquer_conv.save(update_fields=["instance_name", "instance_friendly_name"])
+                    existing_conversation = qualquer_conv
+                    conversation = existing_conversation
+                    created = False
+            if not existing_conversation:
+                # Criar nova conversa com telefone normalizado
+                logger.info(f"📋 [ROUTING] Criando nova conversa com defaults:")
+                logger.info(f"   📋 department no defaults: {defaults.get('department')} ({defaults.get('department').name if defaults.get('department') else 'None'})")
+                logger.info(f"   📋 department_id no defaults: {defaults.get('department').id if defaults.get('department') else 'None'}")
+                logger.info(f"   📊 status: {defaults.get('status')}")
+                logger.info(f"   📞 contact_phone: {normalized_phone}")
+                logger.info(f"   🔍 default_department disponível: {default_department.name if default_department else 'None'}")
+                
+                # ✅ VERIFICAÇÃO CRÍTICA: Garantir que department está nos defaults
+                if default_department and 'department' not in defaults:
+                    logger.warning(f"⚠️ [ROUTING] default_department existe mas não está em defaults, adicionando...")
+                    defaults['department'] = default_department
+                elif default_department and defaults.get('department') != default_department:
+                    logger.warning(f"⚠️ [ROUTING] default_department diferente do que está em defaults, corrigindo...")
+                    defaults['department'] = default_department
+                
+                try:
+                    conversation = Conversation.objects.create(
                         tenant=tenant,
-                        contact_phone=normalized_phone
-                    ).filter(
-                        Q(instance_name=inst_key) if inst_key else (Q(instance_name='') | Q(instance_name__isnull=True))
-                    ).first()
-                    if not existing_conversation:
+                        contact_phone=normalized_phone,
+                        **defaults
+                    )
+                except Exception as create_err:
+                    # ✅ Race condition: outro webhook criou primeiro. Buscar e usar.
+                    from django.db import IntegrityError
+                    if isinstance(create_err, IntegrityError) and 'idx_chat_conversation_unique' in str(create_err):
+                        logger.warning(f"⚠️ [WEBHOOK] Race: conversa já existe, buscando... ({create_err})")
+                        inst_key = (instance_name or '').strip() or ''
                         existing_conversation = Conversation.objects.filter(
-                            tenant=tenant, contact_phone=normalized_phone
+                            tenant=tenant,
+                            contact_phone=normalized_phone
+                        ).filter(
+                            Q(instance_name=inst_key) if inst_key else (Q(instance_name='') | Q(instance_name__isnull=True))
                         ).first()
-                    if existing_conversation:
-                        conversation = existing_conversation
-                        created = False
-                        logger.info(f"✅ [WEBHOOK] Conversa encontrada após race: {conversation.id}")
+                        if not existing_conversation:
+                            existing_conversation = Conversation.objects.filter(
+                                tenant=tenant, contact_phone=normalized_phone
+                            ).first()
+                        if existing_conversation:
+                            conversation = existing_conversation
+                            created = False
+                            logger.info(f"✅ [WEBHOOK] Conversa encontrada após race: {conversation.id}")
+                        else:
+                            raise
                     else:
                         raise
                 else:
-                    raise
-            else:
-                created = True
-            
-            # ✅ DEBUG: Verificar se department foi aplicado
-            logger.info(f"📋 [ROUTING] Conversa criada - verificando department aplicado:")
-            logger.info(f"   📋 conversation.department_id: {conversation.department_id}")
-            logger.info(f"   📋 conversation.department: {conversation.department.name if conversation.department else 'None'}")
-            logger.info(f"   📋 defaults tinha department: {defaults.get('department').id if defaults.get('department') else 'None'}")
-            
-            # ✅ VERIFICAÇÃO: Forçar department apenas se era esperado (não para individual incoming → Inbox)
-            if default_department and not conversation.department and not use_inbox_for_new:
-                logger.warning(f"⚠️ [ROUTING] Conversa criada sem department, forçando default_department")
-                conversation.department = default_department
-                conversation.status = 'open'
-                conversation.save(update_fields=['department', 'status'])
-                logger.info(f"✅ [ROUTING] Department forçado após criação: {conversation.department.name}")
-            
-            # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
-            if not from_me:  # Apenas para mensagens recebidas
-                try:
-                    from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                    if WelcomeMenuService.should_send_menu(conversation):
-                        logger.info(f"📋 [WELCOME MENU] Enviando menu para nova conversa: {conversation.id}")
-                        WelcomeMenuService.send_welcome_menu(conversation)
-                except Exception as e:
-                    logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para nova conversa: {e}", exc_info=True)
+                    created = True
+                
+                # ✅ DEBUG: Verificar se department foi aplicado
+                logger.info(f"📋 [ROUTING] Conversa criada - verificando department aplicado:")
+                logger.info(f"   📋 conversation.department_id: {conversation.department_id}")
+                logger.info(f"   📋 conversation.department: {conversation.department.name if conversation.department else 'None'}")
+                logger.info(f"   📋 defaults tinha department: {defaults.get('department').id if defaults.get('department') else 'None'}")
+                
+                # ✅ VERIFICAÇÃO: Forçar department apenas se era esperado (não para individual incoming → Inbox)
+                if default_department and not conversation.department and not use_inbox_for_new:
+                    logger.warning(f"⚠️ [ROUTING] Conversa criada sem department, forçando default_department")
+                    conversation.department = default_department
+                    conversation.status = 'open'
+                    conversation.save(update_fields=['department', 'status'])
+                    logger.info(f"✅ [ROUTING] Department forçado após criação: {conversation.department.name}")
+                
+                # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
+                if not from_me:  # Apenas para mensagens recebidas
+                    try:
+                        from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                        if WelcomeMenuService.should_send_menu(conversation):
+                            logger.info(f"📋 [WELCOME MENU] Enviando menu para nova conversa: {conversation.id}")
+                            WelcomeMenuService.send_welcome_menu(conversation)
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para nova conversa: {e}", exc_info=True)
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {normalized_phone} (original: {phone}) | Tipo: {conversation_type}")
         logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
@@ -2828,10 +2902,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         if msg_created:
             logger.info(f"✅ [WEBHOOK] MENSAGEM NOVA CRIADA NO BANCO!")
-            logger.info(f"   ID interno: {message.id}")
-            logger.info(f"   Message ID: {message_id}")
-            logger.info(f"   Direction: {direction}")
-            logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
+            logger.info(f"   INCOMING: {direction == 'incoming'} | Contato: {conversation.contact_phone} | Conversa: {conversation.id}")
+            logger.info(f"   ID interno: {message.id} | Message ID: {message_id}")
+            if direction == 'incoming':
+                logger.info(f"📥 [CHAT] Nova mensagem recebida salva – contato {conversation.contact_phone} (conv_id={conversation.id})")
         else:
             logger.info(f"ℹ️ [WEBHOOK] Mensagem já existia no banco (message_id={message_id})")
             logger.info(f"   ID interno: {message.id}")

@@ -789,11 +789,23 @@ class EvolutionWebhookView(APIView):
     def handle_message_upsert(self, data):
         """Handle new messages from Evolution API."""
         try:
-            # ✅ DEBUG CRÍTICO: Log quando messages.upsert chega
-            logger.info(f"📥 [CONNECTIONS WEBHOOK] ====== messages.upsert RECEBIDO ======")
+            # ✅ DEBUG CRÍTICO: Log quando messages.upsert chega (permite confirmar se evento chegou ao backend)
+            try:
+                raw_data = data.get('data')
+                if isinstance(raw_data, dict):
+                    msg_for_log = raw_data
+                elif isinstance(raw_data, list) and len(raw_data) > 0:
+                    msg_for_log = raw_data[0]
+                else:
+                    msg_for_log = {}
+                key = msg_for_log.get('key') or {}
+                remote_jid = key.get('remoteJid', '') if isinstance(key, dict) else ''
+            except Exception:
+                remote_jid = ''
+            logger.info(
+                f"📥 [CONNECTIONS WEBHOOK] ====== messages.upsert RECEBIDO ====== instance={data.get('instance', 'N/A')} remoteJid={remote_jid}"
+            )
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
-            logger.info(f"📥 [CONNECTIONS WEBHOOK] Data completo: {data}")
-            logger.info(f"📥 [CONNECTIONS WEBHOOK] Tipo de data: {type(data)}")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Event: {data.get('event', 'N/A')}")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance: {data.get('instance', 'N/A')}")
             
@@ -966,6 +978,19 @@ class EvolutionWebhookView(APIView):
                         elif connection:
                             logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
                             chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
+                        else:
+                            # ✅ FALLBACK FINAL: Evitar perder mensagem quando instance não foi encontrada
+                            connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
+                            if connection and connection.tenant:
+                                logger.warning(
+                                    f"⚠️ [FLOW CHAT] Instance {instance_name} não encontrada; processando com primeira connection ativa (tenant={connection.tenant.name}) para não perder mensagem"
+                                )
+                                chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
+                            else:
+                                logger.error(
+                                    f"❌ [FLOW CHAT] Mensagem NÃO processada: instance={instance_name} não encontrada e nenhuma connection/tenant disponível. "
+                                    f"Verifique evolution_instance_name/instance_name nas Instâncias WhatsApp (ex: {instance_name})."
+                                )
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}", exc_info=True)
             
