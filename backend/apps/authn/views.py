@@ -115,6 +115,38 @@ def update_profile(request):
             print(f"📝 Updating field {field}: {request.data[field]}")
             setattr(user, field, request.data[field])
     
+    # Instância padrão para novas conversas: só alterar se a chave estiver presente (compatibilidade)
+    if 'default_whatsapp_instance_id' in request.data:
+        from apps.notifications.models import WhatsAppInstance
+        raw = request.data.get('default_whatsapp_instance_id')
+        if raw is None or (isinstance(raw, str) and (raw.strip().lower() == 'null' or not raw.strip())):
+            user.default_whatsapp_instance_id = None
+        else:
+            try:
+                import uuid
+                uid = uuid.UUID(str(raw))
+            except (ValueError, TypeError):
+                return Response(
+                    {'detail': 'Instância não encontrada ou inativa'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not getattr(user, 'tenant_id', None):
+                return Response(
+                    {'detail': 'Instância não encontrada ou inativa'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            wa = WhatsAppInstance.objects.filter(
+                id=uid,
+                tenant_id=user.tenant_id,
+                is_active=True
+            ).first()
+            if not wa:
+                return Response(
+                    {'detail': 'Instância não encontrada ou inativa'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            user.default_whatsapp_instance_id = wa.id
+    
     try:
         user.save()
         print(f"✅ Profile updated successfully for user: {user.username}")

@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Search, User, Phone, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '@/stores/authStore';
+import { usePermissions } from '@/hooks/usePermissions';
 import { showErrorToast } from '@/lib/toastHelper';
 
 interface Contact {
@@ -16,6 +18,7 @@ interface WhatsAppInstance {
   friendly_name: string;
   instance_name: string;
   is_active: boolean;
+  is_default?: boolean;
 }
 
 interface NewConversationModalProps {
@@ -24,7 +27,9 @@ interface NewConversationModalProps {
 }
 
 export function NewConversationModal({ isOpen, onClose }: NewConversationModalProps) {
-  const { setActiveConversation, addConversation, activeDepartment } = useChatStore();
+  const { setActiveConversation, addConversation, activeDepartment, departments } = useChatStore();
+  const { user } = useAuthStore();
+  const { can_access_all_departments, departmentIds } = usePermissions();
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -33,8 +38,20 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const [isValidPhone, setIsValidPhone] = useState(false);
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
 
-  // ✅ MULTI-INSTÂNCIA: Buscar instâncias quando modal abre (para seletor se > 1)
+  // Departamentos reais do usuário (exclui inbox e my_conversations)
+  const userDepartments = useMemo(() => {
+    const list = Array.isArray(departments) ? departments : [];
+    const real = list.filter(
+      (d: { id: string }) => d.id !== 'inbox' && d.id !== 'my_conversations'
+    );
+    if (can_access_all_departments) return real;
+    if (!departmentIds?.length) return [];
+    return real.filter((d: { id: string }) => departmentIds.includes(d.id));
+  }, [departments, can_access_all_departments, departmentIds]);
+
+  // ✅ MULTI-INSTÂNCIA: Buscar instâncias quando modal abre; preselection = user default ou is_default ou primeira
   useEffect(() => {
     if (!isOpen) return;
     const fetchInstances = async () => {
@@ -48,7 +65,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         if (list.length === 1) {
           setSelectedInstanceId(list[0].id);
         } else if (list.length > 1) {
-          setSelectedInstanceId(list[0]?.id ?? null);
+          const userDefaultId = user?.default_whatsapp_instance_id ?? user?.default_whatsapp_instance?.id;
+          const inList = userDefaultId && list.some((i: WhatsAppInstance) => i.id === userDefaultId);
+          const defaultInstance = list.find((i: WhatsAppInstance) => i.is_default === true);
+          const pick = inList ? userDefaultId : (defaultInstance?.id ?? list[0]?.id ?? null);
+          setSelectedInstanceId(pick);
         } else {
           setSelectedInstanceId(null);
         }
@@ -58,7 +79,27 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       }
     };
     fetchInstances();
-  }, [isOpen]);
+  }, [isOpen, user?.default_whatsapp_instance_id, user?.default_whatsapp_instance?.id]);
+
+  // Inicializar selectedDepartmentId quando modal abre: activeDepartment na lista ou primeiro
+  useEffect(() => {
+    if (!isOpen || userDepartments.length === 0) return;
+    if (userDepartments.length === 1) {
+      setSelectedDepartmentId(userDepartments[0].id);
+      return;
+    }
+    const activeInList = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations' &&
+      userDepartments.some((d: { id: string }) => d.id === activeDepartment.id);
+    setSelectedDepartmentId(activeInList ? activeDepartment!.id : userDepartments[0].id);
+  }, [isOpen, userDepartments, activeDepartment]);
+
+  // department_id a enviar no POST /start/: 0 depts = undefined; 1 = esse id; 2+ = selectedDepartmentId (se ainda estiver na lista)
+  const departmentIdForStart = useMemo(() => {
+    if (userDepartments.length === 0) return undefined;
+    if (userDepartments.length === 1) return userDepartments[0].id;
+    const valid = selectedDepartmentId && userDepartments.some((d: { id: string }) => d.id === selectedDepartmentId);
+    return valid ? selectedDepartmentId : (userDepartments[0]?.id ?? undefined);
+  }, [userDepartments, selectedDepartmentId]);
 
   // Detectar se query é telefone ou nome
   const isPhoneQuery = useCallback((query: string): boolean => {
@@ -199,16 +240,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
-        // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
-        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
-          ? activeDepartment.id
-          : undefined;
-        
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: contact.name,
-          ...(departmentId && { department: departmentId }),
+          ...(departmentIdForStart && { department: departmentIdForStart }),
           ...(selectedInstanceId && { instance_id: selectedInstanceId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
@@ -288,16 +323,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
-        // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
-        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
-          ? activeDepartment.id
-          : undefined;
-        
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
-          contact_name: normalizedPhone, // Usar telefone como nome se não tiver contato
-          ...(departmentId && { department: departmentId }),
+          contact_name: normalizedPhone,
+          ...(departmentIdForStart && { department: departmentIdForStart }),
           ...(selectedInstanceId && { instance_id: selectedInstanceId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
@@ -395,6 +424,22 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                 <option key={inst.id} value={inst.id}>
                   {inst.friendly_name || inst.instance_name || inst.id}
                 </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Departamento (só quando usuário tem 2+ departamentos) */}
+        {userDepartments.length > 1 && (
+          <div className="px-4 pt-4 pb-2 border-b border-border">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Iniciar no departamento</label>
+            <select
+              value={selectedDepartmentId ?? ''}
+              onChange={(e) => setSelectedDepartmentId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background text-sm"
+            >
+              {userDepartments.map((d: { id: string; name: string }) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
           </div>

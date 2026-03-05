@@ -15,8 +15,16 @@ import {
   X,
   Crown,
   Bell,
-  MessageSquare
+  MessageSquare,
+  Smartphone
 } from 'lucide-react'
+
+interface WhatsAppInstanceOption {
+  id: string
+  friendly_name: string
+  instance_name?: string
+  is_active?: boolean
+}
 
 interface ProfileData {
   id: string
@@ -27,6 +35,7 @@ interface ProfileData {
   birth_date: string
   notify_email: boolean
   notify_whatsapp: boolean
+  default_whatsapp_instance_id?: string | null
 }
 
 interface PasswordData {
@@ -51,7 +60,9 @@ export default function ProfilePage() {
     birth_date: '',
     notify_email: true,
     notify_whatsapp: true,
+    default_whatsapp_instance_id: null,
   })
+  const [instances, setInstances] = useState<WhatsAppInstanceOption[]>([])
 
   const [passwordData, setPasswordData] = useState<PasswordData>({
     current_password: '',
@@ -62,7 +73,8 @@ export default function ProfilePage() {
   // Initialize profile data from user
   useEffect(() => {
     if (user) {
-      setProfileData({
+      setProfileData(prev => ({
+        ...prev,
         id: user.id.toString(),
         email: user.email || '',
         first_name: user.first_name || '',
@@ -71,9 +83,26 @@ export default function ProfilePage() {
         birth_date: user.birth_date || '',
         notify_email: user.notify_email ?? true,
         notify_whatsapp: user.notify_whatsapp ?? true,
-      })
+        default_whatsapp_instance_id: user.default_whatsapp_instance_id ?? user.default_whatsapp_instance?.id ?? null,
+      }))
     }
   }, [user])
+
+  // Fetch WhatsApp instances (for "instância padrão" section when 2+)
+  useEffect(() => {
+    let cancelled = false
+    api.get('/notifications/whatsapp-instances/', { params: { page_size: 50 } })
+      .then(res => {
+        if (cancelled) return
+        const results = res.data.results ?? res.data ?? []
+        const list = Array.isArray(results) ? results.filter((i: WhatsAppInstanceOption) => i.is_active !== false) : []
+        setInstances(list)
+      })
+      .catch(() => {
+        if (!cancelled) setInstances([])
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,7 +111,7 @@ export default function ProfilePage() {
 
     try {
       console.log('🔍 Updating profile with data:', profileData)
-      const response = await api.patch('/auth/profile/', {
+      const payload: Record<string, unknown> = {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         email: profileData.email,
@@ -90,7 +119,13 @@ export default function ProfilePage() {
         birth_date: profileData.birth_date,
         notify_email: profileData.notify_email,
         notify_whatsapp: profileData.notify_whatsapp,
-      })
+      }
+      if (instances.length > 1) {
+        const preferredId = profileData.default_whatsapp_instance_id ?? null
+        const validId = preferredId && instances.some((i) => i.id === preferredId) ? preferredId : null
+        payload.default_whatsapp_instance_id = validId
+      }
+      const response = await api.patch('/auth/profile/', payload)
       
       console.log('✅ Profile update response:', response.data)
       
@@ -360,6 +395,28 @@ export default function ProfilePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Instância padrão para novas conversas (só quando há 2+ instâncias) */}
+              {instances.length > 1 && (
+                <div>
+                  <Label className="flex items-center gap-1">
+                    <Smartphone className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                    Instância padrão para novas conversas
+                  </Label>
+                  <select
+                    value={profileData.default_whatsapp_instance_id && instances.some((i) => i.id === profileData.default_whatsapp_instance_id) ? profileData.default_whatsapp_instance_id : ''}
+                    onChange={(e) => setProfileData({ ...profileData, default_whatsapp_instance_id: e.target.value || null })}
+                    className="flex h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-1"
+                  >
+                    <option value="">Nenhuma (usar padrão do sistema)</option>
+                    {instances.map((inst) => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.friendly_name || inst.instance_name || inst.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </form>
 

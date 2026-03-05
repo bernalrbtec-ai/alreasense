@@ -41,6 +41,9 @@ interface User {
     plan?: string
     status?: string
   }
+  // Instância WhatsApp padrão para novas conversas (quando tenant tem 2+ instâncias)
+  default_whatsapp_instance_id?: string | null
+  default_whatsapp_instance?: { id: string; friendly_name: string } | null
 }
 
 interface AuthState {

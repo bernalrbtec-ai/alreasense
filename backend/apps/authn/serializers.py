@@ -177,6 +177,8 @@ class UserSerializer(serializers.ModelSerializer):
     is_operator = serializers.ReadOnlyField()
     avatar = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    default_whatsapp_instance_id = serializers.SerializerMethodField()
+    default_whatsapp_instance = serializers.SerializerMethodField()
     
     class Meta:
         model = User
@@ -188,7 +190,8 @@ class UserSerializer(serializers.ModelSerializer):
             'is_admin', 'is_gerente', 'is_agente', 'is_operator', 
             'is_superuser', 'is_staff', 'permissions',
             'avatar', 'display_name', 'phone', 'birth_date',
-            'notify_email', 'notify_whatsapp'
+            'notify_email', 'notify_whatsapp',
+            'default_whatsapp_instance_id', 'default_whatsapp_instance',
         ]
         read_only_fields = ['id', 'date_joined', 'is_superuser', 'is_staff']
     
@@ -221,6 +224,24 @@ class UserSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.avatar.url)
             return obj.avatar.url
         return None
+    
+    def get_default_whatsapp_instance_id(self, obj):
+        """Retorna o id da instância padrão só se existir, estiver ativa e for do mesmo tenant; senão null."""
+        wa = getattr(obj, 'default_whatsapp_instance', None)
+        if not wa or not getattr(wa, 'is_active', False):
+            return None
+        if getattr(wa, 'tenant_id', None) is not None and getattr(obj, 'tenant_id', None) != wa.tenant_id:
+            return None
+        return str(wa.id)
+
+    def get_default_whatsapp_instance(self, obj):
+        """Retorna { id, friendly_name } só quando a instância está ativa e do mesmo tenant; senão null."""
+        wa = getattr(obj, 'default_whatsapp_instance', None)
+        if not wa or not getattr(wa, 'is_active', False):
+            return None
+        if getattr(wa, 'tenant_id', None) is not None and getattr(obj, 'tenant_id', None) != wa.tenant_id:
+            return None
+        return {'id': str(wa.id), 'friendly_name': getattr(wa, 'friendly_name', '') or ''}
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

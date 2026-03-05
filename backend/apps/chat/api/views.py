@@ -1628,6 +1628,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # ✅ CORREÇÃO: Se não especificado ou ID especial da UI, criar sem departamento (Inbox)
             logger.info(f"📋 [CONVERSATION START] Nenhum departamento especificado - criando no Inbox")
         
+        # Validar permissão: usuário só pode criar conversa em departamento ao qual tem acesso
+        if department is not None:
+            if not (
+                request.user.can_access_all_departments()
+                or request.user.departments.filter(id=department.id).exists()
+            ):
+                return Response(
+                    {'error': 'Sem permissão para criar conversa neste departamento'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
         # ✅ CORREÇÃO: Normalizar telefone/ID antes de buscar/criar para evitar duplicatas
         # Para grupos, manter formato @g.us; para individuais, garantir E.164 com +
         from apps.contacts.signals import normalize_phone_for_search

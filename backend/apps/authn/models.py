@@ -123,6 +123,14 @@ class User(AbstractUser):
         default=True,
         help_text="Receber notificações por WhatsApp"
     )
+    default_whatsapp_instance = models.ForeignKey(
+        'notifications.WhatsAppInstance',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='users_default_for_chat',
+        help_text="Instância WhatsApp padrão para novas conversas (opcional)"
+    )
     
     class Meta:
         db_table = 'authn_user'
