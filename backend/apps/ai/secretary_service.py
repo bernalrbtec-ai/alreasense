@@ -860,6 +860,10 @@ def _secretary_worker(conversation, message) -> None:
         if no_reply_from_model and not suggested_department_id:
             return
 
+        # Primeira resposta = ainda não existe mensagem outgoing visível (evita dois balões: resposta + transferência)
+        had_outgoing = conversation.messages.filter(direction="outgoing", is_internal=False).exists()
+        is_first_response = not had_outgoing
+
         latency_ms = int((time.time() - start_time) * 1000)
         request_id = data.get("request_id")
         trace_id = data.get("trace_id")
@@ -929,8 +933,15 @@ def _secretary_worker(conversation, message) -> None:
                 conversation.id, suggested_department_id,
             )
         summary_for_department = str(data.get("summary_for_department") or "").strip()
-        # Fallback: quando há transferência mas a IA não enviou resumo, usar mensagem que disparou
-        if suggested_department_id and not summary_for_department:
+        # Na primeira resposta com reply_text, ignorar transferência para o cliente receber um único balão
+        if suggested_department_id and is_first_response and not no_reply_from_model:
+            logger.info(
+                "[SECRETARY] Primeira resposta: ignorando transferência para um único balão (conv=%s, suggested_dept=%s)",
+                conversation.id, suggested_department_id,
+            )
+        # Fallback: quando vamos aplicar transferência e a IA não enviou resumo, usar mensagem que disparou
+        apply_transfer = suggested_department_id and (not is_first_response or no_reply_from_model)
+        if apply_transfer and not summary_for_department:
             trigger_content = (_message_content_for_secretary(message) or "").strip()
             # Placeholders de mídia sem texto não servem como resumo; usar mensagem fixa
             uninformative = (
@@ -946,7 +957,8 @@ def _secretary_worker(conversation, message) -> None:
                 "[SECRETARY] Resumo não veio do N8N; usando fallback (conv=%s, len=%s)",
                 conversation.id, len(summary_for_department),
             )
-        if suggested_department_id:
+        # Aplicar transferência (apply_transfer já considera primeira resposta + reply para um único balão)
+        if apply_transfer:
             try:
                 from apps.authn.models import Department
                 dept = Department.objects.filter(
