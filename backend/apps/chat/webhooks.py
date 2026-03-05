@@ -2433,25 +2433,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as e:
                             logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
                 
-                    # Ao reabrir conversa fechada: se BIA (Secretária IA) está ativa, sempre colocar no Inbox
-                    # para ela responder; senão respeitar default_department da instância.
-                    from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
-                    secretary_responds = (
-                        TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
-                        and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
-                    )
-                    if secretary_responds:
-                        conversation.department = None
-                        conversation.status = 'pending' if not from_me else 'open'
-                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (BIA ativa, secretária pode responder)")
-                    elif default_department:
+                    # Ao reabrir conversa fechada: respeitar sempre a configuração da instância
+                    # (departamento padrão ou Inbox). BIA pode estar ativa; o que vale é o que está na instância.
+                    if default_department:
                         conversation.department = default_department
                         conversation.status = 'open'
                         logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no departamento {default_department.name} (instância com departamento padrão)")
                     else:
                         conversation.department = None
                         conversation.status = 'pending' if not from_me else 'open'
-                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (sem departamento padrão)")
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (instância sem departamento padrão)")
                     # Reaberta vai para a fila: sem agente atribuído
                     conversation.assigned_to = None
                     conversation.save(update_fields=['status', 'department', 'assigned_to'])
