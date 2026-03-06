@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Search, User, Phone, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { rawInputToE164 } from '@/lib/phoneDDD';
+import { PhoneInputWithDDD } from '@/components/PhoneInputWithDDD';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -292,13 +294,14 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     }
   };
 
-  // Iniciar conversa com telefone direto
+  // Iniciar conversa com telefone direto (usa E.164 com DDD; default 17 se só número)
   const handleStartConversationWithPhone = async () => {
-    if (!isValidPhone) return;
+    const effectivePhone = rawInputToE164(phoneInput, '17') || normalizePhone(phoneInput);
+    if (!effectivePhone || !validatePhone(effectivePhone)) return;
 
     try {
       setIsCreating(true);
-      const normalizedPhone = normalizePhone(phoneInput);
+      const normalizedPhone = effectivePhone;
       
       // Verificar se conversa já existe (filtrar pela instância selecionada)
       const listParams: Record<string, string> = { search: normalizedPhone };
@@ -395,7 +398,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   if (!isOpen) return null;
 
   const isPhone = isPhoneQuery(searchQuery);
-  const showPhoneOption = isPhone && isValidPhone && contacts.length === 0;
+  const showPhoneOption = isPhone && contacts.length === 0;
+  const effectivePhone = showPhoneOption ? rawInputToE164(phoneInput, '17') : '';
+  const effectivePhoneValid = !!effectivePhone && validatePhone(effectivePhone);
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
@@ -518,19 +523,26 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
               ))}
             </div>
           ) : showPhoneOption ? (
-            <div className="text-center py-8">
-              <div className="mb-4">
-                <Phone className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
-                <p className="text-gray-600 dark:text-gray-400 mb-2">Nenhum contato encontrado</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  Iniciar conversa com <strong>{formatPhone(phoneInput)}</strong>
-                </p>
+            <div className="py-6 px-4">
+              <div className="mb-4 text-center">
+                <Phone className="h-10 w-10 mx-auto mb-3 text-gray-300 dark:text-gray-500" />
+                <p className="text-gray-600 dark:text-gray-400 mb-1">Nenhum contato encontrado</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Informe o DDD e o número para iniciar a conversa</p>
               </div>
-              <button
-                onClick={handleStartConversationWithPhone}
-                disabled={isCreating || !isValidPhone}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
-              >
+              <div className="max-w-sm mx-auto mb-4">
+                <PhoneInputWithDDD
+                  value={effectivePhone}
+                  onChange={(e164) => setPhoneInput(e164)}
+                  defaultDdd="17"
+                  placeholder="99999-9999"
+                />
+              </div>
+              <div className="text-center">
+                <button
+                  onClick={handleStartConversationWithPhone}
+                  disabled={isCreating || !effectivePhoneValid}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 mx-auto"
+                >
                 {isCreating ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -542,7 +554,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                     <span>Iniciar Conversa</span>
                   </>
                 )}
-              </button>
+                </button>
+              </div>
             </div>
           ) : isSearching ? (
             <div className="text-center py-8">

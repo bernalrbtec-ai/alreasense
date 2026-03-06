@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { PhoneInputWithDDD } from '../PhoneInputWithDDD'
+import { isValidBrazilianE164 } from '../../lib/phoneDDD'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 
@@ -160,8 +162,12 @@ export default function ContactModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!formData.name.trim() || !formData.phone.trim()) {
-      showErrorToast('salvar', 'Contato', { message: 'Nome e telefone são obrigatórios' })
+    if (!formData.name.trim()) {
+      showErrorToast('salvar', 'Contato', { message: 'Nome é obrigatório' })
+      return
+    }
+    if (!formData.phone.trim() || !isValidBrazilianE164(formData.phone)) {
+      showErrorToast('salvar', 'Contato', { message: 'Informe o telefone com DDD e número (ex.: 17 99999-9999)' })
       return
     }
 
@@ -280,13 +286,12 @@ export default function ContactModal({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Telefone *
                 </label>
-                <input
-                  type="tel"
-                  required
+                <PhoneInputWithDDD
                   value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="+5511999999999"
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                  onChange={(e164) => setFormData({ ...formData, phone: e164 })}
+                  defaultDdd="17"
+                  required
+                  placeholder="99999-9999"
                 />
               </div>
 
