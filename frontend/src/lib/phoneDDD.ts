@@ -63,3 +63,11 @@ export const E164_BR_REGEX = /^\+55\d{10,11}$/
 export function isValidBrazilianE164(phone: string): boolean {
   return typeof phone === 'string' && E164_BR_REGEX.test(phone.replace(/\s/g, ''))
 }
+
+/** Regex E.164 genérico (backend: \+?[1-9]\d{1,14}). Aceita internacional. */
+export const E164_REGEX = /^\+[1-9]\d{6,14}$/
+
+/** Retorna true se o valor for um E.164 válido (Brasil ou internacional). */
+export function isValidE164(phone: string): boolean {
+  return typeof phone === 'string' && E164_REGEX.test(phone.replace(/\s/g, ''))
+}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { PhoneInputWithDDD } from '../PhoneInputWithDDD'
-import { isValidBrazilianE164 } from '../../lib/phoneDDD'
+import { isValidE164 } from '../../lib/phoneDDD'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 
@@ -166,8 +166,8 @@ export default function ContactModal({
       showErrorToast('salvar', 'Contato', { message: 'Nome é obrigatório' })
       return
     }
-    if (!formData.phone.trim() || !isValidBrazilianE164(formData.phone)) {
-      showErrorToast('salvar', 'Contato', { message: 'Informe o telefone com DDD e número (ex.: 17 99999-9999)' })
+    if (!formData.phone.trim() || !isValidE164(formData.phone)) {
+      showErrorToast('salvar', 'Contato', { message: 'Informe o telefone com país, DDD e número no formato internacional' })
       return
     }
 

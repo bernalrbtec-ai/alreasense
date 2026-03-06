@@ -7,7 +7,7 @@ import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import ContactCard from '../components/contacts/ContactCard'
 import { PhoneInputWithDDD } from '../components/PhoneInputWithDDD'
-import { isValidBrazilianE164 } from '../lib/phoneDDD'
+import { isValidE164 } from '../lib/phoneDDD'
 import ImportContactsModal from '../components/contacts/ImportContactsModal'
 import ContactsTable from '../components/contacts/ContactsTable'
 import TagEditModal from '../components/contacts/TagEditModal'
@@ -325,24 +325,20 @@ export default function ContactsPage() {
       showErrorToast(editingContact ? 'atualizar' : 'criar', 'Contato', { message: 'Nome é obrigatório' })
       return
     }
-    if (!formData.phone.trim() || !isValidBrazilianE164(formData.phone)) {
-      showErrorToast(editingContact ? 'atualizar' : 'criar', 'Contato', { message: 'Informe o telefone com DDD e número (ex.: 17 99999-9999)' })
+    if (!formData.phone.trim() || !isValidE164(formData.phone)) {
+      showErrorToast(editingContact ? 'atualizar' : 'criar', 'Contato', { message: 'Informe o telefone com país, DDD e número no formato internacional' })
       return
     }
 
     const toastId = showLoadingToast(editingContact ? 'atualizar' : 'criar', 'Contato')
 
     try {
-      // Telefone já vem em E.164 do PhoneInputWithDDD; normalizar apenas para garantir
+      // Telefone já vem em E.164 do PhoneInputWithDDD; preservar internacional
       let normalizedPhone = formData.phone.replace(/\D/g, '')
-      
-      // Se não começar com código do país, adicionar +55 (Brasil)
-      if (normalizedPhone && !normalizedPhone.startsWith('55')) {
-        normalizedPhone = '55' + normalizedPhone
-      }
-      
-      // Adicionar o +
-      if (normalizedPhone && !normalizedPhone.startsWith('+')) {
+      if (formData.phone.trim().startsWith('+')) {
+        normalizedPhone = '+' + normalizedPhone
+      } else if (normalizedPhone) {
+        if (!normalizedPhone.startsWith('55')) normalizedPhone = '55' + normalizedPhone
         normalizedPhone = '+' + normalizedPhone
       }
       

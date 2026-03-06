@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { X, Search, User, Phone, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { rawInputToE164 } from '@/lib/phoneDDD';
+import { rawInputToE164, isValidE164 } from '@/lib/phoneDDD';
+import { parseE164ToCountryAndNational, buildE164International } from '@/lib/countryCodes';
 import { PhoneInputWithDDD } from '@/components/PhoneInputWithDDD';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -111,23 +112,14 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return /^\d{6,}$/.test(clean);
   }, []);
 
-  // Normalizar telefone para formato padrão
+  // Normalizar telefone para E.164 (preserva internacional)
   const normalizePhone = useCallback((phone: string): string => {
-    // Remove tudo exceto dígitos e +
-    let clean = phone.replace(/[^\d+]/g, '');
-    
-    // Se não começa com +, adicionar +55 (Brasil)
-    if (!clean.startsWith('+')) {
-      // Se começa com 55, adicionar +
-      if (clean.startsWith('55')) {
-        clean = '+' + clean;
-      } else {
-        // Adicionar +55 para números brasileiros
-        clean = '+55' + clean;
-      }
-    }
-    
-    return clean;
+    const digits = (phone || '').replace(/\D/g, '');
+    if (!digits.length) return '';
+    if (phone.trim().startsWith('+')) return '+' + digits;
+    const { dial, national } = parseE164ToCountryAndNational('+' + digits);
+    if (dial && national.length >= 6 && digits.startsWith(dial)) return '+' + digits;
+    return '+55' + digits;
   }, []);
 
   const isGroupIdentifier = useCallback((value: string): boolean => {
@@ -151,12 +143,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return digits ? `${digits}@g.us` : value;
   }, []);
 
-  // Validar telefone
+  // Validar telefone (Brasil ou internacional E.164)
   const validatePhone = useCallback((phone: string): boolean => {
     const normalized = normalizePhone(phone);
-    // Telefone válido: +55 seguido de 10 ou 11 dígitos (DDD + número)
-    // Ex: +5517999999999 (13 dígitos) ou +5511999999999 (13 dígitos)
-    return /^\+55\d{10,11}$/.test(normalized);
+    return isValidE164(normalized);
   }, [normalizePhone]);
 
   // Buscar contatos
@@ -294,9 +284,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     }
   };
 
-  // Iniciar conversa com telefone direto (usa E.164 com DDD; default 17 se só número)
+  // Iniciar conversa com telefone direto (E.164; Brasil ou internacional)
   const handleStartConversationWithPhone = async () => {
-    const effectivePhone = rawInputToE164(phoneInput, '17') || normalizePhone(phoneInput);
+    const effectivePhone = getEffectivePhone(phoneInput);
     if (!effectivePhone || !validatePhone(effectivePhone)) return;
 
     try {
@@ -399,7 +389,19 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
 
   const isPhone = isPhoneQuery(searchQuery);
   const showPhoneOption = isPhone && contacts.length === 0;
-  const effectivePhone = showPhoneOption ? rawInputToE164(phoneInput, '17') : '';
+
+  const getEffectivePhone = useCallback((input: string): string => {
+    if (!input.trim()) return '';
+    const digits = input.replace(/\D/g, '');
+    if (digits.length >= 12 && digits.startsWith('55')) return '+' + digits;
+    if (digits.length >= 10) {
+      const { dial, national } = parseE164ToCountryAndNational('+' + digits);
+      if (dial && national.length >= 6) return buildE164International(dial, national);
+    }
+    return rawInputToE164(input, '17');
+  }, []);
+
+  const effectivePhone = showPhoneOption ? getEffectivePhone(phoneInput) : '';
   const effectivePhoneValid = !!effectivePhone && validatePhone(effectivePhone);
 
   return (
