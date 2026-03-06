@@ -1350,12 +1350,28 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                                 quoted_message_id,
                             )
                     else:
-                        last_ok, last_data = await asyncio.to_thread(
-                            sender.send_text,
-                            recipient_value,
-                            content_for_send or '',
-                            quoted_message_id,
-                        )
+                        # Evolution: enviar com botões (sendButtons) para o destinatário ver os botões no WhatsApp
+                        meta = message.metadata or {}
+                        interactive = meta.get('interactive_reply_buttons')
+                        if interactive and interactive.get('body_text') and interactive.get('buttons') and 1 <= len(interactive['buttons']) <= 3:
+                            log.info(
+                                "✅ [CHAT ENVIO] Enviando mensagem interativa com %s botões (Evolution)",
+                                len(interactive['buttons']),
+                            )
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_interactive_reply_buttons,
+                                recipient_value,
+                                interactive['body_text'],
+                                interactive['buttons'],
+                                quoted_message_id,
+                            )
+                        else:
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_text,
+                                recipient_value,
+                                content_for_send or '',
+                                quoted_message_id,
+                            )
                 if last_ok:
                     evo_id = _extract_provider_message_id(last_data, provider_kind)
                     if evo_id:

@@ -1340,12 +1340,16 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   </div>
                 )}
                 {/* Meta 24h / reply buttons: mensagem com interactive_reply_buttons (body_text + buttons). Incoming = clicável (envia resposta); outgoing = só exibição. */}
-                {!messageItem.is_deleted && messageItem.metadata?.interactive_reply_buttons?.buttons && Array.isArray(messageItem.metadata.interactive_reply_buttons.buttons) && messageItem.metadata.interactive_reply_buttons.buttons.length > 0 && (
+                {!messageItem.is_deleted && (() => {
+                  const irb = messageItem.metadata?.interactive_reply_buttons;
+                  const buttons = Array.isArray(irb?.buttons) ? irb.buttons : [];
+                  if (buttons.length === 0) return null;
+                  return (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {messageItem.metadata.interactive_reply_buttons.buttons.map((btn: { id?: string; title?: string; text?: string }, i: number) => {
-                      const raw = typeof btn?.title === 'string' ? btn.title : (typeof btn?.text === 'string' ? btn.text : '');
-                      if (!raw || typeof raw !== 'string') return null;
-                      const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+                    {buttons.map((btn: { id?: string; title?: string; text?: string }, i: number) => {
+                      const raw = typeof btn?.title === 'string' ? btn.title : (typeof btn?.text === 'string' ? btn.text : (typeof btn?.id === 'string' ? btn.id : ''));
+                      const label = (raw && typeof raw === 'string' ? (raw.length > 80 ? `${raw.slice(0, 77)}...` : raw) : 'Botão') || 'Botão';
+                      const textToSend = (typeof raw === 'string' && raw) ? raw : label;
                       const isIncoming = messageItem.direction === 'incoming';
                       const replyToId = messageItem?.id != null ? String(messageItem.id) : '';
                       const canSend = isIncoming && replyToId && typeof onSendReplyButtonClick === 'function';
@@ -1354,7 +1358,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                           <button
                             key={String(btn?.id ?? i)}
                             type="button"
-                            onClick={() => onSendReplyButtonClick!(raw, replyToId)}
+                            onClick={() => onSendReplyButtonClick!(textToSend, replyToId)}
                             className="inline-block text-xs px-3 py-1.5 rounded-lg border border-green-500/50 text-green-700 dark:text-green-400 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-500/50 truncate max-w-[200px] transition-colors cursor-pointer"
                             title={raw.length > 80 ? raw : undefined}
                           >
@@ -1373,7 +1377,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                       );
                     })}
                   </div>
-                )}
+                  );
+                })()}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   {messageItem.is_edited && (

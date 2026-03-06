@@ -260,3 +260,66 @@ class EvolutionProvider(WhatsAppSenderBase):
         except Exception as e:
             logger.exception("Evolution send_location error: %s", e)
             return False, {'error': str(e), 'error_code': 'EXCEPTION'}
+
+    def send_interactive_reply_buttons(
+        self,
+        phone: str,
+        body_text: str,
+        buttons: list,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem com botões de resposta (reply buttons) via Evolution sendButtons.
+        Assim o destinatário vê os botões no WhatsApp.
+        buttons: list of dicts com 'id' e 'title' (ex.: [{'id': '1', 'title': 'Sim'}, ...]).
+        """
+        number = self._phone_clean(phone)
+        if not number:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        if not buttons or not isinstance(buttons, list) or len(buttons) > 3:
+            return False, {'error': 'buttons inválido (lista com 1 a 3 itens)', 'error_code': 'INVALID_BUTTONS'}
+        action_buttons = []
+        for b in buttons[:3]:
+            if not isinstance(b, dict):
+                continue
+            bid = (b.get('id') or '').strip() or str(len(action_buttons))
+            title = (b.get('title') or b.get('displayText') or '').strip() or bid
+            if isinstance(title, bytes):
+                title = title.decode('utf-8', errors='replace').strip()
+            action_buttons.append({
+                'id': str(bid)[:100],
+                'displayText': (title or ' ')[:100],
+                'title': 'reply',
+            })
+        if len(action_buttons) < 1:
+            return False, {'error': 'nenhum botão válido', 'error_code': 'INVALID_BUTTONS'}
+        body = (body_text or ' ').strip().replace('\x00', '')[:1024] or 'Mensagem'
+        payload = {
+            'number': number,
+            'title': (body[:50] if len(body) > 50 else body) or 'Mensagem',
+            'description': body,
+            'footer': '',
+            'buttons': action_buttons,
+        }
+        if quoted_message_id:
+            payload['quoted'] = {
+                'key': {
+                    'id': quoted_message_id,
+                    'remoteJid': f'{number}@s.whatsapp.net',
+                },
+            }
+        endpoint = f"{self._base_url}/message/sendButtons/{self._instance_name}"
+        logger.info(
+            "Enviando botões via Evolution (provider=evolution instance_id=%s) %s botões",
+            str(self.instance.id),
+            len(action_buttons),
+        )
+        try:
+            r = requests.post(endpoint, json=payload, headers=self._headers(), timeout=15)
+            if r.status_code in (200, 201):
+                return True, (r.json() if r.text else {})
+            return False, {'error': r.text[:500], 'status_code': r.status_code, 'response': r.text}
+        except Exception as e:
+            logger.exception("Evolution send_interactive_reply_buttons error: %s", e)
+            return False, {'error': str(e), 'error_code': 'EXCEPTION'}

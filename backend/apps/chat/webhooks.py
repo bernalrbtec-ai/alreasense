@@ -1629,7 +1629,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         elif message_type == 'buttonsMessage':
             # Mensagem que contém botões (reply buttons) – exibir título/descrição e botões no frontend
             try:
-                bm = message_info.get('buttonsMessage') or message_info.get('buttons') or {}
+                # Buscar em message_info e em message_data (Evolution pode colocar em qualquer nível)
+                bm = (
+                    message_info.get('buttonsMessage') or message_info.get('buttons') or
+                    message_data.get('buttonsMessage') or message_data.get('buttons') or {}
+                )
                 if not isinstance(bm, dict):
                     bm = {}
                 raw = bm.get('contentText') or bm.get('content') or bm.get('description') or bm.get('title') or ''
@@ -1762,7 +1766,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             bm = message_info.get('buttonsMessage') or message_data.get('buttonsMessage')
             if not isinstance(bm, dict):
                 bm = {}
-            buttons_raw = bm.get('buttons') or bm.get('buttonList') or message_info.get('buttonList') or message_info.get('buttons') or message_data.get('buttons')
+            # Buscar lista de botões em todos os formatos possíveis (message + data)
+            buttons_raw = (
+                bm.get('buttons') or bm.get('buttonList') or
+                message_info.get('buttonList') or message_info.get('buttons') or
+                message_data.get('buttonList') or message_data.get('buttons')
+            )
             if not isinstance(buttons_raw, list):
                 buttons_raw = []
             if buttons_raw:
@@ -2954,9 +2963,14 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ Mensagem com botões (buttonsMessage ou Meta 24h): metadata para exibir botões no frontend
         if interactive_reply_buttons_metadata:
             try:
+                # Garantir estrutura segura: body_text string, buttons lista (evita quebra no frontend)
+                irb = interactive_reply_buttons_metadata
+                body_text = (irb.get('body_text') or '') if isinstance(irb.get('body_text'), str) else str(irb.get('body_text') or '')[:1024]
+                buttons = irb.get('buttons') if isinstance(irb.get('buttons'), list) else []
+                safe_irb = {'body_text': body_text[:1024], 'buttons': buttons[:3]}
                 import json
-                json.dumps(interactive_reply_buttons_metadata)
-                message_defaults['metadata']['interactive_reply_buttons'] = interactive_reply_buttons_metadata
+                json.dumps(safe_irb)
+                message_defaults['metadata']['interactive_reply_buttons'] = safe_irb
             except (TypeError, ValueError) as _e:
                 logger.debug("interactive_reply_buttons_metadata não serializável: %s", _e)
         
@@ -3240,20 +3254,36 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # Mesclar metadata: preservar existente, adicionar apenas campos novos do webhook
             merged_metadata = {**existing_metadata, **new_metadata}
             
-            # ✅ Mensagem enviada por nós (from_me): preservar interactive_reply_buttons existente se tiver títulos reais
-            # (o webhook Evolution devolve só ids "0"/"1" nos botões e sobrescreveria "SIM"/"Não")
+            # ✅ Mensagem enviada por nós (from_me): preservar interactive_reply_buttons com títulos reais
+            # (webhook Evolution pode devolver só ids "0"/"1"; não sobrescrever "SIM"/"Não")
+            # Se o webhook trouxer botões com títulos reais e o existente não tiver, usar o do webhook
             if from_me:
+                def _has_real_title(btn):
+                    if not isinstance(btn, dict):
+                        return False
+                    t = (btn.get('title') or btn.get('text') or '').strip()
+                    return bool(t) and not (t.isdigit() and len(t) <= 2)
+
                 existing_irb = existing_metadata.get('interactive_reply_buttons')
-                if isinstance(existing_irb, dict):
-                    existing_buttons = existing_irb.get('buttons') if isinstance(existing_irb.get('buttons'), list) else []
-                    def _has_real_title(btn):
-                        if not isinstance(btn, dict):
-                            return False
-                        t = (btn.get('title') or btn.get('text') or '').strip()
-                        return bool(t) and not (t.isdigit() and len(t) <= 2)
-                    if existing_buttons and any(_has_real_title(b) for b in existing_buttons):
-                        merged_metadata['interactive_reply_buttons'] = existing_irb
-                        logger.info("🔄 [WEBHOOK] Preservando interactive_reply_buttons da mensagem enviada (evitar 0/1 no lugar de SIM/Não)")
+                existing_buttons = (
+                    existing_irb.get('buttons')
+                    if isinstance(existing_irb, dict) and isinstance(existing_irb.get('buttons'), list)
+                    else []
+                )
+                new_irb = new_metadata.get('interactive_reply_buttons')
+                new_buttons = (
+                    new_irb.get('buttons')
+                    if isinstance(new_irb, dict) and isinstance(new_irb.get('buttons'), list)
+                    else []
+                )
+                existing_has_real = existing_buttons and any(_has_real_title(b) for b in existing_buttons)
+                new_has_real = new_buttons and any(_has_real_title(b) for b in new_buttons)
+                if existing_has_real and not new_has_real:
+                    merged_metadata['interactive_reply_buttons'] = existing_irb
+                    logger.info("🔄 [WEBHOOK] Preservando interactive_reply_buttons da mensagem enviada (evitar 0/1 no lugar de SIM/Não)")
+                elif new_has_real and not existing_has_real:
+                    merged_metadata['interactive_reply_buttons'] = new_irb
+                    logger.info("🔄 [WEBHOOK] Usando interactive_reply_buttons do webhook (títulos reais)")
             
             # ✅ IMPORTANTE: Se metadata existente tem reply_to, preservar (não sobrescrever)
             if 'reply_to' in existing_metadata and 'reply_to' not in new_metadata:
