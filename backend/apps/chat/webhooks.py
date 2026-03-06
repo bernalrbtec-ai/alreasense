@@ -1656,8 +1656,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         if not isinstance(title, str):
                             title = str(title).strip() if title else ''
                         bid = (b.get('id') or '').strip() or str(len(buttons_list))
-                        if title or bid:
-                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100] if title else bid})
+                        # Só usar id como título se o payload não trouxer displayText (evitar "0"/"1" no lugar de "SIM"/"Não")
+                        if title:
+                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100]})
+                        elif bid and not (bid.isdigit() and len(bid) <= 2):
+                            buttons_list.append({'id': str(bid)[:100], 'title': bid[:100]})
                     if buttons_list:
                         interactive_reply_buttons_metadata = {
                             'body_text': content[:1024],
@@ -3198,6 +3201,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             # Mesclar metadata: preservar existente, adicionar apenas campos novos do webhook
             merged_metadata = {**existing_metadata, **new_metadata}
+            
+            # ✅ Mensagem enviada por nós (from_me): preservar interactive_reply_buttons existente se tiver títulos reais
+            # (o webhook Evolution devolve só ids "0"/"1" nos botões e sobrescreveria "SIM"/"Não")
+            if from_me:
+                existing_irb = existing_metadata.get('interactive_reply_buttons')
+                if isinstance(existing_irb, dict):
+                    existing_buttons = existing_irb.get('buttons') if isinstance(existing_irb.get('buttons'), list) else []
+                    def _has_real_title(btn):
+                        if not isinstance(btn, dict):
+                            return False
+                        t = (btn.get('title') or btn.get('text') or '').strip()
+                        return bool(t) and not (t.isdigit() and len(t) <= 2)
+                    if existing_buttons and any(_has_real_title(b) for b in existing_buttons):
+                        merged_metadata['interactive_reply_buttons'] = existing_irb
+                        logger.info("🔄 [WEBHOOK] Preservando interactive_reply_buttons da mensagem enviada (evitar 0/1 no lugar de SIM/Não)")
             
             # ✅ IMPORTANTE: Se metadata existente tem reply_to, preservar (não sobrescrever)
             if 'reply_to' in existing_metadata and 'reply_to' not in new_metadata:
