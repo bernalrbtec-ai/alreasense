@@ -3322,7 +3322,22 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     .filter(Q(message_id__isnull=True) | Q(message_id=''))
                     .order_by('-created_at')
                 ).first()
-                if candidate and (candidate.content or '').strip()[:500] == content_normalized:
+                # Match: conteúdo igual OU webhook é sufixo do candidato (ex.: candidato tem "Nome disse:\n\nteste 02", webhook "teste 02")
+                candidate_content = (candidate.content or '').strip()[:500] if candidate else ''
+                content_matches = (
+                    content_normalized
+                    and candidate_content == content_normalized
+                ) or (
+                    content_normalized
+                    and candidate_content
+                    and (content_normalized in candidate_content or candidate_content.endswith(content_normalized))
+                )
+                if candidate and not content_matches:
+                    logger.info(
+                        "🔄 [WEBHOOK] from_me: candidato id=%s mas conteúdo não confere (webhook=%r, candidato=%r)",
+                        candidate.id, content_normalized[:80], candidate_content[:80],
+                    )
+                if candidate and content_matches:
                     logger.info(
                         "🔄 [WEBHOOK] from_me: vinculando webhook à mensagem existente (message_id ainda não setado) id=%s",
                         candidate.id,
