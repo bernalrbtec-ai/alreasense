@@ -274,9 +274,16 @@ class EvolutionProvider(WhatsAppSenderBase):
         Assim o destinatário vê os botões no WhatsApp.
         buttons: list of dicts com 'id' e 'title' (ex.: [{'id': '1', 'title': 'Sim'}, ...]).
         """
-        number = self._phone_clean(phone)
-        if not number:
+        # Evolution docs para sendButtons indicam `number` no formato remoteJid.
+        # Para conversa individual, garantimos "<digits>@s.whatsapp.net".
+        raw_phone = (phone or '').strip()
+        if raw_phone.endswith('@g.us'):
+            return False, {'error': 'botões não suportados em grupos', 'error_code': 'GROUP_NOT_SUPPORTED'}
+
+        number_digits = self._phone_clean(raw_phone)
+        if not number_digits:
             return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        remote_jid = raw_phone if ('@' in raw_phone) else f'{number_digits}@s.whatsapp.net'
         if not buttons or not isinstance(buttons, list) or len(buttons) > 3:
             return False, {'error': 'buttons inválido (lista com 1 a 3 itens)', 'error_code': 'INVALID_BUTTONS'}
         action_buttons = []
@@ -296,7 +303,7 @@ class EvolutionProvider(WhatsAppSenderBase):
             return False, {'error': 'nenhum botão válido', 'error_code': 'INVALID_BUTTONS'}
         body = (body_text or ' ').strip().replace('\x00', '')[:1024] or 'Mensagem'
         payload = {
-            'number': number,
+            'number': remote_jid,
             'title': (body[:50] if len(body) > 50 else body) or 'Mensagem',
             'description': body,
             'footer': '',
@@ -306,7 +313,7 @@ class EvolutionProvider(WhatsAppSenderBase):
             payload['quoted'] = {
                 'key': {
                     'id': quoted_message_id,
-                    'remoteJid': f'{number}@s.whatsapp.net',
+                    'remoteJid': remote_jid,
                 },
             }
         endpoint = f"{self._base_url}/message/sendButtons/{self._instance_name}"
