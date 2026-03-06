@@ -1756,6 +1756,44 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.warning("Tipo de mensagem não tratado: %s", message_type)
                 content = f'[{message_type}]'
 
+        # ✅ Fallback: Evolution pode enviar mensagem com botões com outro messageType (ex.: conversation)
+        # Extrair interactive_reply_buttons se existir no payload, para quem recebe ver os botões
+        if interactive_reply_buttons_metadata is None:
+            bm = message_info.get('buttonsMessage') or message_data.get('buttonsMessage')
+            if not isinstance(bm, dict):
+                bm = {}
+            buttons_raw = bm.get('buttons') or bm.get('buttonList') or message_info.get('buttonList') or message_info.get('buttons') or message_data.get('buttons')
+            if not isinstance(buttons_raw, list):
+                buttons_raw = []
+            if buttons_raw:
+                try:
+                    raw = (bm.get('contentText') or bm.get('content') or bm.get('description') or bm.get('title') or content or '').strip()
+                    if isinstance(raw, bytes):
+                        raw = raw.decode('utf-8', errors='replace').strip()
+                    body_text = (raw or content or 'Mensagem com botões').replace('\x00', '')[:1024]
+                    buttons_list = []
+                    for b in buttons_raw[:10]:
+                        if not isinstance(b, dict):
+                            continue
+                        title = (b.get('displayText') or b.get('text') or b.get('title') or '').strip()
+                        if isinstance(title, bytes):
+                            title = title.decode('utf-8', errors='replace').strip()
+                        if not isinstance(title, str):
+                            title = str(title).strip() if title else ''
+                        bid = (b.get('id') or '').strip() or str(len(buttons_list))
+                        if title:
+                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100]})
+                        elif bid and not (bid.isdigit() and len(bid) <= 2):
+                            buttons_list.append({'id': str(bid)[:100], 'title': bid[:100]})
+                    if buttons_list:
+                        interactive_reply_buttons_metadata = {
+                            'body_text': body_text,
+                            'buttons': buttons_list[:3],
+                        }
+                        logger.info("🔄 [WEBHOOK] Botões extraídos em fallback (messageType=%s): %s", message_type, [x.get('title') for x in buttons_list[:3]])
+                except Exception as e:
+                    logger.debug("Fallback buttonsMessage: %s", e)
+
         # Garantir que content é sempre string antes de usar (evita quebra em log/save)
         if not isinstance(content, str):
             content = str(content, errors='replace') if content is not None else ''
