@@ -252,7 +252,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
               {(() => {
                 const c = message.content != null ? String(message.content) : '';
                 const display =
-                  c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c;
+                  c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c;
                 return display || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem');
               })()}
             </p>

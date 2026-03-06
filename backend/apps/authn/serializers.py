@@ -179,19 +179,21 @@ class UserSerializer(serializers.ModelSerializer):
     permissions = serializers.SerializerMethodField()
     default_whatsapp_instance_id = serializers.SerializerMethodField()
     default_whatsapp_instance = serializers.SerializerMethodField()
-    
+    allow_meta_interactive_buttons = serializers.SerializerMethodField()
+
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'tenant_id', 'tenant_name', 'role', 
+            'tenant_id', 'tenant_name', 'role',
             'department_ids', 'department_names',
             'is_active', 'date_joined',
-            'is_admin', 'is_gerente', 'is_agente', 'is_operator', 
+            'is_admin', 'is_gerente', 'is_agente', 'is_operator',
             'is_superuser', 'is_staff', 'permissions',
             'avatar', 'display_name', 'phone', 'birth_date',
             'notify_email', 'notify_whatsapp',
             'default_whatsapp_instance_id', 'default_whatsapp_instance',
+            'allow_meta_interactive_buttons',
         ]
         read_only_fields = ['id', 'date_joined', 'is_superuser', 'is_staff']
     
@@ -242,6 +244,13 @@ class UserSerializer(serializers.ModelSerializer):
         if getattr(wa, 'tenant_id', None) is not None and getattr(obj, 'tenant_id', None) != wa.tenant_id:
             return None
         return {'id': str(wa.id), 'friendly_name': getattr(wa, 'friendly_name', '') or ''}
+
+    def get_allow_meta_interactive_buttons(self, obj):
+        """Feature flag por tenant: permite desabilitar mensagens com reply buttons (Meta 24h)."""
+        tenant = getattr(obj, 'tenant', None)
+        if tenant is None:
+            return True
+        return getattr(tenant, 'allow_meta_interactive_buttons', True)
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

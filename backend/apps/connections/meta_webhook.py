@@ -275,7 +275,7 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 logger.exception("[META WEBHOOK] Erro ao processar reação: %s", e)
             continue
 
-        # Idempotência: não criar mensagem duplicada
+        # Idempotência: não criar mensagem duplicada por wamid
         if Message.objects.filter(message_id=wamid).exists():
             logger.info("[META WEBHOOK] Mensagem já existente (wamid=%s), ignorando (provider=meta)", wamid[:20] + "...")
             continue
@@ -353,6 +353,22 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         metadata_extra = {}
         if msg_type == 'text':
             content = (msg.get('text') or {}).get('body', '')
+        elif msg_type == 'interactive':
+            # Resposta a botão ou lista (reply button / list_reply): exibir título como conteúdo
+            interactive_obj = msg.get('interactive') or {}
+            itype = interactive_obj.get('type')
+            if itype == 'button_reply':
+                button_reply = interactive_obj.get('button_reply') or {}
+                title = (button_reply.get('title') or button_reply.get('id') or '').strip()
+                content = title or 'Resposta de botão'
+                metadata_extra['button_reply'] = {'id': button_reply.get('id'), 'title': title}
+            elif itype == 'list_reply':
+                list_reply = interactive_obj.get('list_reply') or {}
+                title = (list_reply.get('title') or list_reply.get('id') or '').strip()
+                content = title or 'Resposta de lista'
+                metadata_extra['list_reply'] = {'id': list_reply.get('id'), 'title': title}
+            else:
+                content = '[interactive]'
         elif msg_type in ('image', 'video', 'document', 'audio'):
             media = msg.get('image') or msg.get('video') or msg.get('document') or msg.get('audio') or {}
             media_id = media.get('id')
@@ -384,6 +400,9 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                     "[META WEBHOOK] Reply: mensagem original não encontrada reply_to_message_id=%s (provider=meta)",
                     reply_to_wamid[:24] + "...",
                 )
+
+        # Idempotência por wamid já evita duplicata quando a Meta reenvia o mesmo evento.
+        # Não deduplicar por (conversation, content, tempo) para não descartar uma segunda mensagem legítima com mesmo texto.
 
         # Para mídia sem legenda: não usar placeholder [document]/[image] (evita texto redundante no chat)
         message_defaults = {

@@ -375,6 +375,17 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         else:
             interactive_reply_buttons = None
 
+        # Feature flag por tenant: só aceitar interactive_reply_buttons se o tenant permitir
+        if interactive_reply_buttons:
+            allow = await self.get_tenant_allow_meta_interactive_buttons(self.user.tenant_id)
+            if not allow:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Mensagens com botões estão desabilitadas para esta conta. Entre em contato com o administrador.',
+                    'error_code': 'INTERACTIVE_BUTTONS_DISABLED',
+                }))
+                return
+
         # Exibição: quando for interativo, conteúdo exibido é sempre o body_text (consistência com a API)
         if interactive_reply_buttons:
             content = interactive_reply_buttons['body_text']
@@ -393,10 +404,10 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }))
             return
 
-        # Meta: mensagem com botões só é permitida em conversa individual (API Meta não suporta interativo em grupo)
+        # Meta: mensagem com botões só é permitida em conversa individual (API Meta não suporta interativo em grupo/broadcast)
         if interactive_reply_buttons:
             conv_type = await self.get_conversation_type(conversation_id)
-            if conv_type == 'group':
+            if conv_type and conv_type != 'individual':
                 await self.send(text_data=json.dumps({
                     'type': 'error',
                     'message': 'Mensagem com botões só está disponível para conversas individuais.',
@@ -808,6 +819,16 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             ).values_list('conversation_type', flat=True).first()
         except Exception:
             return None
+
+    @database_sync_to_async
+    def get_tenant_allow_meta_interactive_buttons(self, tenant_id):
+        """Retorna se o tenant permite envio de mensagens com reply buttons (Meta 24h)."""
+        from apps.tenancy.models import Tenant
+        try:
+            t = Tenant.objects.filter(id=tenant_id).values_list('allow_meta_interactive_buttons', flat=True).first()
+            return t if t is not None else True
+        except Exception:
+            return True
 
     @database_sync_to_async
     def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None):

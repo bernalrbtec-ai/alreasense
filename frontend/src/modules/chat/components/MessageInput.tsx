@@ -4,6 +4,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Send, Smile, PenTool, Reply, X, FileText, LayoutList } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
 import { EmojiPicker } from './EmojiPicker';
@@ -31,6 +32,8 @@ interface MessageInputProps {
 
 export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
+  const { user } = useAuthStore();
+  const allowMetaInteractiveButtons = user?.allow_meta_interactive_buttons !== false;
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
   const conversationId = propConversationId || activeConversation?.id;
   const conversationType = propConversationType || activeConversation?.conversation_type || 'individual';
@@ -544,11 +547,13 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
                   : ((() => {
                       const raw = replyToMessage.content != null ? String(replyToMessage.content) : '';
                       const normalized =
-                        raw.trim() === '[button]'
+                        raw.trim() === '[button]' || raw.trim() === '[interactive]'
                           ? 'Resposta de botão'
                           : raw.trim() === '[templateMessage]'
                             ? 'Mensagem de template'
-                            : raw;
+                            : raw.trim() === '[buttonsMessage]'
+                              ? 'Mensagem com botões'
+                              : raw;
                       if (normalized) {
                         return normalized.length > 100 ? normalized.substring(0, 100) + '...' : normalized;
                       }
@@ -625,8 +630,8 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         </button>
       )}
 
-      {/* Botão Reply Buttons: apenas instâncias Meta + individual (dentro da 24h) */}
-      {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && sendMessageWithButtons && (
+      {/* Botão Reply Buttons: apenas instâncias Meta + individual + feature flag do tenant (dentro da 24h) */}
+      {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && allowMetaInteractiveButtons && sendMessageWithButtons && (
         <button
           type="button"
           onClick={() => setShowButtonsModal(true)}

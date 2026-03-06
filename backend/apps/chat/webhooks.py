@@ -1625,6 +1625,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 template_message_metadata = None
             if not isinstance(content, str):
                 content = str(content, errors='replace') if isinstance(content, bytes) else 'Mensagem de template'
+        elif message_type == 'buttonsMessage':
+            # Mensagem que contém botões (reply buttons) – exibir título/descrição em vez de [buttonsMessage]
+            try:
+                bm = message_info.get('buttonsMessage') or message_info.get('buttons') or {}
+                if not isinstance(bm, dict):
+                    bm = {}
+                raw = bm.get('contentText') or bm.get('content') or bm.get('description') or bm.get('title') or ''
+                if isinstance(raw, bytes):
+                    raw = raw.decode('utf-8', errors='replace')
+                if not isinstance(raw, str):
+                    raw = str(raw).strip() if raw else ''
+                else:
+                    raw = raw.strip()
+                content = (raw or 'Mensagem com botões').replace('\x00', '')[:65536]
+                logger.info("buttonsMessage: exibindo texto: %s", content[:80])
+            except Exception as e:
+                logger.warning("buttonsMessage: falha ao extrair payload - %s", e, exc_info=False)
+                content = 'Mensagem com botões'
         elif message_type in ('button', 'templateButtonReplyMessage', 'buttonsResponseMessage'):
             # Resposta de botão (template quick reply ou lista de botões) – exibir texto do botão em vez de [button]
             try:

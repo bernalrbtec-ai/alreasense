@@ -79,7 +79,11 @@ class Tenant(models.Model):
         default=True, 
         help_text="Tenant tem acesso à UI (ex: API Only = False)"
     )
-    
+    allow_meta_interactive_buttons = models.BooleanField(
+        default=True,
+        help_text="Permite envio de mensagens com reply buttons (Meta, janela 24h). Desative para desabilitar a feature por tenant.",
+    )
+
     # Metadados
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

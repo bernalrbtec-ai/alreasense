@@ -44,6 +44,8 @@ interface User {
   // Instância WhatsApp padrão para novas conversas (quando tenant tem 2+ instâncias)
   default_whatsapp_instance_id?: string | null
   default_whatsapp_instance?: { id: string; friendly_name: string } | null
+  /** Feature flag: permite desabilitar mensagens com reply buttons (Meta 24h) por tenant. Ausente ou true = habilitado. */
+  allow_meta_interactive_buttons?: boolean
 }
 
 interface AuthState {

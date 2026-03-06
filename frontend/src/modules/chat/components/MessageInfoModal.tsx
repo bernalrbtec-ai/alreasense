@@ -213,7 +213,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                   <p className="text-sm text-gray-600 dark:text-gray-400 break-words">
                     {(() => {
                       const c = String(message.content ?? '');
-                      return c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c;
+                      return c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c;
                     })()}
                   </p>
                 </div>

@@ -242,11 +242,13 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
   const attachmentType = getAttachmentType();
   const rawReplyContent = repliedMessage.content != null ? String(repliedMessage.content) : '';
   const normalizedReply =
-    rawReplyContent.trim() === '[button]'
+    rawReplyContent.trim() === '[button]' || rawReplyContent.trim() === '[interactive]'
       ? 'Resposta de botão'
       : rawReplyContent.trim() === '[templateMessage]'
         ? 'Mensagem de template'
-        : rawReplyContent;
+        : rawReplyContent.trim() === '[buttonsMessage]'
+          ? 'Mensagem com botões'
+          : rawReplyContent;
   const displayContent = normalizedReply
     ? (normalizedReply.length > 80 ? normalizedReply.substring(0, 80) + '...' : normalizedReply)
     : (attachmentType || 'Mensagem');
@@ -1255,9 +1257,11 @@ export function MessageList() {
                       const displayContent =
                         rawContent.trim() === '[templateMessage]'
                           ? 'Mensagem de template'
-                          : rawContent.trim() === '[button]'
+                          : rawContent.trim() === '[button]' || rawContent.trim() === '[interactive]'
                             ? 'Resposta de botão'
-                            : rawContent;
+                            : rawContent.trim() === '[buttonsMessage]'
+                              ? 'Mensagem com botões'
+                              : rawContent;
                       return (
                         <>
                           {messageItem.direction === 'outgoing' && (() => {

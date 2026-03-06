@@ -616,7 +616,7 @@ export function ConversationList() {
                         : (() => {
                             const raw = conversationItem.last_message?.content;
                             const c = typeof raw === 'string' ? raw : String(raw ?? '');
-                            const preview = (c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c) || '';
+                            const preview = (c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c) || '';
                             return conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
                               ? `${conversationItem.last_message.sender_name}: ${preview}`
                               : (preview || '📎 Anexo');
