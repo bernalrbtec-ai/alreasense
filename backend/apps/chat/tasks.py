@@ -1262,12 +1262,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                             break
                 else:
                     # Texto puro (sem anexo nem localização)
-                    # Meta: fora da janela 24h só pode enviar por template
+                    # Meta: fora da janela 24h só pode enviar por template; dentro 24h pode enviar texto ou interativo (botões)
                     if provider_kind == 'meta':
                         from apps.chat.whatsapp_24h import is_within_24h_window
                         within_24h = await database_sync_to_async(is_within_24h_window)(conversation)
-                        if not within_24h:
-                            meta = message.metadata or {}
+                        meta = message.metadata or {}
+                        interactive = meta.get('interactive_reply_buttons')
+                        if interactive and interactive.get('body_text') and interactive.get('buttons') and 1 <= len(interactive['buttons']) <= 3:
+                            if not within_24h:
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message='Mensagem com botões só pode ser enviada dentro da janela de 24h.')
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
+                                log.warning(
+                                    "❌ [CHAT ENVIO] Meta: mensagem com botões fora da janela 24h | conversation_id=%s",
+                                    str(conversation.id),
+                                )
+                                return
+                            log.info(
+                                "✅ [CHAT ENVIO] Enviando mensagem interativa com %s botões (Meta)",
+                                len(interactive['buttons']),
+                            )
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_interactive_reply_buttons,
+                                recipient_value,
+                                interactive['body_text'],
+                                interactive['buttons'],
+                                quoted_message_id,
+                            )
+                        elif not within_24h:
                             wa_template_id = meta.get('wa_template_id')
                             if not wa_template_id:
                                 close_old_connections()
@@ -1309,7 +1333,6 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                             if not isinstance(body_params, (list, tuple)):
                                 body_params = wa_template.body_parameters_default or []
                             body_params = list(body_params)
-                            # Se o template espera pelo menos 1 parâmetro (ex.: {{1}} = nome) e não foi enviado nenhum, usa o nome do contato
                             if not body_params and (conversation.contact_name or conversation.contact_phone):
                                 body_params = [str(conversation.contact_name or conversation.contact_phone or 'Cliente').strip() or 'Cliente']
                             last_ok, last_data = await asyncio.to_thread(

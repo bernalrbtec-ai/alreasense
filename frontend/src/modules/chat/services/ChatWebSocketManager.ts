@@ -396,6 +396,34 @@ class ChatWebSocketManager {
   }
 
   /**
+   * Envia mensagem com reply buttons (Meta: dentro da janela 24h, até 3 botões).
+   * Disponível apenas para instâncias Meta (meta_cloud).
+   */
+  public sendChatMessageWithButtons(
+    conversationId: string,
+    bodyText: string,
+    buttons: Array<{ id: string; title: string }>,
+  ): boolean {
+    const targetConversationId = conversationId || this.currentConversationId;
+    if (!targetConversationId) {
+      console.error('❌ [MANAGER] Nenhuma conversa ativa');
+      return false;
+    }
+    const payload: any = {
+      type: 'send_message',
+      conversation_id: targetConversationId,
+      content: bodyText,
+      include_signature: false,
+      is_internal: false,
+      interactive_reply_buttons: {
+        body_text: bodyText,
+        buttons: buttons.slice(0, 3),
+      },
+    };
+    return this.sendMessage(payload);
+  }
+
+  /**
    * Envia evento de digitação
    */
   public sendTyping(isTyping: boolean): void {

@@ -3,6 +3,7 @@ Provider Meta WhatsApp Cloud API (Graph API v21.0).
 Envio via Bearer token; tratar 401/403/429.
 """
 import logging
+import re
 import requests
 from typing import Tuple, Dict, Any, Optional
 
@@ -208,6 +209,66 @@ class MetaCloudProvider(WhatsAppSenderBase):
         }
         if quoted_message_id:
             payload['context'] = {'message_id': quoted_message_id}
+        return self._request(payload)
+
+    def send_interactive_reply_buttons(
+        self,
+        phone: str,
+        body_text: str,
+        buttons: list,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem interativa com reply buttons (até 3) dentro da janela 24h.
+        Meta: type=interactive, interactive.type=button.
+        """
+        to = self._to_phone(phone)
+        if not to:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        body_clean = (body_text or '').strip().replace('\x00', '')[:1024]
+        if not body_clean:
+            return False, {'error': 'Corpo da mensagem obrigatório', 'error_code': 'INVALID_BODY'}
+        if not buttons or not isinstance(buttons, list):
+            return False, {'error': 'Pelo menos um botão é obrigatório', 'error_code': 'INVALID_BUTTONS'}
+        if len(buttons) > 3:
+            return False, {'error': 'Máximo 3 botões', 'error_code': 'INVALID_BUTTONS'}
+        action_buttons = []
+        seen_ids = set()
+        for b in buttons:
+            if not isinstance(b, dict):
+                continue
+            raw_id = (b.get('id') or '').strip()
+            bid = (re.sub(r'[^a-zA-Z0-9_-]', '', raw_id))[:256]  # Meta: id alfanumérico/underscore/hífen, máx 256
+            if not bid:
+                continue
+            title = (b.get('title') or '').strip()[:20]
+            if not bid or not title:
+                continue
+            if bid in seen_ids:
+                continue
+            seen_ids.add(bid)
+            action_buttons.append({'type': 'reply', 'reply': {'id': bid, 'title': title}})
+        if len(action_buttons) < 1:
+            return False, {'error': 'Pelo menos um botão válido (id + title)', 'error_code': 'INVALID_BUTTONS'}
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': {
+                'type': 'button',
+                'body': {'text': body_clean},
+                'action': {'buttons': action_buttons},
+            },
+        }
+        if quoted_message_id:
+            payload['context'] = {'message_id': quoted_message_id}
+        logger.info(
+            "Meta Cloud API enviando mensagem interativa com %s botões (instance_id=%s)",
+            len(action_buttons),
+            str(self.instance.id),
+        )
         return self._request(payload)
 
     def send_template(

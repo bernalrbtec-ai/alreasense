@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool, Reply, X, FileText } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X, FileText, LayoutList } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -14,16 +14,22 @@ import { QuickRepliesButton } from './QuickRepliesButton';
 import { TemplatePickerModal } from './TemplatePickerModal';
 import { api } from '@/lib/api';
 
+export interface InteractiveButton {
+  id: string;
+  title: string;
+}
+
 interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[], mentionEveryone?: boolean) => boolean;
   sendMessageAsTemplate?: (conversationId: string, waTemplateId: string, bodyParameters: string[]) => boolean;
+  sendMessageWithButtons?: (conversationId: string, bodyText: string, buttons: InteractiveButton[]) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
   conversationId?: string;
   conversationType?: 'individual' | 'group' | 'broadcast';
 }
 
-export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
   const conversationId = propConversationId || activeConversation?.id;
@@ -35,6 +41,9 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showButtonsModal, setShowButtonsModal] = useState(false);
+  const [buttonsBodyText, setButtonsBodyText] = useState('');
+  const [buttonsList, setButtonsList] = useState<InteractiveButton[]>([{ id: 'btn1', title: '' }]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const MAX_FILES = 10;
@@ -101,6 +110,11 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
         setMessage('');
         setMentions([]);
       }
+
+      // Limpar modo botões ao trocar de conversa
+      setShowButtonsModal(false);
+      setButtonsBodyText('');
+      setButtonsList([{ id: 'btn1', title: '' }]);
       
       // Atualizar referência
       previousConversationIdRef.current = currentConvId;
@@ -599,7 +613,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
         disabled={sending || !isConnected || isGroupInputBlocked}
       />
 
-      {/* Botão Template: apenas instâncias Meta (envio com botões; fora da 24h é obrigatório) */}
+      {/* Botão Template: apenas instâncias Meta (envio fora da 24h) */}
       {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && sendMessageAsTemplate && (
         <button
           type="button"
@@ -608,6 +622,18 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
           title={activeConversation?.requires_template_to_message ? 'Enviar por template (fora da janela 24h)' : 'Enviar por template (ex.: mensagem com botões)'}
         >
           <FileText className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Botão Reply Buttons: apenas instâncias Meta + individual (dentro da 24h) */}
+      {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && sendMessageWithButtons && (
+        <button
+          type="button"
+          onClick={() => setShowButtonsModal(true)}
+          className="p-2 rounded-full flex-shrink-0 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 dark:text-emerald-400"
+          title="Adicionar botões (até 3, dentro da janela 24h)"
+        >
+          <LayoutList className="w-5 h-5" />
         </button>
       )}
 
@@ -738,6 +764,98 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
           }
         }}
       />
+    )}
+
+    {/* Modal Mensagem com botões (só Meta, dentro da 24h) */}
+    {showButtonsModal && conversationId && sendMessageWithButtons && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowButtonsModal(false)}>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Mensagem com botões</h3>
+            <button type="button" onClick={() => setShowButtonsModal(false)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Até 3 botões. Disponível apenas dentro da janela de 24h (Meta).</p>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Texto da mensagem</label>
+          <textarea
+            value={buttonsBodyText}
+            onChange={e => setButtonsBodyText(e.target.value.slice(0, 1024))}
+            placeholder="Digite o texto que aparece acima dos botões"
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-3"
+          />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Botões (título até 20 caracteres)</label>
+          {buttonsList.map((btn, idx) => (
+            <div key={idx} className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={btn.id}
+                onChange={e => {
+                  const v = e.target.value.replace(/[^a-zA-Z0-9_-]/g, '');
+                  setButtonsList(prev => prev.map((b, i) => i === idx ? { ...b, id: v } : b));
+                }}
+                placeholder="id"
+                className="w-24 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+              />
+              <input
+                type="text"
+                value={btn.title}
+                onChange={e => setButtonsList(prev => prev.map((b, i) => i === idx ? { ...b, title: e.target.value.slice(0, 20) } : b))}
+                placeholder="Título"
+                className="flex-1 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+              />
+              {buttonsList.length > 1 && (
+                <button type="button" onClick={() => setButtonsList(prev => prev.filter((_, i) => i !== idx))} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ))}
+          {buttonsList.length < 3 && (
+            <button
+              type="button"
+              onClick={() => {
+                const existingIds = new Set(buttonsList.map(b => b.id));
+                let id = `btn_${Date.now().toString(36)}`;
+                while (existingIds.has(id)) {
+                  id = `btn_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+                }
+                setButtonsList(prev => [...prev, { id, title: '' }]);
+              }}
+              className="text-sm text-emerald-600 dark:text-emerald-400 hover:underline mb-3"
+            >
+              + Adicionar botão
+            </button>
+          )}
+          <div className="flex justify-end gap-2 mt-3">
+            <button type="button" onClick={() => setShowButtonsModal(false)} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const body = buttonsBodyText.trim();
+                const list = buttonsList.filter(b => b.id.trim() && b.title.trim());
+                const ids = new Set(list.map(b => b.id));
+                if (!body || list.length === 0 || ids.size !== list.length) {
+                  toast.error('Preencha o texto e pelo menos 1 botão com id e título únicos.');
+                  return;
+                }
+                sendMessageWithButtons(conversationId, body, list);
+                setShowButtonsModal(false);
+                setButtonsBodyText('');
+                setButtonsList([{ id: 'btn1', title: '' }]);
+                toast.success('Mensagem com botões enviada.');
+              }}
+              disabled={!isConnected || !buttonsBodyText.trim() || buttonsList.every(b => !b.title.trim())}
+              className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

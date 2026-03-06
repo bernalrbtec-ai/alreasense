@@ -293,7 +293,17 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         mention_everyone = data.get('mention_everyone', False)  # ✅ NOVO: Flag para @everyone
         wa_template_id = data.get('wa_template_id')  # ✅ Meta 24h: envio por template
         template_body_parameters = data.get('template_body_parameters', data.get('body_parameters', []))
-        
+        interactive_reply_buttons = data.get('interactive_reply_buttons')  # ✅ Meta 24h: botões (só Meta)
+
+        # ✅ Conflito: não permitir template e interativo no mesmo payload
+        if wa_template_id and interactive_reply_buttons:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Envie apenas template ou mensagem com botões, não ambos.',
+                'error_code': 'TEMPLATE_AND_BUTTONS',
+            }))
+            return
+
         # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
         logger.critical(f"✅ [CHAT WS V2] conversation_id validado: {conversation_id}")
         logger.critical(f"   content: {content[:50] if content else '(template)'}...")
@@ -301,14 +311,74 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         logger.critical(f"   mentions: {mentions}")
         if wa_template_id:
             logger.critical(f"   wa_template_id: {wa_template_id} (Meta 24h)")
-        
+        if interactive_reply_buttons:
+            logger.critical(f"   interactive_reply_buttons: presente (Meta 24h)")
+
+        # Mensagem válida se tiver conteúdo, anexos, template ou interativo com body_text + botões
         if not content and not attachment_urls and not wa_template_id:
-            await self.send(text_data=json.dumps({
-                'type': 'error',
-                'message': 'Mensagem vazia'
-            }))
-            return
-        
+            if not interactive_reply_buttons:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Mensagem vazia'
+                }))
+                return
+            body_text = (interactive_reply_buttons or {}).get('body_text') or ''
+            buttons = (interactive_reply_buttons or {}).get('buttons') or []
+            if not (isinstance(body_text, str) and body_text.strip()) or not (isinstance(buttons, list) and 1 <= len(buttons) <= 3):
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Mensagem com botões precisa de corpo e 1 a 3 botões.',
+                    'error_code': 'INVALID_INTERACTIVE',
+                }))
+                return
+
+        if interactive_reply_buttons:
+            body_text = (interactive_reply_buttons.get('body_text') or '').strip().replace('\x00', '')[:1024]
+            raw_buttons = interactive_reply_buttons.get('buttons') or []
+            if not isinstance(raw_buttons, list):
+                raw_buttons = []
+            if not body_text:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Corpo da mensagem obrigatório para mensagem com botões.',
+                    'error_code': 'INVALID_INTERACTIVE',
+                }))
+                return
+            if len(raw_buttons) < 1 or len(raw_buttons) > 3:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Botões inválidos: use de 1 a 3 botões.',
+                    'error_code': 'INVALID_INTERACTIVE',
+                }))
+                return
+            buttons_normalized = []
+            seen_ids = set()
+            for b in raw_buttons[:3]:
+                if not isinstance(b, dict):
+                    continue
+                bid = (b.get('id') or '').strip()
+                title = (b.get('title') or '').strip()[:20]
+                if not bid or not title:
+                    continue
+                if bid in seen_ids:
+                    continue
+                seen_ids.add(bid)
+                buttons_normalized.append({'id': bid, 'title': title})
+            if len(buttons_normalized) < 1:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Cada botão precisa de id e título (título até 20 caracteres).',
+                    'error_code': 'INVALID_INTERACTIVE',
+                }))
+                return
+            interactive_reply_buttons = {'body_text': body_text, 'buttons': buttons_normalized}
+        else:
+            interactive_reply_buttons = None
+
+        # Exibição: quando for interativo, conteúdo exibido é sempre o body_text (consistência com a API)
+        if interactive_reply_buttons:
+            content = interactive_reply_buttons['body_text']
+
         # Verificar acesso à conversa (mesmo critério do subscribe: tenant + departamento)
         has_access = await self.check_conversation_access(conversation_id)
         if not has_access:
@@ -323,6 +393,17 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }))
             return
 
+        # Meta: mensagem com botões só é permitida em conversa individual (API Meta não suporta interativo em grupo)
+        if interactive_reply_buttons:
+            conv_type = await self.get_conversation_type(conversation_id)
+            if conv_type == 'group':
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Mensagem com botões só está disponível para conversas individuais.',
+                    'error_code': 'INTERACTIVE_GROUP_NOT_ALLOWED',
+                }))
+                return
+
         # Cria mensagem no banco (create_message ainda valida tenant para defesa em profundidade)
         try:
             message = await self.create_message(
@@ -336,6 +417,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 mention_everyone=mention_everyone,
                 wa_template_id=wa_template_id,
                 template_body_parameters=template_body_parameters,
+                interactive_reply_buttons=interactive_reply_buttons,
             )
         except Exception as e:
             logger.error(f"❌ [CHAT WS V2] Erro ao criar mensagem: {e}", exc_info=True)
@@ -714,14 +796,27 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         
         except Conversation.DoesNotExist:
             return False
-    
+
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None):
+    def get_conversation_type(self, conversation_id):
+        """Retorna conversation_type da conversa (ou None se não existir / outro tenant)."""
+        from apps.chat.models import Conversation
+        try:
+            return Conversation.objects.filter(
+                id=conversation_id,
+                tenant_id=self.user.tenant_id,
+            ).values_list('conversation_type', flat=True).first()
+        except Exception:
+            return None
+
+    @database_sync_to_async
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None):
         """
         Cria mensagem no banco.
-        
+
         ✅ SEGURANÇA CRÍTICA: Valida que conversation existe e pertence ao tenant do usuário
         ✅ Meta 24h: wa_template_id e template_body_parameters vão no metadata para envio por template.
+        ✅ Meta 24h: interactive_reply_buttons (body_text + buttons) para envio interativo dentro da 24h.
         """
         from apps.chat.models import Message, Conversation
         
@@ -906,7 +1001,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                             content = template_body_to_display_text(wa_template.body, params)
                 elif not content:
                     content = "[Mensagem de template]"
-            
+
+            # Meta 24h: mensagem interativa com reply buttons (só Meta)
+            if interactive_reply_buttons and isinstance(interactive_reply_buttons, dict):
+                metadata['interactive_reply_buttons'] = {
+                    'body_text': (interactive_reply_buttons.get('body_text') or '').strip()[:1024],
+                    'buttons': list(interactive_reply_buttons.get('buttons') or [])[:3],
+                }
+
             message = Message.objects.create(
                 conversation=conversation,
                 sender=self.user,

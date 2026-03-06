@@ -13,6 +13,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
 import { useChatStore } from '../store/chatStore';
 import { chatWebSocketManager, WebSocketMessage } from '../services/ChatWebSocketManager';
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
@@ -345,8 +346,15 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('new_conversation', handleNewConversation);
     chatWebSocketManager.on('instance_status_changed', handleInstanceStatusChanged);
 
+    const handleError = (data: WebSocketMessage) => {
+      const msg = data.message ?? data.error ?? 'Erro ao enviar. Tente novamente.';
+      toast.error(typeof msg === 'string' ? msg : String(msg));
+    };
+    chatWebSocketManager.on('error', handleError);
+
     // Cleanup
     return () => {
+      chatWebSocketManager.off('error', handleError);
       chatWebSocketManager.off('message_received', handleMessageReceived);
       chatWebSocketManager.off('message_status_update', handleStatusUpdate);
       chatWebSocketManager.off('typing', handleTyping);
@@ -426,9 +434,19 @@ export function useChatSocket(conversationId?: string) {
     return chatWebSocketManager.sendChatMessageAsTemplate(conversationId, waTemplateId, bodyParameters);
   }, [isConnected]);
 
+  const sendMessageWithButtons = useCallback((
+    conversationId: string,
+    bodyText: string,
+    buttons: Array<{ id: string; title: string }>,
+  ): boolean => {
+    if (!isConnected) return false;
+    return chatWebSocketManager.sendChatMessageWithButtons(conversationId, bodyText, buttons);
+  }, [isConnected]);
+
   return {
     sendMessage,
     sendMessageAsTemplate,
+    sendMessageWithButtons,
     sendTyping,
     markAsSeen,
     isConnected,
