@@ -1660,11 +1660,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         if not isinstance(title, str):
                             title = str(title).strip() if title else ''
                         bid = (b.get('id') or '').strip() or str(len(buttons_list))
-                        # Só usar id como título se o payload não trouxer displayText (evitar "0"/"1" no lugar de "SIM"/"Não")
+                        # Sempre incluir o botão; se vier só 0/1 do Evolution, usar rótulo legível para exibir
                         if title:
-                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100]})
+                            display_title = title[:100]
                         elif bid and not (bid.isdigit() and len(bid) <= 2):
-                            buttons_list.append({'id': str(bid)[:100], 'title': bid[:100]})
+                            display_title = bid[:100]
+                        else:
+                            # Evolution envia só id 0/1: exibir "Opção 1", "Opção 2" (ou "Sim"/"Não" se forem 2)
+                            n = len(buttons_list) + 1
+                            display_title = ('Sim', 'Não')[n - 1] if len(buttons_raw[:3]) == 2 and n <= 2 else f'Opção {n}'
+                        buttons_list.append({'id': str(bid)[:100], 'title': display_title})
                     if buttons_list:
                         interactive_reply_buttons_metadata = {
                             'body_text': content[:1024],
@@ -1791,9 +1796,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             title = str(title).strip() if title else ''
                         bid = (b.get('id') or '').strip() or str(len(buttons_list))
                         if title:
-                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100]})
+                            display_title = title[:100]
                         elif bid and not (bid.isdigit() and len(bid) <= 2):
-                            buttons_list.append({'id': str(bid)[:100], 'title': bid[:100]})
+                            display_title = bid[:100]
+                        else:
+                            n = len(buttons_list) + 1
+                            display_title = ('Sim', 'Não')[n - 1] if len(buttons_raw[:3]) == 2 and n <= 2 else f'Opção {n}'
+                        buttons_list.append({'id': str(bid)[:100], 'title': display_title})
                     if buttons_list:
                         interactive_reply_buttons_metadata = {
                             'body_text': body_text,
@@ -3380,6 +3389,48 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     message_id=message_id,
                     defaults=message_defaults
                 )
+                # ✅ from_me + mensagem nova: pode ser duplicata (webhook veio antes do link). Copiar texto real dos botões da mensagem que criamos e remover a duplicada.
+                if msg_created and from_me and conversation:
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    from django.db.models import Q
+                    recent = timezone.now() - timedelta(seconds=120)
+                    my_irb = (message.metadata or {}).get('interactive_reply_buttons') or {}
+                    my_btns = my_irb.get('buttons') if isinstance(my_irb.get('buttons'), list) else []
+                    fallback_titles = {'Sim', 'Não', 'Opção 1', 'Opção 2', 'Opção 3'}
+                    only_fallback = my_btns and all(
+                        (b.get('title') or b.get('text') or '').strip() in fallback_titles
+                        for b in my_btns if isinstance(b, dict)
+                    )
+                    if only_fallback:
+                        original = (
+                            Message.objects.filter(
+                                conversation=conversation,
+                                direction='outgoing',
+                                created_at__gte=recent,
+                            )
+                            .filter(Q(message_id__isnull=True) | Q(message_id=''))
+                            .exclude(id=message.id)
+                            .order_by('-created_at')
+                        ).first()
+                        if original:
+                            orig_irb = (original.metadata or {}).get('interactive_reply_buttons')
+                            if isinstance(orig_irb, dict) and isinstance(orig_irb.get('buttons'), list) and orig_irb.get('buttons'):
+                                orig_btns = orig_irb.get('buttons', [])[:3]
+                                if orig_btns and any(
+                                    (b.get('title') or b.get('text') or '').strip() and (b.get('title') or b.get('text') or '').strip() not in fallback_titles
+                                    for b in orig_btns if isinstance(b, dict)
+                                ):
+                                    merged_meta = dict(message.metadata or {})
+                                    merged_meta['interactive_reply_buttons'] = {
+                                        'body_text': (orig_irb.get('body_text') or my_irb.get('body_text') or '')[:1024],
+                                        'buttons': orig_btns,
+                                    }
+                                    message.metadata = merged_meta
+                                    message.save(update_fields=['metadata'])
+                                    original_id = original.id
+                                    original.delete()
+                                    logger.info("🔄 [WEBHOOK] Texto real dos botões copiado da mensagem original (id=%s) e original removida", original_id)
             else:
                 message = linked_msg
                 msg_created = False
