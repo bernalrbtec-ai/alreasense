@@ -309,25 +309,50 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }))
             return
         
-        # Cria mensagem no banco
-        message = await self.create_message(
-            conversation_id=conversation_id,
-            content=content,
-            is_internal=is_internal,
-            attachment_urls=attachment_urls,
-            include_signature=include_signature,
-            reply_to=reply_to,  # ✅ NOVO: Passar reply_to
-            mentions=mentions,  # ✅ NOVO: Passar mentions
-            mention_everyone=mention_everyone,  # ✅ NOVO: Passar mention_everyone
-            wa_template_id=wa_template_id,  # ✅ Meta 24h: envio por template
-            template_body_parameters=template_body_parameters,
-        )
+        # Verificar acesso à conversa (mesmo critério do subscribe: tenant + departamento)
+        has_access = await self.check_conversation_access(conversation_id)
+        if not has_access:
+            logger.warning(
+                f"❌ [CHAT WS V2] Usuário {self.user.email} sem acesso à conversa {conversation_id} (envio bloqueado)"
+            )
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Conversa não encontrada ou não acessível. A conversa pode ter sido removida ou você não tem permissão para enviar mensagens.',
+                'conversation_id': str(conversation_id),
+                'error_code': 'CONVERSATION_ACCESS_DENIED',
+            }))
+            return
+
+        # Cria mensagem no banco (create_message ainda valida tenant para defesa em profundidade)
+        try:
+            message = await self.create_message(
+                conversation_id=conversation_id,
+                content=content,
+                is_internal=is_internal,
+                attachment_urls=attachment_urls,
+                include_signature=include_signature,
+                reply_to=reply_to,
+                mentions=mentions,
+                mention_everyone=mention_everyone,
+                wa_template_id=wa_template_id,
+                template_body_parameters=template_body_parameters,
+            )
+        except Exception as e:
+            logger.error(f"❌ [CHAT WS V2] Erro ao criar mensagem: {e}", exc_info=True)
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Erro ao enviar mensagem. Tente novamente.',
+                'conversation_id': str(conversation_id),
+                'error_code': 'SEND_MESSAGE_FAILED',
+            }))
+            return
         
         if not message:
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'Conversa não encontrada ou não acessível. A conversa pode ter sido removida ou você não tem permissão para enviar mensagens.',
-                'conversation_id': conversation_id
+                'conversation_id': str(conversation_id),
+                'error_code': 'CONVERSATION_NOT_FOUND',
             }))
             return
         
