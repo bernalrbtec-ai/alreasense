@@ -738,7 +738,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
     try:
         message_data = data.get('data', {})
         key = message_data.get('key', {})
-        message_info = message_data.get('message', {})
+        message_info = message_data.get('message') or {}  # garante dict mesmo quando message é null
         
         # Extrai dados
         remote_jid = key.get('remoteJid', '')  # Ex: 5517999999999@s.whatsapp.net ou 120363123456789012@g.us (grupo)
@@ -910,7 +910,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
-        
+        template_message_metadata = None  # Preenchido apenas no branch templateMessage
+
         # ✅ DEBUG: Log do tipo de mensagem recebido
         logger.info(f"🔍 [WEBHOOK UPSERT] MessageType recebido: {message_type}")
         logger.info(f"   Message data keys: {list(message_data.keys())}")
@@ -1554,7 +1555,78 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 content = f"📍 Localização: {name or address or f'{degrees_lat}, {degrees_lng}'}"
             else:
                 content = "📍 Localização compartilhada"
+        elif message_type == 'templateMessage':
+            # Template oficial (Evolution API): extrair texto para exibição e metadata
+            try:
+                context_info = (
+                    (message_info.get('templateMessage') or {}).get('contextInfo', {}) or
+                    message_info.get('contextInfo', {}) or
+                    message_data.get('contextInfo', {}) or
+                    {}
+                )
+                if not isinstance(context_info, dict):
+                    context_info = {}
+                quoted_id = extract_quoted_message(context_info)
+                if quoted_id:
+                    quoted_message_id_evolution = quoted_id
+                tm_payload = message_info.get('templateMessage') or message_info.get('hydratedTemplate') or message_info
+                if not isinstance(tm_payload, dict):
+                    tm_payload = {}
+                from apps.chat.utils.template_display import evolution_template_to_display_text
+                content = evolution_template_to_display_text(tm_payload)
+                content = (content or '').strip()
+                if not isinstance(content, str):
+                    content = str(content, errors='replace') if isinstance(content, bytes) else 'Mensagem de template'
+                content = content.replace('\x00', '')
+                if not content:
+                    content = 'Mensagem de template'
+                _MAX_CONTENT_LEN = 65536
+                if len(content) > _MAX_CONTENT_LEN:
+                    logger.info("templateMessage: content truncado de %s para %s caracteres", len(content), _MAX_CONTENT_LEN)
+                    content = content[:_MAX_CONTENT_LEN - 3].rstrip() + '...'
+                template_name = tm_payload.get('name') or tm_payload.get('elementName') or ''
+                template_lang = tm_payload.get('language', '') or tm_payload.get('lang', '')
+                buttons_raw = tm_payload.get('buttons') or []
+                if not buttons_raw:
+                    _inner = tm_payload.get('templateMessage')
+                    if isinstance(_inner, dict):
+                        buttons_raw = _inner.get('buttons') or []
+                buttons_list = []
+                if isinstance(buttons_raw, list):
+                    for b in buttons_raw[:10]:
+                        if not isinstance(b, dict):
+                            continue
+                        btn_text = (b.get('text') or b.get('displayText') or b.get('title') or '')
+                        if isinstance(btn_text, str) and btn_text:
+                            btn_type = b.get('type', 'quick_reply')
+                            buttons_list.append({
+                                'type': str(btn_type)[:50] if btn_type is not None else 'quick_reply',
+                                'text': btn_text[:100],
+                            })
+                if template_name or template_lang or buttons_list:
+                    def _to_str(val, max_len=0):
+                        if val is None:
+                            return ''
+                        if isinstance(val, str):
+                            s = val
+                        elif isinstance(val, bytes):
+                            s = val.decode('utf-8', errors='replace')
+                        else:
+                            s = str(val)
+                        return s[:max_len] if max_len else s
+                    template_message_metadata = {
+                        'name': _to_str(template_name, 200),
+                        'language': _to_str(template_lang, 20),
+                        'buttons': buttons_list,
+                    }
+            except Exception as e:
+                logger.warning("templateMessage: falha ao extrair payload - %s", e, exc_info=False)
+                content = 'Mensagem de template'
+                template_message_metadata = None
+            if not isinstance(content, str):
+                content = str(content, errors='replace') if isinstance(content, bytes) else 'Mensagem de template'
         else:
+            logger.warning("Tipo de mensagem não tratado: %s", message_type)
             content = f'[{message_type}]'
         
         # Nome do contato
@@ -2573,6 +2645,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ NOVO: Adicionar dados de localização ao metadata
         if location_message_data:
             message_defaults['metadata']['location_message'] = location_message_data
+
+        # ✅ Template oficial (Evolution): metadata para exibição no frontend
+        if template_message_metadata:
+            try:
+                import json
+                json.dumps(template_message_metadata)
+                message_defaults['metadata']['template_message'] = template_message_metadata
+            except (TypeError, ValueError) as _e:
+                logger.debug("template_message_metadata não serializável: %s", _e)
         
         # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
         if mentions_list:

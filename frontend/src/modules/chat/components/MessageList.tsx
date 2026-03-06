@@ -1231,57 +1231,88 @@ export function MessageList() {
                  !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) &&
                  !messageItem.metadata?.location_message && (
                   <>
-                    {/* ✅ NOVO: Renderizar assinatura como cabeçalho separado (apenas para mensagens enviadas) */}
-                    {messageItem.direction === 'outgoing' && (() => {
-                      const parsed = parseMessageSignature(messageItem.content);
-                      if (parsed.signature) {
-                        return (
-                          <div className="mb-1">
-                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                              {parsed.signature}
-                            </p>
+                    {/* ✅ Template: exibir "Mensagem de template" quando conteúdo for literal [templateMessage] (mensagens antigas) */}
+                    {(() => {
+                      const rawContent = messageItem.content ?? '';
+                      const displayContent = rawContent.trim() === '[templateMessage]' ? 'Mensagem de template' : rawContent;
+                      return (
+                        <>
+                          {messageItem.direction === 'outgoing' && (() => {
+                            const parsed = parseMessageSignature(displayContent);
+                            if (parsed.signature) {
+                              return (
+                                <div className="mb-1">
+                                  <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                                    {parsed.signature}
+                                  </p>
+                                  <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                                    {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
+                                      <MentionRenderer 
+                                        content={parsed.content} 
+                                        mentions={messageItem.metadata.mentions}
+                                      />
+                                    ) : (
+                                      <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(parsed.content) }} />
+                                    )}
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return (
+                              <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                                {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
+                                  <MentionRenderer 
+                                    content={displayContent} 
+                                    mentions={messageItem.metadata.mentions}
+                                  />
+                                ) : (
+                                  <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(displayContent) }} />
+                                )}
+                              </p>
+                            );
+                          })()}
+                          {messageItem.direction === 'incoming' && (
                             <p className="text-sm whitespace-pre-wrap break-words mb-1">
                               {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
                                 <MentionRenderer 
-                                  content={parsed.content} 
+                                  content={displayContent} 
                                   mentions={messageItem.metadata.mentions}
                                 />
                               ) : (
-                                <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(parsed.content) }} />
+                                <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(displayContent) }} />
                               )}
                             </p>
-                          </div>
-                        );
-                      }
-                      // Sem assinatura, renderizar normalmente
-                      return (
-                        <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                          {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
-                            <MentionRenderer 
-                              content={messageItem.content} 
-                              mentions={messageItem.metadata.mentions}
-                            />
-                          ) : (
-                            <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
                           )}
-                        </p>
+                        </>
                       );
                     })()}
-                    
-                    {/* Mensagens recebidas (sem assinatura) */}
-                    {messageItem.direction === 'incoming' && (
-                      <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                        {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
-                          <MentionRenderer 
-                            content={messageItem.content} 
-                            mentions={messageItem.metadata.mentions}
-                          />
-                        ) : (
-                          <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
-                        )}
-                      </p>
-                    )}
                   </>
+                )}
+                {/* Template oficial: indicador e botões (leitura defensiva; mostra mesmo sem texto) */}
+                {!messageItem.is_deleted && (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) && (
+                  <div className="mt-1.5 space-y-1">
+                    <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
+                      Template
+                    </span>
+                    {messageItem.metadata?.template_message?.buttons && Array.isArray(messageItem.metadata.template_message.buttons) && messageItem.metadata.template_message.buttons.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {messageItem.metadata.template_message.buttons.map((btn: { text?: string; type?: string }, i: number) => {
+                          const raw = typeof btn?.text === 'string' ? btn.text : '';
+                          if (!raw) return null;
+                          const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+                          return (
+                            <span
+                              key={i}
+                              className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 truncate max-w-[200px]"
+                              title={raw.length > 80 ? raw : undefined}
+                            >
+                              {label}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
