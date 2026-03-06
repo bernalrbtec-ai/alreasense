@@ -1334,6 +1334,25 @@ export function MessageList() {
                     })}
                   </div>
                 )}
+                {/* Meta 24h / reply buttons: mensagem com interactive_reply_buttons (body_text + buttons) */}
+                {!messageItem.is_deleted && messageItem.metadata?.interactive_reply_buttons?.buttons && Array.isArray(messageItem.metadata.interactive_reply_buttons.buttons) && messageItem.metadata.interactive_reply_buttons.buttons.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {messageItem.metadata.interactive_reply_buttons.buttons.map((btn: { id?: string; title?: string; text?: string }, i: number) => {
+                      const raw = typeof btn?.title === 'string' ? btn.title : (typeof btn?.text === 'string' ? btn.text : '');
+                      if (!raw || typeof raw !== 'string') return null;
+                      const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+                      return (
+                        <span
+                          key={String(btn?.id ?? i)}
+                          className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 truncate max-w-[200px]"
+                          title={raw.length > 80 ? raw : undefined}
+                        >
+                          {String(label)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   {messageItem.is_edited && (

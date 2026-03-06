@@ -149,6 +149,19 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return isValidE164(normalized);
   }, [normalizePhone]);
 
+  // Telefone efetivo ao iniciar por número. Hooks devem vir antes de qualquer return (regra do React).
+  const getEffectivePhone = useCallback((input: string): string => {
+    const s = input != null && typeof input === 'string' ? input : String(input ?? '');
+    if (!s.trim()) return '';
+    const digits = s.replace(/\D/g, '');
+    if (digits.length >= 12 && digits.startsWith('55')) return '+' + digits;
+    if (digits.length >= 10) {
+      const { dial, national } = parseE164ToCountryAndNational('+' + digits);
+      if (dial && national.length >= 6) return buildE164International(dial, national);
+    }
+    return rawInputToE164(s, '17');
+  }, []);
+
   // Buscar contatos
   useEffect(() => {
     if (!isOpen) {
@@ -385,24 +398,12 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return phone;
   };
 
-  if (!isOpen) return null;
-
   const isPhone = isPhoneQuery(searchQuery);
   const showPhoneOption = isPhone && contacts.length === 0;
-
-  const getEffectivePhone = useCallback((input: string): string => {
-    if (!input.trim()) return '';
-    const digits = input.replace(/\D/g, '');
-    if (digits.length >= 12 && digits.startsWith('55')) return '+' + digits;
-    if (digits.length >= 10) {
-      const { dial, national } = parseE164ToCountryAndNational('+' + digits);
-      if (dial && national.length >= 6) return buildE164International(dial, national);
-    }
-    return rawInputToE164(input, '17');
-  }, []);
-
   const effectivePhone = showPhoneOption ? getEffectivePhone(phoneInput) : '';
   const effectivePhoneValid = !!effectivePhone && validatePhone(effectivePhone);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">

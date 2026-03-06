@@ -8,7 +8,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -911,6 +911,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
         template_message_metadata = None  # Preenchido apenas no branch templateMessage
+        interactive_reply_buttons_metadata = None  # Preenchido no branch buttonsMessage para exibir botões no frontend
 
         # ✅ DEBUG: Log do tipo de mensagem recebido
         logger.info(f"🔍 [WEBHOOK UPSERT] MessageType recebido: {message_type}")
@@ -1626,7 +1627,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             if not isinstance(content, str):
                 content = str(content, errors='replace') if isinstance(content, bytes) else 'Mensagem de template'
         elif message_type == 'buttonsMessage':
-            # Mensagem que contém botões (reply buttons) – exibir título/descrição em vez de [buttonsMessage]
+            # Mensagem que contém botões (reply buttons) – exibir título/descrição e botões no frontend
             try:
                 bm = message_info.get('buttonsMessage') or message_info.get('buttons') or {}
                 if not isinstance(bm, dict):
@@ -1640,6 +1641,28 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     raw = raw.strip()
                 content = (raw or 'Mensagem com botões').replace('\x00', '')[:65536]
                 logger.info("buttonsMessage: exibindo texto: %s", content[:80])
+                # Extrair botões para metadata (frontend exibe como interactive_reply_buttons)
+                buttons_raw = bm.get('buttons') or bm.get('buttonList')
+                if not isinstance(buttons_raw, list):
+                    buttons_raw = []
+                if buttons_raw:
+                    buttons_list = []
+                    for b in buttons_raw[:10]:
+                        if not isinstance(b, dict):
+                            continue
+                        title = (b.get('displayText') or b.get('text') or b.get('title') or '').strip()
+                        if isinstance(title, bytes):
+                            title = title.decode('utf-8', errors='replace').strip()
+                        if not isinstance(title, str):
+                            title = str(title).strip() if title else ''
+                        bid = (b.get('id') or '').strip() or str(len(buttons_list))
+                        if title or bid:
+                            buttons_list.append({'id': str(bid)[:100], 'title': title[:100] if title else bid})
+                    if buttons_list:
+                        interactive_reply_buttons_metadata = {
+                            'body_text': content[:1024],
+                            'buttons': buttons_list[:3],
+                        }
             except Exception as e:
                 logger.warning("buttonsMessage: falha ao extrair payload - %s", e, exc_info=False)
                 content = 'Mensagem com botões'
@@ -1975,20 +1998,45 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     .first()
                 )
                 if mais_antiga and mais_antiga.id != existing_conversation.id:
-                    # Preferir a criada primeiro (conversa original do contato)
-                    logger.info(
-                        f"🔄 [TROCA-INST] Reutilizando conversa mais antiga (evitar duplicata): "
-                        f"conv_id={mais_antiga.id} (criada {mais_antiga.created_at}) em vez de {existing_conversation.id}; atualizando instance_name → {instance_name.strip()!r}"
-                    )
-                    existing_conversation = mais_antiga
-                    existing_conversation.instance_name = instance_name.strip()
-                    existing_conversation.instance_friendly_name = (
-                        (correct_friendly_name or "").strip()
-                        or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
-                        or (wa_instance and wa_instance.instance_name or "")
-                        or ""
-                    )
-                    existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                    target_instance = instance_name.strip()
+                    # UniqueViolation: índice (tenant, contact_phone, instance_name) — se já existir conversa com esse instance_name, reutilizá-la
+                    already_with_instance = Conversation.objects.filter(
+                        base_filter & Q(instance_name=target_instance)
+                    ).exclude(id=mais_antiga.id).first()
+                    if already_with_instance:
+                        existing_conversation = already_with_instance
+                        logger.info(
+                            f"🔄 [TROCA-INST] Já existe conversa com instance_name={target_instance!r}, usando conv_id={already_with_instance.id} (evita UniqueViolation)"
+                        )
+                    else:
+                        existing_conversation = mais_antiga
+                        existing_conversation.instance_name = target_instance
+                        existing_conversation.instance_friendly_name = (
+                            (correct_friendly_name or "").strip()
+                            or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
+                            or (wa_instance and wa_instance.instance_name or "")
+                            or ""
+                        )
+                        try:
+                            existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                            logger.info(
+                                f"🔄 [TROCA-INST] Reutilizando conversa mais antiga: conv_id={mais_antiga.id}, instance_name → {target_instance!r}"
+                            )
+                        except IntegrityError as e:
+                            if "idx_chat_conversation_unique" in str(e):
+                                fallback = Conversation.objects.filter(
+                                    base_filter & Q(instance_name=target_instance)
+                                ).first()
+                                if fallback:
+                                    existing_conversation = fallback
+                                    logger.warning(
+                                        "🔄 [TROCA-INST] UniqueViolation ao atualizar mais_antiga, usando conversa existente: %s",
+                                        fallback.id,
+                                    )
+                                else:
+                                    raise
+                            else:
+                                raise
         
         # 2. Fallback: conversa legada sem instance_name (NULL ou vazio)
         if not existing_conversation:
@@ -1996,15 +2044,39 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 base_filter & (Q(instance_name='') | Q(instance_name__isnull=True))
             ).first()
             if existing_conversation and instance_name and str(instance_name).strip():
-                logger.info(f"🔄 [MULTI-INST] Conversa legada encontrada (sem instance_name), atribuindo: {instance_name}")
-                existing_conversation.instance_name = instance_name.strip()
-                existing_conversation.instance_friendly_name = (
-                    (correct_friendly_name or "").strip()
-                    or (wa_instance and (getattr(wa_instance, "friendly_name", None) or "").strip())
-                    or (wa_instance and wa_instance.instance_name)
-                    or ""
-                )
-                existing_conversation.save(update_fields=['instance_name', 'instance_friendly_name'])
+                target_instance = instance_name.strip()
+                already_with_instance = Conversation.objects.filter(
+                    base_filter & Q(instance_name=target_instance)
+                ).exclude(id=existing_conversation.id).first()
+                if already_with_instance:
+                    existing_conversation = already_with_instance
+                    logger.info(f"🔄 [MULTI-INST] Já existe conversa com instance_name={target_instance!r}, usando conv_id={existing_conversation.id}")
+                else:
+                    logger.info(f"🔄 [MULTI-INST] Conversa legada encontrada (sem instance_name), atribuindo: {target_instance}")
+                    existing_conversation.instance_name = target_instance
+                    existing_conversation.instance_friendly_name = (
+                        (correct_friendly_name or "").strip()
+                        or (wa_instance and (getattr(wa_instance, "friendly_name", None) or "").strip())
+                        or (wa_instance and wa_instance.instance_name)
+                        or ""
+                    )
+                    try:
+                        existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                    except IntegrityError as e:
+                        if "idx_chat_conversation_unique" in str(e):
+                            fallback = Conversation.objects.filter(
+                                base_filter & Q(instance_name=target_instance)
+                            ).first()
+                            if fallback:
+                                existing_conversation = fallback
+                                logger.warning(
+                                    "🔄 [MULTI-INST] UniqueViolation ao atualizar legada, usando conversa existente: %s",
+                                    fallback.id,
+                                )
+                            else:
+                                raise
+                        else:
+                            raise
         
         # 3. Fallback órfã: instance_name preenchido mas com instância que não existe mais (removida/trocada)
         # Mesmo contato entrando pela instância atual → reutilizar conversa e atualizar instance_name
@@ -2045,19 +2117,44 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 )
                 for conv in orphan_candidates:
                     if _is_orphan(conv):
-                        existing_conversation = conv
-                        logger.info(
-                            f"🔄 [TROCA-INST] Reutilizando conversa órfã (instance_name=instância inexistente): "
-                            f"{conv.id} instance_name={conv.instance_name!r} → {instance_name.strip()!r}"
-                        )
-                        existing_conversation.instance_name = instance_name.strip()
-                        existing_conversation.instance_friendly_name = (
-                            (correct_friendly_name or "").strip()
-                            or (getattr(wa_instance, "friendly_name", None) or "").strip()
-                            or (getattr(wa_instance, "instance_name", None) or "")
-                            or ""
-                        )
-                        existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                        target_instance = instance_name.strip()
+                        already_with_instance = Conversation.objects.filter(
+                            base_filter & Q(instance_name=target_instance)
+                        ).exclude(id=conv.id).first()
+                        if already_with_instance:
+                            existing_conversation = already_with_instance
+                            logger.info(
+                                f"🔄 [TROCA-INST] Órfã encontrada mas já existe conversa com instance_name={target_instance!r}, usando conv_id={existing_conversation.id}"
+                            )
+                        else:
+                            existing_conversation = conv
+                            existing_conversation.instance_name = target_instance
+                            existing_conversation.instance_friendly_name = (
+                                (correct_friendly_name or "").strip()
+                                or (getattr(wa_instance, "friendly_name", None) or "").strip()
+                                or (getattr(wa_instance, "instance_name", None) or "")
+                                or ""
+                            )
+                            try:
+                                existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                                logger.info(
+                                    f"🔄 [TROCA-INST] Reutilizando conversa órfã: {conv.id} instance_name → {target_instance!r}"
+                                )
+                            except IntegrityError as e:
+                                if "idx_chat_conversation_unique" in str(e):
+                                    fallback = Conversation.objects.filter(
+                                        base_filter & Q(instance_name=target_instance)
+                                    ).first()
+                                    if fallback:
+                                        existing_conversation = fallback
+                                        logger.warning(
+                                            "🔄 [TROCA-INST] UniqueViolation ao atualizar órfã, usando conversa existente: %s",
+                                            fallback.id,
+                                        )
+                                    else:
+                                        raise
+                                else:
+                                    raise
                         break
         
         # 4. Fallback tenant com uma única instância ativa: qualquer conversa (tenant+phone) é a mesma
@@ -2070,18 +2167,43 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     .first()
                 )
                 if existing_conversation:
-                    logger.info(
-                        f"🔄 [TROCA-INST] Reutilizando conversa (tenant 1 instância): {existing_conversation.id} "
-                        f"→ instance_name={instance_name.strip()!r}"
-                    )
-                    existing_conversation.instance_name = instance_name.strip()
-                    existing_conversation.instance_friendly_name = (
-                        (correct_friendly_name or "").strip()
-                        or (getattr(wa_instance, "friendly_name", None) or "").strip()
-                        or (getattr(wa_instance, "instance_name", None) or "")
-                        or ""
-                    )
-                    existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                    target_instance = instance_name.strip()
+                    already_with_instance = Conversation.objects.filter(
+                        base_filter & Q(instance_name=target_instance)
+                    ).exclude(id=existing_conversation.id).first()
+                    if already_with_instance:
+                        existing_conversation = already_with_instance
+                        logger.info(
+                            f"🔄 [TROCA-INST] Já existe conversa com instance_name={target_instance!r}, usando conv_id={existing_conversation.id}"
+                        )
+                    else:
+                        logger.info(
+                            f"🔄 [TROCA-INST] Reutilizando conversa (tenant 1 instância): {existing_conversation.id} → instance_name={target_instance!r}"
+                        )
+                        existing_conversation.instance_name = target_instance
+                        existing_conversation.instance_friendly_name = (
+                            (correct_friendly_name or "").strip()
+                            or (getattr(wa_instance, "friendly_name", None) or "").strip()
+                            or (getattr(wa_instance, "instance_name", None) or "")
+                            or ""
+                        )
+                        try:
+                            existing_conversation.save(update_fields=["instance_name", "instance_friendly_name"])
+                        except IntegrityError as e:
+                            if "idx_chat_conversation_unique" in str(e):
+                                fallback = Conversation.objects.filter(
+                                    base_filter & Q(instance_name=target_instance)
+                                ).first()
+                                if fallback:
+                                    existing_conversation = fallback
+                                    logger.warning(
+                                        "🔄 [TROCA-INST] UniqueViolation (tenant 1 inst), usando conversa existente: %s",
+                                        fallback.id,
+                                    )
+                                else:
+                                    raise
+                            else:
+                                raise
         
         if existing_conversation:
             # Conversa existe - usar telefone normalizado para garantir consistência
@@ -2140,21 +2262,50 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     qualquer_conv = None
                 if qualquer_conv:
                     inst_name = (instance_name or "").strip()
-                    logger.info(
-                        f"🔄 [TROCA-INST] Reutilizando única conversa existente (evitar duplicata): "
-                        f"conv_id={qualquer_conv.id}; atualizando instance_name → {inst_name!r}"
-                    )
-                    qualquer_conv.instance_name = inst_name
-                    qualquer_conv.instance_friendly_name = (
-                        (correct_friendly_name or "").strip()
-                        or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
-                        or (wa_instance and wa_instance.instance_name or "")
-                        or ""
-                    )
-                    qualquer_conv.save(update_fields=["instance_name", "instance_friendly_name"])
-                    existing_conversation = qualquer_conv
-                    conversation = existing_conversation
-                    created = False
+                    already_with_instance = Conversation.objects.filter(
+                        base_filter & Q(instance_name=inst_name)
+                    ).exclude(id=qualquer_conv.id).first()
+                    if already_with_instance:
+                        existing_conversation = already_with_instance
+                        conversation = existing_conversation
+                        created = False
+                        logger.info(
+                            f"🔄 [TROCA-INST] Já existe conversa com instance_name={inst_name!r}, usando conv_id={existing_conversation.id} (evita UniqueViolation)"
+                        )
+                    else:
+                        logger.info(
+                            f"🔄 [TROCA-INST] Reutilizando única conversa existente (evitar duplicata): "
+                            f"conv_id={qualquer_conv.id}; atualizando instance_name → {inst_name!r}"
+                        )
+                        qualquer_conv.instance_name = inst_name
+                        qualquer_conv.instance_friendly_name = (
+                            (correct_friendly_name or "").strip()
+                            or (wa_instance and getattr(wa_instance, "friendly_name", None) or "")
+                            or (wa_instance and wa_instance.instance_name or "")
+                            or ""
+                        )
+                        try:
+                            qualquer_conv.save(update_fields=["instance_name", "instance_friendly_name"])
+                            existing_conversation = qualquer_conv
+                            conversation = existing_conversation
+                            created = False
+                        except IntegrityError as e:
+                            if "idx_chat_conversation_unique" in str(e):
+                                fallback = Conversation.objects.filter(
+                                    base_filter & Q(instance_name=inst_name)
+                                ).first()
+                                if fallback:
+                                    existing_conversation = fallback
+                                    conversation = fallback
+                                    created = False
+                                    logger.warning(
+                                        "🔄 [TROCA-INST] UniqueViolation (qualquer_conv), usando conversa existente: %s",
+                                        fallback.id,
+                                    )
+                                else:
+                                    raise
+                            else:
+                                raise
             if not existing_conversation:
                 # Criar nova conversa com telefone normalizado
                 logger.info(f"📋 [ROUTING] Criando nova conversa com defaults:")
@@ -2180,7 +2331,6 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     )
                 except Exception as create_err:
                     # ✅ Race condition: outro webhook criou primeiro. Buscar e usar.
-                    from django.db import IntegrityError
                     if isinstance(create_err, IntegrityError) and 'idx_chat_conversation_unique' in str(create_err):
                         logger.warning(f"⚠️ [WEBHOOK] Race: conversa já existe, buscando... ({create_err})")
                         inst_key = (instance_name or '').strip() or ''
@@ -2759,6 +2909,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 message_defaults['metadata']['template_message'] = template_message_metadata
             except (TypeError, ValueError) as _e:
                 logger.debug("template_message_metadata não serializável: %s", _e)
+
+        # ✅ Mensagem com botões (buttonsMessage ou Meta 24h): metadata para exibir botões no frontend
+        if interactive_reply_buttons_metadata:
+            try:
+                import json
+                json.dumps(interactive_reply_buttons_metadata)
+                message_defaults['metadata']['interactive_reply_buttons'] = interactive_reply_buttons_metadata
+            except (TypeError, ValueError) as _e:
+                logger.debug("interactive_reply_buttons_metadata não serializável: %s", _e)
         
         # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
         if mentions_list:
