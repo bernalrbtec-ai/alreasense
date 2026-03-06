@@ -527,13 +527,21 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
               <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">
                 {replyToMessage.is_deleted
                   ? 'Mensagem apagada'
-                  : (replyToMessage.content
-                      ? (replyToMessage.content.length > 100
-                          ? replyToMessage.content.substring(0, 100) + '...'
-                          : replyToMessage.content)
-                      : (replyToMessage.attachments && replyToMessage.attachments.length > 0
-                          ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
-                          : 'Mensagem'))}
+                  : ((() => {
+                      const raw = replyToMessage.content != null ? String(replyToMessage.content) : '';
+                      const normalized =
+                        raw.trim() === '[button]'
+                          ? 'Resposta de botão'
+                          : raw.trim() === '[templateMessage]'
+                            ? 'Mensagem de template'
+                            : raw;
+                      if (normalized) {
+                        return normalized.length > 100 ? normalized.substring(0, 100) + '...' : normalized;
+                      }
+                      return replyToMessage.attachments && replyToMessage.attachments.length > 0
+                        ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
+                        : 'Mensagem';
+                    })())}
               </p>
             </div>
             <button

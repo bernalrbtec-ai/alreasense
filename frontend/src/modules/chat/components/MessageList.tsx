@@ -240,10 +240,15 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
   };
   
   const attachmentType = getAttachmentType();
-  const displayContent = repliedMessage.content 
-    ? (repliedMessage.content.length > 80 
-        ? repliedMessage.content.substring(0, 80) + '...' 
-        : repliedMessage.content)
+  const rawReplyContent = repliedMessage.content != null ? String(repliedMessage.content) : '';
+  const normalizedReply =
+    rawReplyContent.trim() === '[button]'
+      ? 'Resposta de botão'
+      : rawReplyContent.trim() === '[templateMessage]'
+        ? 'Mensagem de template'
+        : rawReplyContent;
+  const displayContent = normalizedReply
+    ? (normalizedReply.length > 80 ? normalizedReply.substring(0, 80) + '...' : normalizedReply)
     : (attachmentType || 'Mensagem');
   
   return (
@@ -1225,16 +1230,25 @@ export function MessageList() {
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
                 {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
-                {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() &&
-                 !/^\[(document|image|video|audio)\]$/i.test(messageItem.content.trim()) &&
-                 messageItem.content.trim() !== '[contactsArrayMessage]' &&
-                 !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) &&
-                 !messageItem.metadata?.location_message && (
+                {!messageItem.is_deleted && messageItem.content != null && (() => {
+                 const contentStr = String(messageItem.content ?? '');
+                 return contentStr.trim() &&
+                 !/^\[(document|image|video|audio)\]$/i.test(contentStr.trim()) &&
+                 contentStr.trim() !== '[contactsArrayMessage]' &&
+                 !(messageItem.metadata?.contact_message || contentStr.includes('📇') || contentStr.includes('Compartilhou contato')) &&
+                 !messageItem.metadata?.location_message;
+                 })() && (
                   <>
                     {/* ✅ Template: exibir "Mensagem de template" quando conteúdo for literal [templateMessage] (mensagens antigas) */}
+                    {/* ✅ Resposta de botão: exibir "Resposta de botão" quando conteúdo for literal [button] (mensagens antigas) */}
                     {(() => {
-                      const rawContent = messageItem.content ?? '';
-                      const displayContent = rawContent.trim() === '[templateMessage]' ? 'Mensagem de template' : rawContent;
+                      const rawContent = typeof messageItem.content === 'string' ? messageItem.content : String(messageItem.content ?? '');
+                      const displayContent =
+                        rawContent.trim() === '[templateMessage]'
+                          ? 'Mensagem de template'
+                          : rawContent.trim() === '[button]'
+                            ? 'Resposta de botão'
+                            : rawContent;
                       return (
                         <>
                           {messageItem.direction === 'outgoing' && (() => {

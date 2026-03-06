@@ -203,14 +203,19 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
             )}
 
             {/* Conteúdo (se for texto) */}
-            {message.content && (
+            {message.content != null && String(message.content).trim() !== '' && (
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                   <FileText className="w-5 h-5 text-gray-600 dark:text-gray-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Conteúdo</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 break-words">{message.content}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 break-words">
+                    {(() => {
+                      const c = String(message.content ?? '');
+                      return c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c;
+                    })()}
+                  </p>
                 </div>
               </div>
             )}

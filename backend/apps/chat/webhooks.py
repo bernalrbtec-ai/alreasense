@@ -1625,9 +1625,96 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 template_message_metadata = None
             if not isinstance(content, str):
                 content = str(content, errors='replace') if isinstance(content, bytes) else 'Mensagem de template'
+        elif message_type in ('button', 'templateButtonReplyMessage', 'buttonsResponseMessage'):
+            # Resposta de botão (template quick reply ou lista de botões) – exibir texto do botão em vez de [button]
+            try:
+                btn_payload = (
+                    message_info.get('templateButtonReplyMessage') or
+                    message_info.get('buttonsResponseMessage') or
+                    message_info.get('button') or
+                    {}
+                )
+                if not isinstance(btn_payload, dict):
+                    btn_payload = {}
+                context_info_btn = (
+                    btn_payload.get('contextInfo') or
+                    message_info.get('contextInfo') or
+                    (message_data or {}).get('contextInfo') or
+                    {}
+                )
+                if not isinstance(context_info_btn, dict):
+                    context_info_btn = {}
+                quoted_id = extract_quoted_message(context_info_btn)
+                if quoted_id:
+                    quoted_message_id_evolution = quoted_id
+
+                def _btn_str(v):
+                    if v is None:
+                        return ''
+                    if isinstance(v, str):
+                        return v.strip()
+                    if isinstance(v, bytes):
+                        return v.decode('utf-8', errors='replace').strip()
+                    return str(v).strip()
+
+                selected_text = _btn_str(btn_payload.get('selectedDisplayText'))
+                selected_id = _btn_str(btn_payload.get('selectedId'))
+                selected_idx = btn_payload.get('selectedIndex')
+                content = (
+                    selected_text or
+                    selected_id or
+                    (str(selected_idx).strip() if selected_idx is not None else '') or
+                    'Resposta de botão'
+                )
+                content = (content or '').replace('\x00', '')
+                if len(content) > 65536:
+                    content = content[:65533].rstrip() + '...'
+                logger.info("templateButtonReplyMessage/button: exibindo texto do botão: %s", content[:80])
+            except Exception as e:
+                logger.warning("Resposta de botão: falha ao extrair payload - %s", e, exc_info=False)
+                content = 'Resposta de botão'
         else:
-            logger.warning("Tipo de mensagem não tratado: %s", message_type)
-            content = f'[{message_type}]'
+            # Fallback: verificar se message_info tem payload de botão mesmo com outro messageType
+            btn_payload = (
+                message_info.get('templateButtonReplyMessage') or
+                message_info.get('buttonsResponseMessage') or
+                message_info.get('button')
+            )
+            if isinstance(btn_payload, dict):
+                def _btn_str_fb(v):
+                    if v is None:
+                        return ''
+                    if isinstance(v, str):
+                        return v.strip()
+                    if isinstance(v, bytes):
+                        return v.decode('utf-8', errors='replace').strip()
+                    return str(v).strip()
+
+                selected_text = _btn_str_fb(btn_payload.get('selectedDisplayText'))
+                selected_id = _btn_str_fb(btn_payload.get('selectedId'))
+                selected_idx = btn_payload.get('selectedIndex')
+                content = (
+                    selected_text or
+                    selected_id or
+                    (str(selected_idx).strip() if selected_idx is not None else '') or
+                    'Resposta de botão'
+                )
+                content = (content or '').replace('\x00', '')
+                if len(content) > 65536:
+                    content = content[:65533].rstrip() + '...'
+                context_info_btn = btn_payload.get('contextInfo') or message_info.get('contextInfo') or {}
+                if isinstance(context_info_btn, dict):
+                    quoted_id = extract_quoted_message(context_info_btn)
+                    if quoted_id:
+                        quoted_message_id_evolution = quoted_id
+                logger.info("Resposta de botão (fallback): exibindo texto: %s", content[:80])
+            else:
+                logger.warning("Tipo de mensagem não tratado: %s", message_type)
+                content = f'[{message_type}]'
+
+        # Garantir que content é sempre string antes de usar (evita quebra em log/save)
+        if not isinstance(content, str):
+            content = str(content, errors='replace') if content is not None else ''
         
         # Nome do contato
         push_name = message_data.get('pushName', '')

@@ -249,7 +249,12 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
           <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Mensagem a encaminhar:</p>
           <div className="bg-white dark:bg-gray-700 rounded p-2 border border-gray-200 dark:border-gray-600">
             <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
-              {message.content || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem')}
+              {(() => {
+                const c = message.content != null ? String(message.content) : '';
+                const display =
+                  c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c;
+                return display || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem');
+              })()}
             </p>
           </div>
         </div>

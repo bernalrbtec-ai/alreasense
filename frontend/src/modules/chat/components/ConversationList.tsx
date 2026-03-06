@@ -613,9 +613,14 @@ export function ConversationList() {
                       {/* Mensagem apagada: indicar sem exibir conteúdo */}
                       {conversationItem.last_message?.is_deleted
                         ? 'Mensagem apagada'
-                        : (conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
-                            ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`
-                            : (conversationItem.last_message?.content || '📎 Anexo'))
+                        : (() => {
+                            const raw = conversationItem.last_message?.content;
+                            const c = typeof raw === 'string' ? raw : String(raw ?? '');
+                            const preview = (c.trim() === '[button]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c) || '';
+                            return conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
+                              ? `${conversationItem.last_message.sender_name}: ${preview}`
+                              : (preview || '📎 Anexo');
+                          })()
                       }
                     </p>
                   ) : (
