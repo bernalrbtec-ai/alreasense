@@ -3304,24 +3304,68 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             message = existing_message
             msg_created = False
         else:
-            # ✅ FIX: Se não tem message_id, gerar um baseado no key.id
-            if not message_id:
-                key_id = key.get('id')
-                if key_id:
-                    message_id = key_id
-                    logger.info(f"⚠️ [WEBHOOK] message_id não fornecido, usando key.id: {message_id}")
-                else:
-                    # Fallback: gerar ID único baseado no timestamp e remoteJid
-                    import hashlib
-                    unique_str = f"{remote_jid}_{from_me}_{content[:50]}_{conversation.id}"
-                    message_id = hashlib.md5(unique_str.encode()).hexdigest()[:16]
-                    logger.warning(f"⚠️ [WEBHOOK] message_id não encontrado, gerando: {message_id}")
-            
-            message_defaults['message_id'] = message_id
-            message, msg_created = Message.objects.get_or_create(
-                message_id=message_id,
-                defaults=message_defaults
-            )
+            linked_msg = None
+            # ✅ RACE FIX (from_me): Webhook pode chegar antes de atualizarmos message_id após o envio.
+            # Buscar mensagem outgoing recente na mesma conversa sem message_id e mesmo conteúdo → atualizar e preservar botões
+            if from_me and message_id and conversation:
+                from django.utils import timezone
+                from datetime import timedelta
+                from django.db.models import Q
+                recent = timezone.now() - timedelta(seconds=120)
+                content_normalized = (content or '').strip()[:500]
+                candidate = (
+                    Message.objects.filter(
+                        conversation=conversation,
+                        direction='outgoing',
+                        created_at__gte=recent,
+                    )
+                    .filter(Q(message_id__isnull=True) | Q(message_id=''))
+                    .order_by('-created_at')
+                ).first()
+                if candidate and (candidate.content or '').strip()[:500] == content_normalized:
+                    logger.info(
+                        "🔄 [WEBHOOK] from_me: vinculando webhook à mensagem existente (message_id ainda não setado) id=%s",
+                        candidate.id,
+                    )
+                    existing_metadata = candidate.metadata or {}
+                    new_metadata = message_defaults.get('metadata', {})
+                    merged_metadata = {**existing_metadata, **new_metadata}
+                    new_irb = new_metadata.get('interactive_reply_buttons') or {}
+                    new_btns = new_irb.get('buttons') if isinstance(new_irb.get('buttons'), list) else []
+                    new_has_real_titles = any(
+                        (isinstance(b, dict) and (b.get('title') or b.get('text') or '').strip()
+                        and not ((b.get('title') or b.get('text') or '').strip().isdigit() and len((b.get('title') or b.get('text') or '').strip()) <= 2)
+                        for b in new_btns
+                    )
+                    if existing_metadata.get('interactive_reply_buttons') and not new_has_real_titles:
+                        merged_metadata['interactive_reply_buttons'] = existing_metadata['interactive_reply_buttons']
+                        logger.info("🔄 [WEBHOOK] Preservando interactive_reply_buttons na mensagem vinculada (botões para quem recebe)")
+                    candidate.message_id = message_id
+                    candidate.metadata = merged_metadata
+                    candidate.save(update_fields=['message_id', 'metadata'])
+                    linked_msg = candidate
+            if linked_msg is None:
+                # ✅ FIX: Se não tem message_id, gerar um baseado no key.id
+                if not message_id:
+                    key_id = key.get('id')
+                    if key_id:
+                        message_id = key_id
+                        logger.info(f"⚠️ [WEBHOOK] message_id não fornecido, usando key.id: {message_id}")
+                    else:
+                        # Fallback: gerar ID único baseado no timestamp e remoteJid
+                        import hashlib
+                        unique_str = f"{remote_jid}_{from_me}_{content[:50]}_{conversation.id}"
+                        message_id = hashlib.md5(unique_str.encode()).hexdigest()[:16]
+                        logger.warning(f"⚠️ [WEBHOOK] message_id não encontrado, gerando: {message_id}")
+                
+                message_defaults['message_id'] = message_id
+                message, msg_created = Message.objects.get_or_create(
+                    message_id=message_id,
+                    defaults=message_defaults
+                )
+            else:
+                message = linked_msg
+                msg_created = False
         
         if msg_created:
             logger.info(f"✅ [WEBHOOK] MENSAGEM NOVA CRIADA NO BANCO!")
