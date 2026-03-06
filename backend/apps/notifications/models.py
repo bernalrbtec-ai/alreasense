@@ -1248,6 +1248,13 @@ class WhatsAppTemplate(models.Model):
         verbose_name='Parâmetros padrão do body',
         help_text='Lista de valores padrão para variáveis do body (ex: ["Olá", "João"])',
     )
+    # Botões do template (QUICK_REPLY etc.), extraídos do sync Meta; formato [{"type": "quick_reply", "text": "Sim"}, ...]
+    buttons = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Botões',
+        help_text='Lista de botões (ex.: quick_reply) extraída da API Meta (components type BUTTONS).',
+    )
     is_active = models.BooleanField(
         default=True,
         db_index=True,

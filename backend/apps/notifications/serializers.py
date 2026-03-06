@@ -126,7 +126,8 @@ class WhatsAppTemplateSerializer(serializers.ModelSerializer):
         model = WhatsAppTemplate
         fields = [
             'id', 'tenant', 'name', 'template_id', 'language_code',
-            'body', 'body_parameters_default', 'is_active', 'wa_instance', 'wa_instance_name',
+            'body', 'body_parameters_default', 'buttons',
+            'is_active', 'wa_instance', 'wa_instance_name',
             'meta_status', 'meta_status_updated_at',
             'created_at', 'updated_at',
         ]

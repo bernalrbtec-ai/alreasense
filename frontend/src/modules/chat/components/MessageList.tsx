@@ -1115,14 +1115,23 @@ export function MessageList() {
                   });
                 }}
               >
-                {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
-                {/* ✅ CORREÇÃO CRÍTICA: Usar optional chaining para evitar erro de inicialização */}
-                {/* ✅ NOVO: Cabeçalho aparece também para mensagens de mídia (vídeo/áudio/imagem) */}
-                {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
-                  <p className="text-xs font-semibold text-green-600 mb-1">
-                    {messageItem.sender_name || messageItem.sender_phone}
-                  </p>
-                )}
+                {/* Cabeçalho da bolha: nome (grupos) à esquerda + badge Template (menor, à direita); só renderiza se houver algo a mostrar */}
+                {(activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone)) || (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) ? (
+                  <div className="flex justify-between items-center gap-2 mb-1 min-h-0">
+                    <div className="min-w-0 flex-1">
+                      {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
+                        <p className="text-xs font-semibold text-green-600 truncate">
+                          {messageItem.sender_name || messageItem.sender_phone}
+                        </p>
+                      )}
+                    </div>
+                    {(messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) && (
+                      <span className="flex-shrink-0 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-gray-200/90 dark:bg-gray-600/90 text-gray-600 dark:text-gray-400">
+                        Template
+                      </span>
+                    )}
+                  </div>
+                ) : null}
 
                 {/* ✅ NOVO: Badge "Fora de Horário" para mensagens recebidas fora do horário de atendimento */}
                 {messageItem.direction === 'incoming' && messageItem.metadata?.is_after_hours_auto && (
@@ -1302,30 +1311,23 @@ export function MessageList() {
                     })()}
                   </>
                 )}
-                {/* Template oficial: indicador e botões (leitura defensiva; mostra mesmo sem texto) */}
-                {!messageItem.is_deleted && (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) && (
-                  <div className="mt-1.5 space-y-1">
-                    <span className="inline-block text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
-                      Template
-                    </span>
-                    {messageItem.metadata?.template_message?.buttons && Array.isArray(messageItem.metadata.template_message.buttons) && messageItem.metadata.template_message.buttons.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {messageItem.metadata.template_message.buttons.map((btn: { text?: string; type?: string }, i: number) => {
-                          const raw = typeof btn?.text === 'string' ? btn.text : '';
-                          if (!raw) return null;
-                          const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
-                          return (
-                            <span
-                              key={i}
-                              className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 truncate max-w-[200px]"
-                              title={raw.length > 80 ? raw : undefined}
-                            >
-                              {label}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
+                {/* Template oficial: apenas botões (indicador "Template" está no cabeçalho da bolha) */}
+                {!messageItem.is_deleted && (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) && messageItem.metadata?.template_message?.buttons && Array.isArray(messageItem.metadata.template_message.buttons) && messageItem.metadata.template_message.buttons.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {messageItem.metadata.template_message.buttons.map((btn: { text?: string; type?: string }, i: number) => {
+                      const raw = typeof btn?.text === 'string' ? btn.text : '';
+                      if (!raw) return null;
+                      const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+                      return (
+                        <span
+                          key={i}
+                          className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 truncate max-w-[200px]"
+                          title={raw.length > 80 ? raw : undefined}
+                        >
+                          {label}
+                        </span>
+                      );
+                    })}
                   </div>
                 )}
                 

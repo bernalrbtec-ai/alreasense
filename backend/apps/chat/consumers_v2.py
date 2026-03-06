@@ -876,31 +876,36 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                     metadata['mentions'] = processed_mentions
                     logger.info(f"✅ [CHAT WS V2] {len(processed_mentions)} menção(ões) processadas e adicionadas ao metadata")
             
-            # ✅ Meta 24h: template para envio fora da janela; preencher content com texto do template para exibição no chat
+            # ✅ Meta 24h: template para envio fora da janela; preencher content e template_message (botões) para exibição no chat
             if wa_template_id:
                 metadata['wa_template_id'] = str(wa_template_id)
                 if template_body_parameters is not None:
                     metadata['body_parameters'] = list(template_body_parameters) if isinstance(template_body_parameters, (list, tuple)) else []
-                if not content:
-                    import uuid
-                    from apps.chat.utils.template_display import template_body_to_display_text
-                    from apps.notifications.models import WhatsAppTemplate
-                    try:
-                        tid = uuid.UUID(str(wa_template_id))
-                    except (ValueError, TypeError):
-                        content = "[Mensagem de template]"
-                    else:
-                        wa_template = WhatsAppTemplate.objects.filter(
-                            id=tid,
-                            tenant_id=self.user.tenant_id,
-                        ).first()
-                        if not wa_template:
-                            content = "[Mensagem de template]"
-                        elif not (wa_template.body and wa_template.body.strip()):
+                wa_template = None
+                try:
+                    import uuid as _uuid
+                    tid = _uuid.UUID(str(wa_template_id))
+                    wa_template = WhatsAppTemplate.objects.filter(
+                        id=tid,
+                        tenant_id=self.user.tenant_id,
+                    ).first()
+                except (ValueError, TypeError):
+                    pass
+                if wa_template:
+                    btn_list = getattr(wa_template, 'buttons', None)
+                    if isinstance(btn_list, list) and len(btn_list) > 0:
+                        normalized = [{'type': b.get('type', 'quick_reply'), 'text': str(b.get('text', ''))[:100]} for b in btn_list[:10] if isinstance(b, dict) and b.get('text')]
+                        if normalized:
+                            metadata['template_message'] = {'buttons': normalized}
+                    if not content:
+                        from apps.chat.utils.template_display import template_body_to_display_text
+                        if not (wa_template.body and wa_template.body.strip()):
                             content = f"Template: {wa_template.name}"
                         else:
                             params = list(template_body_parameters) if isinstance(template_body_parameters, (list, tuple)) else []
                             content = template_body_to_display_text(wa_template.body, params)
+                elif not content:
+                    content = "[Mensagem de template]"
             
             message = Message.objects.create(
                 conversation=conversation,

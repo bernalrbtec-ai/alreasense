@@ -740,6 +740,35 @@ def _extract_meta_template_body(item):
     return ''
 
 
+def _extract_meta_template_buttons(item):
+    """
+    Extrai lista de botões (quick_reply etc.) de um item da API Meta message_templates.
+    components type BUTTONS -> buttons[] com type QUICK_REPLY e text.
+    Retorna [{"type": "quick_reply", "text": "..."}, ...].
+    """
+    if not isinstance(item, dict):
+        return []
+    out = []
+    for c in item.get('components') or []:
+        if not isinstance(c, dict):
+            continue
+        if (c.get('type') or '').strip().upper() != 'BUTTONS':
+            continue
+        for btn in c.get('buttons') or []:
+            if not isinstance(btn, dict):
+                continue
+            btype = (btn.get('type') or '').strip().upper()
+            text = (btn.get('text') or '').strip()
+            if not text:
+                continue
+            out.append({
+                'type': 'quick_reply' if btype == 'QUICK_REPLY' else btype.lower() if btype else 'quick_reply',
+                'text': text[:100],
+            })
+        break
+    return out
+
+
 class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for WhatsAppTemplate (templates Meta para janela 24h)."""
     serializer_class = WhatsAppTemplateSerializer
@@ -812,6 +841,7 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
                 if meta_status_val not in ('approved', 'pending', 'rejected', 'limited', 'disabled', 'unknown', 'sync_error'):
                     meta_status_val = 'unknown'
                 body_text = _extract_meta_template_body(item)
+                buttons_list = _extract_meta_template_buttons(item)
                 qs = WhatsAppTemplate.objects.filter(
                     tenant=user.tenant,
                     template_id=name,
@@ -822,6 +852,8 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
                 update_kw = {'meta_status': meta_status_val, 'meta_status_updated_at': now}
                 if body_text:
                     update_kw['body'] = body_text
+                if buttons_list:
+                    update_kw['buttons'] = buttons_list
                 qs.update(**update_kw)
         return Response(
             {'synced_instances': synced, 'errors': errors},
