@@ -1654,19 +1654,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     for b in buttons_raw[:10]:
                         if not isinstance(b, dict):
                             continue
-                        title = (b.get('displayText') or b.get('text') or b.get('title') or '').strip()
+                        # Evolution envia buttonText.displayText e buttonId; outros formatos: displayText, text, title, id
+                        btn_text = b.get('buttonText') if isinstance(b.get('buttonText'), dict) else {}
+                        title = (
+                            (b.get('displayText') or b.get('text') or b.get('title') or
+                             (btn_text.get('displayText') or btn_text.get('text') or ''))
+                            or ''
+                        ).strip()
                         if isinstance(title, bytes):
                             title = title.decode('utf-8', errors='replace').strip()
                         if not isinstance(title, str):
                             title = str(title).strip() if title else ''
-                        bid = (b.get('id') or '').strip() or str(len(buttons_list))
+                        bid = (b.get('id') or b.get('buttonId') or '').strip() or str(len(buttons_list))
                         # Sempre incluir o botão; se vier só 0/1 do Evolution, usar rótulo legível para exibir
                         if title:
                             display_title = title[:100]
                         elif bid and not (bid.isdigit() and len(bid) <= 2):
                             display_title = bid[:100]
                         else:
-                            # Evolution envia só id 0/1: exibir "Opção 1", "Opção 2" (ou "Sim"/"Não" se forem 2)
                             n = len(buttons_list) + 1
                             display_title = ('Sim', 'Não')[n - 1] if len(buttons_raw[:3]) == 2 and n <= 2 else f'Opção {n}'
                         buttons_list.append({'id': str(bid)[:100], 'title': display_title})
@@ -1675,6 +1680,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             'body_text': content[:1024],
                             'buttons': buttons_list[:3],
                         }
+                        logger.info("buttonsMessage: botões extraídos (Evolution buttonText.displayText): %s", [x.get('title') for x in buttons_list[:3]])
             except Exception as e:
                 logger.warning("buttonsMessage: falha ao extrair payload - %s", e, exc_info=False)
                 content = 'Mensagem com botões'
@@ -1789,12 +1795,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     for b in buttons_raw[:10]:
                         if not isinstance(b, dict):
                             continue
-                        title = (b.get('displayText') or b.get('text') or b.get('title') or '').strip()
+                        btn_text = b.get('buttonText') if isinstance(b.get('buttonText'), dict) else {}
+                        title = (
+                            (b.get('displayText') or b.get('text') or b.get('title') or
+                             (btn_text.get('displayText') or btn_text.get('text') or ''))
+                            or ''
+                        ).strip()
                         if isinstance(title, bytes):
                             title = title.decode('utf-8', errors='replace').strip()
                         if not isinstance(title, str):
                             title = str(title).strip() if title else ''
-                        bid = (b.get('id') or '').strip() or str(len(buttons_list))
+                        bid = (b.get('id') or b.get('buttonId') or '').strip() or str(len(buttons_list))
                         if title:
                             display_title = title[:100]
                         elif bid and not (bid.isdigit() and len(bid) <= 2):
