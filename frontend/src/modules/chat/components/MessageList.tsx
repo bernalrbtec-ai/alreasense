@@ -310,7 +310,12 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
   }, {} as ReactionsSummary);
 };
 
-export function MessageList() {
+export interface MessageListProps {
+  /** Ao clicar num botão de resposta (mensagem recebida com interactive_reply_buttons), envia o texto do botão como resposta. Estilo WhatsApp Web. */
+  onSendReplyButtonClick?: (buttonText: string, replyToMessageId: string) => void;
+}
+
+export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   console.log('🔄 [MessageList] Componente iniciando renderização...');
   
   // ✅ CORREÇÃO CRÍTICA: Inicializar estados ANTES de usar seletores que dependem de activeConversation
@@ -1334,13 +1339,29 @@ export function MessageList() {
                     })}
                   </div>
                 )}
-                {/* Meta 24h / reply buttons: mensagem com interactive_reply_buttons (body_text + buttons) */}
+                {/* Meta 24h / reply buttons: mensagem com interactive_reply_buttons (body_text + buttons). Incoming = clicável (envia resposta); outgoing = só exibição. */}
                 {!messageItem.is_deleted && messageItem.metadata?.interactive_reply_buttons?.buttons && Array.isArray(messageItem.metadata.interactive_reply_buttons.buttons) && messageItem.metadata.interactive_reply_buttons.buttons.length > 0 && (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {messageItem.metadata.interactive_reply_buttons.buttons.map((btn: { id?: string; title?: string; text?: string }, i: number) => {
                       const raw = typeof btn?.title === 'string' ? btn.title : (typeof btn?.text === 'string' ? btn.text : '');
                       if (!raw || typeof raw !== 'string') return null;
                       const label = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw;
+                      const isIncoming = messageItem.direction === 'incoming';
+                      const replyToId = messageItem?.id != null ? String(messageItem.id) : '';
+                      const canSend = isIncoming && replyToId && typeof onSendReplyButtonClick === 'function';
+                      if (canSend) {
+                        return (
+                          <button
+                            key={String(btn?.id ?? i)}
+                            type="button"
+                            onClick={() => onSendReplyButtonClick!(raw, replyToId)}
+                            className="inline-block text-xs px-3 py-1.5 rounded-lg border border-green-500/50 text-green-700 dark:text-green-400 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-500/50 truncate max-w-[200px] transition-colors cursor-pointer"
+                            title={raw.length > 80 ? raw : undefined}
+                          >
+                            {String(label)}
+                          </button>
+                        );
+                      }
                       return (
                         <span
                           key={String(btn?.id ?? i)}

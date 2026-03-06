@@ -1,7 +1,7 @@
 /**
  * Janela de chat principal - Estilo WhatsApp Web
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
@@ -57,6 +57,14 @@ export function ChatWindow() {
   const { isConnected, sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendTyping } = useChatSocket(activeConversationId);
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
+
+  // Callback estável para botões de resposta (reply buttons) na lista de mensagens
+  const handleSendReplyButtonClick = useCallback(
+    (buttonText: string, replyToMessageId: string) => {
+      sendMessage(buttonText, true, false, replyToMessageId);
+    },
+    [sendMessage]
+  );
   
   // Escape: se houver reply ativo, cancela o reply; senão deixa de exibir a conversa (volta à lista). NÃO fecha a conversa (sem API).
   useEffect(() => {
@@ -1003,7 +1011,9 @@ export function ChatWindow() {
       {/* ✅ CORREÇÃO: Renderizar MessageList apenas se conversationId estiver inicializado */}
       {conversationId && (
       <div className="flex-1 overflow-hidden">
-        <MessageList />
+        <MessageList
+          onSendReplyButtonClick={openInSpyMode ? undefined : handleSendReplyButtonClick}
+        />
       </div>
       )}
 
