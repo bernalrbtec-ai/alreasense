@@ -3332,9 +3332,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     merged_metadata = {**existing_metadata, **new_metadata}
                     new_irb = new_metadata.get('interactive_reply_buttons') or {}
                     new_btns = new_irb.get('buttons') if isinstance(new_irb.get('buttons'), list) else []
+                    def _btn_real(t):
+                        s = (t or '').strip()
+                        return bool(s) and not (s.isdigit() and len(s) <= 2)
                     new_has_real_titles = any(
-                        (isinstance(b, dict) and (b.get('title') or b.get('text') or '').strip()
-                        and not ((b.get('title') or b.get('text') or '').strip().isdigit() and len((b.get('title') or b.get('text') or '').strip()) <= 2)
+                        isinstance(b, dict) and _btn_real(b.get('title') or b.get('text'))
                         for b in new_btns
                     )
                     if existing_metadata.get('interactive_reply_buttons') and not new_has_real_titles:
