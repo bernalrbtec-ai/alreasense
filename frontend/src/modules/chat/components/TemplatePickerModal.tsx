@@ -1,6 +1,7 @@
 /**
- * Modal para escolher template WhatsApp (Meta: fora da janela 24h).
- * Exibe templates disponíveis para a conversa; ao selecionar, envia mensagem por template.
+ * Modal para escolher template WhatsApp (Meta).
+ * Exibe templates disponíveis para a conversa; ao selecionar, envia mensagem por template (ex.: com botões).
+ * Fora da janela 24h o envio por template é obrigatório; dentro da 24h pode ser usado para enviar templates com botões.
  */
 import React, { useState, useEffect } from 'react';
 import { X, FileText, Loader2 } from 'lucide-react';
@@ -90,7 +91,7 @@ export function TemplatePickerModal({
           </button>
         </div>
         <p className="px-4 pt-2 text-sm text-gray-500 dark:text-gray-400">
-          Esta conversa está fora da janela de 24h. Escolha um template aprovado para enviar.
+          Escolha um template aprovado para enviar (ex.: mensagens com botões). Fora da janela de 24h só é possível enviar por template.
         </p>
         <div className="flex-1 overflow-y-auto p-4">
           {loading && (

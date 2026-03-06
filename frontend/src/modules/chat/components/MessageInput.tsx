@@ -599,13 +599,13 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, i
         disabled={sending || !isConnected || isGroupInputBlocked}
       />
 
-      {/* Botão Template (Meta: fora da janela 24h) */}
-      {activeConversation?.requires_template_to_message && sendMessageAsTemplate && (
+      {/* Botão Template: apenas instâncias Meta (envio com botões; fora da 24h é obrigatório) */}
+      {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && sendMessageAsTemplate && (
         <button
           type="button"
           onClick={() => setShowTemplateModal(true)}
           className="p-2 rounded-full flex-shrink-0 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:text-indigo-400"
-          title="Enviar por template (fora da janela 24h)"
+          title={activeConversation?.requires_template_to_message ? 'Enviar por template (fora da janela 24h)' : 'Enviar por template (ex.: mensagem com botões)'}
         >
           <FileText className="w-5 h-5" />
         </button>
