@@ -172,8 +172,11 @@ export function getMessagePreviewText(
   if (raw === '[button]' || raw === '[interactive]') return 'Resposta de botão';
   if (raw === '[templateMessage]') return 'Mensagem de template';
   if (raw === '[buttonsMessage]') return 'Mensagem com botões';
-  if (raw === '[listMessage]') return 'Mensagem com lista';
-  if (metadata?.interactive_list != null && typeof metadata.interactive_list === 'object') return 'Mensagem com lista';
+  if (raw === '[listMessage]') return '';
+  if (metadata?.interactive_list != null && typeof metadata.interactive_list === 'object') {
+    const il = metadata.interactive_list as { body_text?: string };
+    return (il?.body_text && String(il.body_text).trim()) ? String(il.body_text).trim() : '';
+  }
   return raw || '';
 }
 

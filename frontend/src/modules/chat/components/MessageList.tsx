@@ -1258,8 +1258,10 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                  return contentStr.trim() &&
                  !/^\[(document|image|video|audio)\]$/i.test(contentStr.trim()) &&
                  contentStr.trim() !== '[contactsArrayMessage]' &&
+                 contentStr.trim() !== '[listMessage]' &&
                  !(messageItem.metadata?.contact_message || contentStr.includes('📇') || contentStr.includes('Compartilhou contato')) &&
-                 !messageItem.metadata?.location_message;
+                 !messageItem.metadata?.location_message &&
+                 !messageItem.metadata?.interactive_list;
                  })() && (
                   <>
                     {/* ✅ Template: exibir "Mensagem de template" quando conteúdo for literal [templateMessage] (mensagens antigas) */}
