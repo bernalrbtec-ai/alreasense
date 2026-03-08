@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle, Trash2 } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, List, Video, Music, Reply, AlertCircle, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
@@ -26,6 +26,17 @@ import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 import { EmojiPicker } from './EmojiPicker';
 import { parseMessageSignature } from '../utils/signatureParser';
 import { useTheme } from '@/hooks/useTheme';
+import { InteractiveListModal } from './InteractiveListModal';
+import type { InteractiveListSection } from './InteractiveListModal';
+
+/** Formato de metadata.interactive_list (lista interativa Meta/WhatsApp). */
+type InteractiveListMetadata = {
+  body_text?: string;
+  button_text?: string;
+  header_text?: string;
+  footer_text?: string;
+  sections?: Array<{ title?: string; rows?: Array<{ id?: string; title?: string; description?: string }> }>;
+};
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -327,7 +338,10 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   /** Qual ação de retry está em andamento: 'simple' = Tentar novamente, 'fallback' = Sim (outra instância). Usado para mostrar "Enviando..." só no botão clicado. */
   const [retryActionKind, setRetryActionKind] = useState<'simple' | 'fallback' | null>(null);
-  
+  /** Modal da lista interativa (estilo WhatsApp): título + seções/rows; null = fechado. */
+  const [interactiveListModal, setInteractiveListModal] = useState<{ title: string; sections: InteractiveListSection[]; footer?: string } | null>(null);
+  const interactiveListButtonRef = useRef<HTMLButtonElement | null>(null);
+
   console.log('✅ [MessageList] Estados inicializados');
   
   // ✅ CORREÇÃO: Capturar activeConversation ANTES de usar em outros seletores
@@ -1365,30 +1379,44 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   </div>
                   );
                 })()}
-                {/* Lista interativa (interactive_list): exibição em modo leitura - seções e rows */}
+                {/* Lista interativa (interactive_list): estilo WhatsApp – body + botão verde; opções no modal */}
                 {!messageItem.is_deleted && (() => {
-                  const il = messageItem.metadata?.interactive_list as { body_text?: string; button_text?: string; header_text?: string; footer_text?: string; sections?: Array<{ title?: string; rows?: Array<{ id?: string; title?: string; description?: string }> }> } | undefined;
+                  const il = messageItem.metadata?.interactive_list as InteractiveListMetadata | undefined;
                   if (!il || typeof il !== 'object') return null;
                   const sections = Array.isArray(il.sections) ? il.sections : [];
-                  if (sections.length === 0 && !il.body_text && !il.button_text) return null;
+                  const hasContent = sections.length > 0 || il.body_text || il.button_text;
+                  if (!hasContent) return null;
+
+                  const buttonLabel = (il.button_text && String(il.button_text).trim()) || 'Opções';
+                  const sectionsForModal: InteractiveListSection[] = sections.map((sec) => ({
+                    title: sec.title,
+                    rows: Array.isArray(sec.rows) ? sec.rows : [],
+                  }));
+
+                  const openListModal = () => {
+                    setInteractiveListModal({
+                      title: buttonLabel,
+                      sections: sectionsForModal,
+                      footer: il.footer_text ? String(il.footer_text) : undefined,
+                    });
+                  };
+
                   return (
                     <div className="mt-1.5 space-y-1.5">
                       {il.header_text ? <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">{il.header_text}</p> : null}
                       {il.body_text ? <p className="text-sm text-gray-700 dark:text-gray-300">{il.body_text}</p> : null}
-                      {il.button_text ? <span className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50">{il.button_text}</span> : null}
-                      {sections.map((sec, si) => (
-                        <div key={si} className="rounded border border-gray-200 dark:border-gray-600 overflow-hidden">
-                          {sec.title ? <p className="text-xs font-medium px-2 py-1 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{sec.title}</p> : null}
-                          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
-                            {(Array.isArray(sec.rows) ? sec.rows : []).map((row, ri) => (
-                              <li key={ri} className="px-2 py-1.5 text-sm text-gray-700 dark:text-gray-300">
-                                <span className="font-medium">{row.title ?? row.id ?? ''}</span>
-                                {row.description ? <span className="block text-xs text-gray-500 dark:text-gray-400">{row.description}</span> : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          interactiveListButtonRef.current = e.currentTarget;
+                          openListModal();
+                        }}
+                        className="inline-flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-[#25D366] text-white hover:opacity-90 active:scale-[0.98] transition-opacity transition-transform border-0 cursor-pointer"
+                        aria-label="Ver opções da lista"
+                      >
+                        <List className="w-4 h-4 flex-shrink-0" aria-hidden />
+                        <span className="truncate max-w-[200px]">{buttonLabel}</span>
+                      </button>
                       {il.footer_text ? <p className="text-xs text-gray-500 dark:text-gray-400">{il.footer_text}</p> : null}
                     </div>
                   );
@@ -1541,6 +1569,19 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
           onSuccess={() => {
             setForwardMessage(null);
             // Opcional: atualizar lista de mensagens
+          }}
+        />
+      )}
+
+      {/* Modal da lista interativa (opções estilo WhatsApp) */}
+      {interactiveListModal && (
+        <InteractiveListModal
+          title={interactiveListModal.title}
+          sections={interactiveListModal.sections}
+          footer={interactiveListModal.footer}
+          onClose={() => {
+            setInteractiveListModal(null);
+            setTimeout(() => interactiveListButtonRef.current?.focus(), 0);
           }}
         />
       )}
