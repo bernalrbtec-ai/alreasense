@@ -273,14 +273,14 @@ REDIS_PORT = config('REDISPORT', default='6379')
 REDIS_USER = config('REDISUSER', default='default')
 
 # Debug das variáveis de ambiente
-print(f"🔍 [DEBUG] REDIS_URL env: {os.environ.get('REDIS_URL', 'Not set')}")
-print(f"🔍 [DEBUG] REDISHOST env: {os.environ.get('REDISHOST', 'Not set')}")
-print(f"🔍 [DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD') else 'Not set'}")
+print(f"[DEBUG] REDIS_URL env: {os.environ.get('REDIS_URL', 'Not set')}")
+print(f"[DEBUG] REDISHOST env: {os.environ.get('REDISHOST', 'Not set')}")
+print(f"[DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD') else 'Not set'}")
 
 # Usar REDIS_URL se disponível, senão construir a partir das variáveis
 if REDIS_URL and REDIS_URL != '':
     # Usar REDIS_URL diretamente do Railway
-    print(f"✅ [REDIS] Usando REDIS_URL diretamente")
+    print("[OK] [REDIS] Usando REDIS_URL diretamente")
     
     # Extrair informações da REDIS_URL para as variáveis individuais
     try:
@@ -294,33 +294,33 @@ if REDIS_URL and REDIS_URL != '':
             REDIS_USER = parsed.username
         if parsed.password:
             REDIS_PASSWORD = parsed.password
-        print(f"🔧 [REDIS] Extraído da URL - Host: {REDIS_HOST}, Port: {REDIS_PORT}, User: {REDIS_USER}")
+        print(f"[CONFIG] [REDIS] Extraído da URL - Host: {REDIS_HOST}, Port: {REDIS_PORT}, User: {REDIS_USER}")
     except Exception as e:
-        print(f"⚠️ [REDIS] Erro ao extrair info da URL: {e}")
+        print(f"[WARN] [REDIS] Erro ao extrair info da URL: {e}")
         
 else:
     # Construir URL do Redis a partir das variáveis individuais
     if REDIS_HOST and REDIS_HOST != 'localhost':
         if REDIS_PASSWORD:
             REDIS_URL = f"redis://{REDIS_USER}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
-            print(f"✅ [REDIS] Construindo URL com password")
+            print("[OK] [REDIS] Construindo URL com password")
         else:
             REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
-            print(f"✅ [REDIS] Construindo URL sem password")
+            print("[OK] [REDIS] Construindo URL sem password")
     else:
         # Se não conseguir construir a URL, usar fallback localhost apenas em DEBUG
         if DEBUG:
             REDIS_URL = 'redis://localhost:6379/0'
-            print(f"⚠️ [REDIS] Usando localhost como fallback (DEBUG mode)")
+            print("[WARN] [REDIS] Usando localhost como fallback (DEBUG mode)")
         else:
             REDIS_URL = ''
-            print(f"❌ [REDIS] Erro: Redis não configurado em produção!")
+            print("[ERROR] [REDIS] Erro: Redis não configurado em produção!")
 
-print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:50]}..." if REDIS_URL else "🔧 [SETTINGS] REDIS_URL: Not configured...")
-print(f"🔧 [SETTINGS] REDIS_HOST: {REDIS_HOST}")
-print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
-print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
-print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
+print(f"[CONFIG] [SETTINGS] REDIS_URL: {REDIS_URL[:50]}..." if REDIS_URL else "[CONFIG] [SETTINGS] REDIS_URL: Not configured...")
+print(f"[CONFIG] [SETTINGS] REDIS_HOST: {REDIS_HOST}")
+print(f"[CONFIG] [SETTINGS] REDIS_PORT: {REDIS_PORT}")
+print(f"[CONFIG] [SETTINGS] REDIS_USER: {REDIS_USER}")
+print(f"[CONFIG] [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
 
 # ✅ IMPROVEMENT: Django Cache Configuration (Redis)
 # Usa database /2 para não conflitar com Channels (/1) e Chat Streams (/3)
@@ -335,7 +335,7 @@ if REDIS_URL:
             'TIMEOUT': 300,  # 5 minutos default
         }
     }
-    print(f"✅ [CACHE] Configurado com Redis: {CACHES['default']['LOCATION'][:50]}...")
+    print(f"[OK] [CACHE] Configurado com Redis: {CACHES['default']['LOCATION'][:50]}...")
 else:
     # Fallback para cache local em desenvolvimento (sem Redis)
     CACHES = {
@@ -344,7 +344,7 @@ else:
             'LOCATION': 'unique-snowflake',
         }
     }
-    print("⚠️ [CACHE] Redis não configurado, usando cache local (LocMemCache)")
+    print("[WARN] [CACHE] Redis não configurado, usando cache local (LocMemCache)")
 
 # Redis Streams (Chat Send Pipeline)
 CHAT_STREAM_REDIS_URL = config(
@@ -370,11 +370,11 @@ CHAT_STREAM_RECLAIM_IDLE_MS = config('CHAT_STREAM_RECLAIM_IDLE_MS', default=6000
 CHAT_STREAM_BLOCK_TIMEOUT_MS = config('CHAT_STREAM_BLOCK_TIMEOUT_MS', default=5000, cast=int)  # 5s
 
 if CHAT_STREAM_REDIS_URL:
-    print(f"✅ [CHAT STREAM] URL configurada: {CHAT_STREAM_REDIS_URL[:60]}...")
-    print(f"✅ [CHAT STREAM] Grupo: {CHAT_STREAM_CONSUMER_GROUP}")
-    print(f"✅ [CHAT STREAM] Stream send: {CHAT_STREAM_SEND_NAME}")
+    print(f"[OK] [CHAT STREAM] URL configurada: {CHAT_STREAM_REDIS_URL[:60]}...")
+    print(f"[OK] [CHAT STREAM] Grupo: {CHAT_STREAM_CONSUMER_GROUP}")
+    print(f"[OK] [CHAT STREAM] Stream send: {CHAT_STREAM_SEND_NAME}")
 else:
-    print("⚠️ [CHAT STREAM] CHAT_STREAM_REDIS_URL não configurada. Fluxo de envio usará Redis padrão.")
+    print("[WARN] [CHAT STREAM] CHAT_STREAM_REDIS_URL não configurada. Fluxo de envio usará Redis padrão.")
 
 # Channels - Using Redis URL
 CHANNEL_LAYERS = {
@@ -393,7 +393,7 @@ CHANNEL_LAYERS = {
 
 # 🔍 DEBUG: Verificar variáveis RabbitMQ
 import os
-print(f"🔍 [DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set')[:80]}")
+print(f"[DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set')[:80]}")
 
 # ✅ REGRA: Usar APENAS RABBITMQ_URL (interno), sem PRIVATE/CloudAMQP
 # Se não existir, construir a partir de DEFAULT_USER/DEFAULT_PASS para host interno
@@ -406,23 +406,23 @@ if not RABBITMQ_URL:
         host = 'rabbitmq.railway.internal'
         port = 5672
         RABBITMQ_URL = f'amqp://{user}:{password}@{host}:{port}'
-        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente para host interno")
+        print("[OK] [SETTINGS] RABBITMQ_URL construída manualmente para host interno")
         print(f"   User: {user}")
         print(f"   Pass length: {len(password)} chars")
     else:
         # Fallback apenas para build/dev
         RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-        print(f"⚠️ [SETTINGS] RABBITMQ_URL não encontrada. Usando localhost (build/dev)")
+        print("[WARN] [SETTINGS] RABBITMQ_URL não encontrada. Usando localhost (build/dev)")
 
 # Log seguro (mascarar credenciais)
 if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
     # Em produção, mostrar apenas o host
     import re
     safe_url = re.sub(r'://.*@', '://***:***@', RABBITMQ_URL)
-    print(f"✅ [SETTINGS] RABBITMQ_URL final: {safe_url}")
-    print(f"✅ [SETTINGS] RABBITMQ_URL length: {len(RABBITMQ_URL)} chars")
+    print(f"[OK] [SETTINGS] RABBITMQ_URL final: {safe_url}")
+    print(f"[OK] [SETTINGS] RABBITMQ_URL length: {len(RABBITMQ_URL)} chars")
 else:
-    print(f"⚠️ [SETTINGS] RABBITMQ_URL final: localhost (dev/build mode)")
+    print("[WARN] [SETTINGS] RABBITMQ_URL final: localhost (dev/build mode)")
 
 # MongoDB removido - usando PostgreSQL com pgvector
 
@@ -629,29 +629,29 @@ ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, ca
 USE_PRESIGNED_URL = config('USE_PRESIGNED_URL', default=False, cast=bool)
 
 # Debug settings for Railway deploy - AFTER all configurations are loaded
-print("🚀 [SETTINGS] ==========================================")
-print("🚀 [SETTINGS] DJANGO SETTINGS LOADED SUCCESSFULLY!")
-print("🚀 [SETTINGS] ==========================================")
-print(f"🔧 [SETTINGS] DEBUG: {DEBUG}")
-print(f"🔧 [SETTINGS] ALLOWED_HOSTS: {ALLOWED_HOSTS}")
-print(f"🔧 [SETTINGS] DATABASE: {DATABASES['default']['ENGINE']}")
-print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:20] if REDIS_URL else 'Not configured'}...")
-print(f"🔧 [SETTINGS] REDIS_HOST: {REDIS_HOST}")
-print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
-print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
-print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'***' if REDIS_PASSWORD else 'Not set'}")
-print(f"🔧 [SETTINGS] PAGE_SIZE: {REST_FRAMEWORK['PAGE_SIZE']}")
-print(f"🔧 [SETTINGS] PAGE_SIZE_MAX: {REST_FRAMEWORK.get('PAGE_SIZE_MAX', 'Not set')}")
-print(f"🔧 [SETTINGS] INSTALLED_APPS: {len(INSTALLED_APPS)} apps")
+print("[READY] [SETTINGS] ==========================================")
+print("[READY] [SETTINGS] DJANGO SETTINGS LOADED SUCCESSFULLY!")
+print("[READY] [SETTINGS] ==========================================")
+print(f"[CONFIG] [SETTINGS] DEBUG: {DEBUG}")
+print(f"[CONFIG] [SETTINGS] ALLOWED_HOSTS: {ALLOWED_HOSTS}")
+print(f"[CONFIG] [SETTINGS] DATABASE: {DATABASES['default']['ENGINE']}")
+print(f"[CONFIG] [SETTINGS] REDIS_URL: {REDIS_URL[:20] if REDIS_URL else 'Not configured'}...")
+print(f"[CONFIG] [SETTINGS] REDIS_HOST: {REDIS_HOST}")
+print(f"[CONFIG] [SETTINGS] REDIS_PORT: {REDIS_PORT}")
+print(f"[CONFIG] [SETTINGS] REDIS_USER: {REDIS_USER}")
+print(f"[CONFIG] [SETTINGS] REDIS_PASSWORD: {'***' if REDIS_PASSWORD else 'Not set'}")
+print(f"[CONFIG] [SETTINGS] PAGE_SIZE: {REST_FRAMEWORK['PAGE_SIZE']}")
+print(f"[CONFIG] [SETTINGS] PAGE_SIZE_MAX: {REST_FRAMEWORK.get('PAGE_SIZE_MAX', 'Not set')}")
+print(f"[CONFIG] [SETTINGS] INSTALLED_APPS: {len(INSTALLED_APPS)} apps")
 
 # Log application loading
-print(f"📱 [APPS] Loading {len(LOCAL_APPS)} local apps: {', '.join([app.split('.')[-1] for app in LOCAL_APPS])}")
-print(f"📱 [APPS] Loading {len(THIRD_PARTY_APPS)} third-party apps: {', '.join([app.split('.')[-1] for app in THIRD_PARTY_APPS])}")
-print(f"📱 [APPS] Total apps: {len(INSTALLED_APPS)}")
+print(f"[APPS] Loading {len(LOCAL_APPS)} local apps: {', '.join([app.split('.')[-1] for app in LOCAL_APPS])}")
+print(f"[APPS] Loading {len(THIRD_PARTY_APPS)} third-party apps: {', '.join([app.split('.')[-1] for app in THIRD_PARTY_APPS])}")
+print(f"[APPS] Total apps: {len(INSTALLED_APPS)}")
 
 # Log middleware
-print(f"🔧 [MIDDLEWARE] Loading {len(MIDDLEWARE)} middleware components")
-print(f"🔧 [MIDDLEWARE] Components: {', '.join(MIDDLEWARE)}")
+print(f"[CONFIG] [MIDDLEWARE] Loading {len(MIDDLEWARE)} middleware components")
+print(f"[CONFIG] [MIDDLEWARE] Components: {', '.join(MIDDLEWARE)}")
 
-print("✅ [SETTINGS] All configurations loaded successfully!")
-print("🚀 [SETTINGS] Ready for deployment!")
+print("[OK] [SETTINGS] All configurations loaded successfully!")
+print("[READY] [SETTINGS] Ready for deployment!")

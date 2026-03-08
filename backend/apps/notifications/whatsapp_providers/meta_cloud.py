@@ -271,6 +271,131 @@ class MetaCloudProvider(WhatsAppSenderBase):
         )
         return self._request(payload)
 
+    # Limites Meta para lista interativa (rejeitar se exceder; não truncar)
+    LIST_BUTTON_MAX = 20
+    LIST_HEADER_FOOTER_MAX = 60
+    LIST_SECTION_TITLE_MAX = 24
+    LIST_ROW_TITLE_MAX = 24
+    LIST_ROW_DESCRIPTION_MAX = 72
+    LIST_BODY_MAX = 1024
+
+    def send_interactive_list(
+        self,
+        phone: str,
+        body_text: str,
+        button_text: str,
+        sections: list,
+        header_text: Optional[str] = None,
+        footer_text: Optional[str] = None,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem interativa tipo lista (até 10 rows no total) dentro da janela 24h.
+        Meta: type=interactive, interactive.type=list.
+        Rejeita com mensagem clara se algum limite for excedido (não trunca).
+        """
+        to = self._to_phone(phone)
+        if not to:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        body_clean = (body_text or '').strip().replace('\x00', '')
+        if not body_clean:
+            return False, {'error': 'Corpo da mensagem (body_text) obrigatório', 'error_code': 'INVALID_BODY'}
+        if len(body_clean) > self.LIST_BODY_MAX:
+            return False, {'error': f'body_text deve ter no máximo {self.LIST_BODY_MAX} caracteres', 'error_code': 'INVALID_BODY'}
+        btn_clean = (button_text or '').strip().replace('\x00', '')[:self.LIST_BUTTON_MAX]
+        if not btn_clean:
+            return False, {'error': 'Texto do botão (button_text) obrigatório', 'error_code': 'INVALID_BUTTON'}
+        if len((button_text or '').strip()) > self.LIST_BUTTON_MAX:
+            return False, {'error': f'button_text deve ter no máximo {self.LIST_BUTTON_MAX} caracteres', 'error_code': 'INVALID_BUTTON'}
+        if header_text is not None and len((header_text or '').strip()) > self.LIST_HEADER_FOOTER_MAX:
+            return False, {'error': f'header_text deve ter no máximo {self.LIST_HEADER_FOOTER_MAX} caracteres', 'error_code': 'INVALID_HEADER'}
+        if footer_text is not None and len((footer_text or '').strip()) > self.LIST_HEADER_FOOTER_MAX:
+            return False, {'error': f'footer_text deve ter no máximo {self.LIST_HEADER_FOOTER_MAX} caracteres', 'error_code': 'INVALID_FOOTER'}
+        if not sections or not isinstance(sections, list):
+            return False, {'error': 'Pelo menos uma seção é obrigatória', 'error_code': 'INVALID_SECTIONS'}
+        action_sections = []
+        all_row_ids = set()
+        total_rows = 0
+        for sec in sections:
+            if not isinstance(sec, dict):
+                continue
+            sec_title = (sec.get('title') or '').strip()[:self.LIST_SECTION_TITLE_MAX]
+            if len((sec.get('title') or '').strip()) > self.LIST_SECTION_TITLE_MAX:
+                return False, {'error': f'section.title deve ter no máximo {self.LIST_SECTION_TITLE_MAX} caracteres', 'error_code': 'INVALID_SECTION_TITLE'}
+            rows_raw = sec.get('rows') or []
+            if not isinstance(rows_raw, list):
+                continue
+            rows = []
+            for r in rows_raw:
+                if total_rows >= 10:
+                    return False, {'error': 'Máximo 10 opções (rows) no total', 'error_code': 'INVALID_ROWS'}
+                if not isinstance(r, dict):
+                    continue
+                raw_id = (r.get('id') or '').strip()
+                rid = (re.sub(r'[^a-zA-Z0-9_-]', '', raw_id))[:256] or str(total_rows)
+                row_title = (r.get('title') or '').strip()
+                if not row_title:
+                    return False, {'error': 'Cada opção deve ter um título (não vazio)', 'error_code': 'INVALID_ROW_TITLE'}
+                if len(row_title) > self.LIST_ROW_TITLE_MAX:
+                    return False, {'error': f'row.title deve ter no máximo {self.LIST_ROW_TITLE_MAX} caracteres', 'error_code': 'INVALID_ROW_TITLE'}
+                row_desc = (r.get('description') or '').strip()
+                if row_desc and len(row_desc) > self.LIST_ROW_DESCRIPTION_MAX:
+                    return False, {'error': f'row.description deve ter no máximo {self.LIST_ROW_DESCRIPTION_MAX} caracteres', 'error_code': 'INVALID_ROW_DESCRIPTION'}
+                if rid in all_row_ids:
+                    return False, {'error': 'IDs de opções devem ser únicos em todas as seções', 'error_code': 'INVALID_ROW_IDS'}
+                all_row_ids.add(rid)
+                row_obj = {'id': rid, 'title': row_title[:self.LIST_ROW_TITLE_MAX]}
+                if row_desc:
+                    row_obj['description'] = row_desc[:self.LIST_ROW_DESCRIPTION_MAX]
+                rows.append(row_obj)
+                total_rows += 1
+            if not rows:
+                return False, {'error': 'Cada seção deve ter pelo menos uma opção (row)', 'error_code': 'INVALID_SECTIONS'}
+            action_sections.append({'title': sec_title or 'Seção', 'rows': rows})
+        if total_rows < 1:
+            return False, {'error': 'Pelo menos uma opção (row) no total', 'error_code': 'INVALID_SECTIONS'}
+        interactive_payload = {
+            'type': 'list',
+            'body': {'text': body_clean[:self.LIST_BODY_MAX]},
+            'action': {
+                'button': btn_clean,
+                'sections': action_sections,
+            },
+        }
+        if header_text and (header_text or '').strip():
+            interactive_payload['header'] = {'type': 'text', 'text': (header_text or '').strip()[:self.LIST_HEADER_FOOTER_MAX]}
+        if footer_text and (footer_text or '').strip():
+            interactive_payload['footer'] = {'text': (footer_text or '').strip()[:self.LIST_HEADER_FOOTER_MAX]}
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'interactive',
+            'interactive': interactive_payload,
+        }
+        if quoted_message_id:
+            payload['context'] = {'message_id': quoted_message_id}
+        logger.info(
+            "Meta Cloud API enviando lista interativa (instance_id=%s sections=%s rows=%s)",
+            str(self.instance.id),
+            len(action_sections),
+            total_rows,
+        )
+        ok, data = self._request(payload)
+        if ok:
+            logger.info(
+                "Meta Cloud API send_interactive_list OK (instance_id=%s)",
+                str(self.instance.id),
+            )
+        else:
+            logger.warning(
+                "Meta Cloud API send_interactive_list falhou (instance_id=%s): %s",
+                str(self.instance.id),
+                data.get('error', ''),
+            )
+        return ok, data
+
     def send_template(
         self,
         phone: str,

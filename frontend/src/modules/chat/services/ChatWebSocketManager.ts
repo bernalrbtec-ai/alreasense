@@ -424,6 +424,67 @@ class ChatWebSocketManager {
   }
 
   /**
+   * Envia mensagem com lista interativa (Meta 24h).
+   * sections: array de { title, rows: [{ id, title, description? }] }; até 10 rows no total (Meta).
+   */
+  public sendChatMessageWithList(
+    conversationId: string,
+    bodyText: string,
+    buttonText: string,
+    sections: Array<{ title?: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    headerText?: string,
+    footerText?: string,
+    replyTo?: string,
+  ): boolean {
+    const targetConversationId = conversationId || this.currentConversationId;
+    if (!targetConversationId) {
+      console.error('❌ [MANAGER] Nenhuma conversa ativa');
+      return false;
+    }
+    const MAX_LIST_ROWS = 10;
+    const sectionsOut: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }> = [];
+    let totalRows = 0;
+    for (const sec of sections.slice(0, 10)) {
+      if (totalRows >= MAX_LIST_ROWS) break;
+      const rows: Array<{ id: string; title: string; description?: string }> = [];
+      for (const r of sec.rows || []) {
+        if (totalRows >= MAX_LIST_ROWS) break;
+        rows.push({
+          id: (r.id || '').trim().slice(0, 100),
+          title: (r.title || '').slice(0, 24),
+          description: (r.description || '').slice(0, 72) || undefined,
+        });
+        totalRows += 1;
+      }
+      if (rows.length > 0) {
+        sectionsOut.push({ title: (sec.title || '').slice(0, 24), rows });
+      }
+    }
+    if (sectionsOut.length === 0 || totalRows === 0) {
+      console.error('❌ [MANAGER] Lista precisa de pelo menos uma opção.');
+      return false;
+    }
+    const payload: Record<string, unknown> = {
+      type: 'send_message',
+      conversation_id: targetConversationId,
+      content: bodyText,
+      include_signature: false,
+      is_internal: false,
+      interactive_list: {
+        body_text: bodyText,
+        button_text: buttonText.slice(0, 20),
+        header_text: (headerText || '').slice(0, 60),
+        footer_text: (footerText || '').slice(0, 60),
+        sections: sectionsOut,
+      },
+    };
+    if (replyTo) {
+      payload.reply_to = replyTo;
+    }
+    return this.sendMessage(payload);
+  }
+
+  /**
    * Envia evento de digitação
    */
   public sendTyping(isTyping: boolean): void {

@@ -11,7 +11,7 @@ import { format } from 'date-fns';
 import type { MessageAttachment, MessageReaction } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
 import { useUserAccess } from '@/hooks/useUserAccess';
-import { sortMessagesByTimestamp } from '../utils/messageUtils';
+import { sortMessagesByTimestamp, getMessagePreviewText } from '../utils/messageUtils';
 import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
@@ -241,14 +241,7 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
   
   const attachmentType = getAttachmentType();
   const rawReplyContent = repliedMessage.content != null ? String(repliedMessage.content) : '';
-  const normalizedReply =
-    rawReplyContent.trim() === '[button]' || rawReplyContent.trim() === '[interactive]'
-      ? 'Resposta de botão'
-      : rawReplyContent.trim() === '[templateMessage]'
-        ? 'Mensagem de template'
-        : rawReplyContent.trim() === '[buttonsMessage]'
-          ? 'Mensagem com botões'
-          : rawReplyContent;
+  const normalizedReply = getMessagePreviewText(rawReplyContent, repliedMessage.metadata as Record<string, unknown> | undefined) || rawReplyContent;
   const displayContent = normalizedReply
     ? (normalizedReply.length > 80 ? normalizedReply.substring(0, 80) + '...' : normalizedReply)
     : (attachmentType || 'Mensagem');
@@ -1259,14 +1252,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                     {/* ✅ Resposta de botão: exibir "Resposta de botão" quando conteúdo for literal [button] (mensagens antigas) */}
                     {(() => {
                       const rawContent = typeof messageItem.content === 'string' ? messageItem.content : String(messageItem.content ?? '');
-                      const displayContent =
-                        rawContent.trim() === '[templateMessage]'
-                          ? 'Mensagem de template'
-                          : rawContent.trim() === '[button]' || rawContent.trim() === '[interactive]'
-                            ? 'Resposta de botão'
-                            : rawContent.trim() === '[buttonsMessage]'
-                              ? 'Mensagem com botões'
-                              : rawContent;
+                      const displayContent = getMessagePreviewText(rawContent, messageItem.metadata as Record<string, unknown> | undefined) || rawContent;
                       return (
                         <>
                           {messageItem.direction === 'outgoing' && (() => {
@@ -1377,6 +1363,34 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                       );
                     })}
                   </div>
+                  );
+                })()}
+                {/* Lista interativa (interactive_list): exibição em modo leitura - seções e rows */}
+                {!messageItem.is_deleted && (() => {
+                  const il = messageItem.metadata?.interactive_list as { body_text?: string; button_text?: string; header_text?: string; footer_text?: string; sections?: Array<{ title?: string; rows?: Array<{ id?: string; title?: string; description?: string }> }> } | undefined;
+                  if (!il || typeof il !== 'object') return null;
+                  const sections = Array.isArray(il.sections) ? il.sections : [];
+                  if (sections.length === 0 && !il.body_text && !il.button_text) return null;
+                  return (
+                    <div className="mt-1.5 space-y-1.5">
+                      {il.header_text ? <p className="text-xs font-semibold text-gray-600 dark:text-gray-400">{il.header_text}</p> : null}
+                      {il.body_text ? <p className="text-sm text-gray-700 dark:text-gray-300">{il.body_text}</p> : null}
+                      {il.button_text ? <span className="inline-block text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50">{il.button_text}</span> : null}
+                      {sections.map((sec, si) => (
+                        <div key={si} className="rounded border border-gray-200 dark:border-gray-600 overflow-hidden">
+                          {sec.title ? <p className="text-xs font-medium px-2 py-1 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-400">{sec.title}</p> : null}
+                          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {(Array.isArray(sec.rows) ? sec.rows : []).map((row, ri) => (
+                              <li key={ri} className="px-2 py-1.5 text-sm text-gray-700 dark:text-gray-300">
+                                <span className="font-medium">{row.title ?? row.id ?? ''}</span>
+                                {row.description ? <span className="block text-xs text-gray-500 dark:text-gray-400">{row.description}</span> : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                      {il.footer_text ? <p className="text-xs text-gray-500 dark:text-gray-400">{il.footer_text}</p> : null}
+                    </div>
                   );
                 })()}
                 

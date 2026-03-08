@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import type { Message, Conversation } from '../types';
+import { getMessagePreviewText } from '../utils/messageUtils';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -249,12 +250,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
           <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Mensagem a encaminhar:</p>
           <div className="bg-white dark:bg-gray-700 rounded p-2 border border-gray-200 dark:border-gray-600">
             <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">
-              {(() => {
-                const c = message.content != null ? String(message.content) : '';
-                const display =
-                  c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c;
-                return display || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem');
-              })()}
+              {getMessagePreviewText(message.content != null ? String(message.content) : '', message.metadata as Record<string, unknown> | undefined) || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem')}
             </p>
           </div>
         </div>

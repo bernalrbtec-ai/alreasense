@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool, Reply, X, FileText, LayoutList } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X, FileText, LayoutList, ListOrdered } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
@@ -14,6 +14,7 @@ import { MentionInput } from './MentionInput';
 import { QuickRepliesButton } from './QuickRepliesButton';
 import { TemplatePickerModal } from './TemplatePickerModal';
 import { api } from '@/lib/api';
+import { getMessagePreviewText } from '../utils/messageUtils';
 
 export interface InteractiveButton {
   id: string;
@@ -24,13 +25,22 @@ interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[], mentionEveryone?: boolean) => boolean;
   sendMessageAsTemplate?: (conversationId: string, waTemplateId: string, bodyParameters: string[]) => boolean;
   sendMessageWithButtons?: (conversationId: string, bodyText: string, buttons: InteractiveButton[]) => boolean;
+  sendMessageWithList?: (
+    conversationId: string,
+    bodyText: string,
+    buttonText: string,
+    sections: Array<{ title?: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    headerText?: string,
+    footerText?: string,
+    replyTo?: string,
+  ) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
   conversationId?: string;
   conversationType?: 'individual' | 'group' | 'broadcast';
 }
 
-export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
   const { user } = useAuthStore();
   const allowMetaInteractiveButtons = user?.allow_meta_interactive_buttons !== false;
@@ -47,6 +57,14 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
   const [showButtonsModal, setShowButtonsModal] = useState(false);
   const [buttonsBodyText, setButtonsBodyText] = useState('');
   const [buttonsList, setButtonsList] = useState<InteractiveButton[]>([{ id: 'btn1', title: '' }]);
+  const [showListModal, setShowListModal] = useState(false);
+  const [listBodyText, setListBodyText] = useState('');
+  const [listButtonText, setListButtonText] = useState('');
+  const [listHeaderText, setListHeaderText] = useState('');
+  const [listFooterText, setListFooterText] = useState('');
+  const [listSections, setListSections] = useState<Array<{ title: string; rows: Array<{ id: string; title: string; description: string }> }>>([
+    { title: 'Opções', rows: [{ id: 'opt1', title: '', description: '' }] },
+  ]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const MAX_FILES = 10;
@@ -544,23 +562,16 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
               <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">
                 {replyToMessage.is_deleted
                   ? 'Mensagem apagada'
-                  : ((() => {
+                  : (() => {
                       const raw = replyToMessage.content != null ? String(replyToMessage.content) : '';
-                      const normalized =
-                        raw.trim() === '[button]' || raw.trim() === '[interactive]'
-                          ? 'Resposta de botão'
-                          : raw.trim() === '[templateMessage]'
-                            ? 'Mensagem de template'
-                            : raw.trim() === '[buttonsMessage]'
-                              ? 'Mensagem com botões'
-                              : raw;
+                      const normalized = getMessagePreviewText(raw, replyToMessage.metadata as Record<string, unknown> | undefined) || raw;
                       if (normalized) {
                         return normalized.length > 100 ? normalized.substring(0, 100) + '...' : normalized;
                       }
                       return replyToMessage.attachments && replyToMessage.attachments.length > 0
                         ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
                         : 'Mensagem';
-                    })())}
+                    })()}
               </p>
             </div>
             <button
@@ -630,7 +641,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         </button>
       )}
 
-      {/* Botão Reply Buttons: apenas instâncias Meta + individual + feature flag do tenant (dentro da 24h) */}
+      {/* Botão Reply Buttons: apenas instâncias Meta + individual + feature flag (dentro da 24h) */}
       {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && allowMetaInteractiveButtons && sendMessageWithButtons && (
         <button
           type="button"
@@ -639,6 +650,17 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
           title="Adicionar botões (até 3, dentro da janela 24h)"
         >
           <LayoutList className="w-5 h-5" />
+        </button>
+      )}
+      {/* Botão Lista interativa: apenas Meta + individual + feature flag (dentro da 24h) */}
+      {conversationType === 'individual' && activeConversation?.integration_type === 'meta_cloud' && allowMetaInteractiveButtons && sendMessageWithList && (
+        <button
+          type="button"
+          onClick={() => setShowListModal(true)}
+          className="p-2 rounded-full flex-shrink-0 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30 dark:text-violet-400"
+          title="Enviar lista (até 10 opções, dentro da janela 24h)"
+        >
+          <ListOrdered className="w-5 h-5" />
         </button>
       )}
 
@@ -855,6 +877,153 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
               }}
               disabled={!isConnected || !buttonsBodyText.trim() || buttonsList.every(b => !b.title.trim())}
               className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
+            >
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal Lista interativa (só Meta, dentro da 24h) */}
+    {showListModal && conversationId && sendMessageWithList && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowListModal(false)}>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Mensagem com lista</h3>
+            <button type="button" onClick={() => setShowListModal(false)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">Até 10 opções. Apenas instâncias Meta, dentro da janela de 24h.</p>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Texto da mensagem (obrigatório)</label>
+          <textarea
+            value={listBodyText}
+            onChange={e => setListBodyText(e.target.value.slice(0, 1024))}
+            placeholder="Corpo da mensagem"
+            rows={2}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2"
+          />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Texto do botão (até 20 caracteres)</label>
+          <input
+            type="text"
+            value={listButtonText}
+            onChange={e => setListButtonText(e.target.value.slice(0, 20))}
+            placeholder="Ex: Ver opções"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2"
+          />
+          <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Cabeçalho (opcional, até 60)</label>
+          <input
+            type="text"
+            value={listHeaderText}
+            onChange={e => setListHeaderText(e.target.value.slice(0, 60))}
+            placeholder="Opcional"
+            className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2 text-sm"
+          />
+          <label className="block text-sm text-gray-500 dark:text-gray-400 mb-1">Rodapé (opcional, até 60)</label>
+          <input
+            type="text"
+            value={listFooterText}
+            onChange={e => setListFooterText(e.target.value.slice(0, 60))}
+            placeholder="Opcional"
+            className="w-full px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-3 text-sm"
+          />
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opções (id único, título até 24, descrição até 72; máx. 10)</label>
+          {listSections.map((sec, si) => (
+            <div key={si} className="mb-3">
+              <input
+                type="text"
+                value={sec.title}
+                onChange={e => setListSections(prev => prev.map((s, i) => i === si ? { ...s, title: e.target.value.slice(0, 24) } : s))}
+                placeholder="Título da seção"
+                className="w-full px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm mb-1"
+              />
+              {sec.rows.map((row, ri) => (
+                <div key={ri} className="flex gap-2 mb-1 flex-wrap">
+                  <input
+                    type="text"
+                    value={row.id}
+                    onChange={e => setListSections(prev => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, id: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '') } : r) } : s))}
+                    placeholder="id"
+                    className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={row.title}
+                    onChange={e => setListSections(prev => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, title: e.target.value.slice(0, 24) } : r) } : s))}
+                    placeholder="Título"
+                    className="flex-1 min-w-[80px] px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={row.description}
+                    onChange={e => setListSections(prev => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, description: e.target.value.slice(0, 72) } : r) } : s))}
+                    placeholder="Desc (opc)"
+                    className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm"
+                  />
+                  {listSections.reduce((acc, s) => acc + s.rows.length, 0) > 1 && (
+                    <button type="button" onClick={() => setListSections(prev => prev.map((s, i) => i === si ? { ...s, rows: s.rows.filter((_, j) => j !== ri) } : s).filter(s => s.rows.length > 0 || prev.length === 1))} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {listSections.reduce((acc, s) => acc + s.rows.length, 0) < 10 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const total = listSections.reduce((acc, s) => acc + s.rows.length, 0);
+                    if (total >= 10) return;
+                    const newId = `opt_${Date.now().toString(36)}`;
+                    setListSections(prev => prev.map((s, i) => i === si ? { ...s, rows: [...s.rows, { id: newId, title: '', description: '' }] } : s));
+                  }}
+                  className="text-sm text-violet-600 dark:text-violet-400 hover:underline mb-1"
+                >
+                  + Adicionar opção
+                </button>
+              )}
+            </div>
+          ))}
+          <div className="flex justify-end gap-2 mt-3">
+            <button type="button" onClick={() => setShowListModal(false)} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600">
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const body = listBodyText.trim();
+                const btn = listButtonText.trim();
+                const allRows = listSections.flatMap(s => s.rows).filter(r => r.id.trim() && r.title.trim());
+                const ids = new Set(allRows.map(r => r.id));
+                if (!body || !btn || allRows.length === 0 || ids.size !== allRows.length) {
+                  toast.error('Preencha o texto, o botão e pelo menos 1 opção com id e título únicos.');
+                  return;
+                }
+                const sections = listSections.map(sec => ({
+                  title: sec.title.slice(0, 24),
+                  rows: sec.rows.filter(r => r.id.trim() && r.title.trim()).map(r => ({
+                    id: r.id.trim(),
+                    title: r.title.slice(0, 24),
+                    description: r.description?.trim().slice(0, 72) || undefined,
+                  })),
+                })).filter(sec => sec.rows.length > 0);
+                if (sections.length === 0) {
+                  toast.error('Adicione pelo menos uma opção.');
+                  return;
+                }
+                const replyToId = replyToMessage?.id ? String(replyToMessage.id) : undefined;
+                sendMessageWithList(conversationId, body, btn, sections, listHeaderText.trim() || undefined, listFooterText.trim() || undefined, replyToId);
+                setShowListModal(false);
+                setListBodyText('');
+                setListButtonText('');
+                setListHeaderText('');
+                setListFooterText('');
+                setListSections([{ title: 'Opções', rows: [{ id: 'opt1', title: '', description: '' }] }]);
+                clearReply();
+                toast.success('Mensagem com lista enviada.');
+              }}
+              disabled={!isConnected || !listBodyText.trim() || !listButtonText.trim() || listSections.every(s => s.rows.every(r => !r.title.trim()))}
+              className="px-3 py-1.5 rounded-lg bg-violet-600 text-white disabled:opacity-50"
             >
               Enviar
             </button>

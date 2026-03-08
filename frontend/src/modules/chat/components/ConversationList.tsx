@@ -12,6 +12,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { upsertConversation } from '../store/conversationUpdater';
 import { getDisplayName } from '../utils/phoneFormatter';
+import { getMessagePreviewText } from '../utils/messageUtils';
 import { NewConversationModal } from './NewConversationModal';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -616,7 +617,7 @@ export function ConversationList() {
                         : (() => {
                             const raw = conversationItem.last_message?.content;
                             const c = typeof raw === 'string' ? raw : String(raw ?? '');
-                            const preview = (c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c) || '';
+                            const preview = getMessagePreviewText(c, conversationItem.last_message?.metadata as Record<string, unknown> | undefined) || c || '';
                             return conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
                               ? `${conversationItem.last_message.sender_name}: ${preview}`
                               : (preview || '📎 Anexo');

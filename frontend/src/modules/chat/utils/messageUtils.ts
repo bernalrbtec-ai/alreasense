@@ -153,3 +153,27 @@ export function validateFileType(file: File, allowedTypes: string[]): { valid: b
   return { valid: true };
 }
 
+/** Metadata shape for placeholder detection */
+type MessageMetadataForPreview = {
+  interactive_list?: unknown;
+  template_message?: unknown;
+  interactive_reply_buttons?: unknown;
+} | null | undefined;
+
+/**
+ * Texto de preview/placeholder para mensagens especiais (template, botões, lista, etc.).
+ * Centraliza labels em um único lugar para MessageList, ConversationList, modais e input.
+ */
+export function getMessagePreviewText(
+  content: string | undefined | null,
+  metadata?: MessageMetadataForPreview
+): string {
+  const raw = (content ?? '').trim();
+  if (raw === '[button]' || raw === '[interactive]') return 'Resposta de botão';
+  if (raw === '[templateMessage]') return 'Mensagem de template';
+  if (raw === '[buttonsMessage]') return 'Mensagem com botões';
+  if (raw === '[listMessage]') return 'Mensagem com lista';
+  if (metadata?.interactive_list != null && typeof metadata.interactive_list === 'object') return 'Mensagem com lista';
+  return raw || '';
+}
+

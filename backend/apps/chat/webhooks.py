@@ -13,6 +13,11 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageEditHistory
+from apps.chat.utils.evolution_list_parsing import (
+    parse_list_message,
+    parse_list_message_fallback,
+    parse_list_response,
+)
 # download_attachment removido - agora usa process_incoming_media diretamente (S3 + cache Redis)
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
@@ -912,6 +917,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         message_type = message_data.get('messageType', 'text')
         template_message_metadata = None  # Preenchido apenas no branch templateMessage
         interactive_reply_buttons_metadata = None  # Preenchido no branch buttonsMessage para exibir botões no frontend
+        interactive_list_metadata = None  # Preenchido no branch listMessage para exibir lista no frontend
+        list_reply_metadata = None  # Preenchido no branch listResponseMessage (resposta à lista)
 
         # ✅ DEBUG: Log do tipo de mensagem recebido
         logger.info(f"🔍 [WEBHOOK UPSERT] MessageType recebido: {message_type}")
@@ -1732,6 +1739,37 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             except Exception as e:
                 logger.warning("Resposta de botão: falha ao extrair payload - %s", e, exc_info=False)
                 content = 'Resposta de botão'
+        elif message_type == 'listMessage':
+            # Lista interativa (Evolution): extrair body, buttonText, sections/rows para metadata
+            lm = (
+                message_info.get('listMessage') or message_data.get('listMessage') or
+                message_info.get('list') or message_data.get('list') or {}
+            )
+            if not isinstance(lm, dict):
+                lm = {}
+            content, interactive_list_metadata = parse_list_message(lm)
+            if interactive_list_metadata:
+                logger.info(
+                    "listMessage: extraído (Evolution) instance=%s sections=%s",
+                    instance_name,
+                    len(interactive_list_metadata.get('sections', [])),
+                )
+            else:
+                logger.warning("listMessage: parsing retornou sem metadata (Evolution) instance=%s", instance_name)
+        elif message_type == 'listResponseMessage':
+            # Resposta à lista (Evolution): exibir título da opção escolhida
+            lrm = (
+                message_info.get('listResponseMessage') or message_data.get('listResponseMessage') or
+                message_info.get('listResponse') or message_data.get('listResponse') or {}
+            )
+            if not isinstance(lrm, dict):
+                lrm = {}
+            content, list_reply_metadata = parse_list_response(lrm)
+            logger.info(
+                "listResponseMessage: exibindo opção escolhida (Evolution) instance=%s title=%s",
+                instance_name,
+                (list_reply_metadata.get('title') or list_reply_metadata.get('id') or '')[:50],
+            )
         else:
             # Fallback: verificar se message_info tem payload de botão mesmo com outro messageType
             btn_payload = (
@@ -1822,6 +1860,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.info("🔄 [WEBHOOK] Botões extraídos em fallback (messageType=%s): %s", message_type, [x.get('title') for x in buttons_list[:3]])
                 except Exception as e:
                     logger.debug("Fallback buttonsMessage: %s", e)
+            if interactive_list_metadata is None:
+                lm = message_info.get('listMessage') or message_data.get('listMessage') or message_info.get('list') or message_data.get('list')
+                if isinstance(lm, dict) and (lm.get('sections') or lm.get('values') or lm.get('description')):
+                    fallback_content, fallback_il = parse_list_message_fallback(lm)
+                    if fallback_il:
+                        interactive_list_metadata = fallback_il
+                        if not content or content.startswith('['):
+                            content = fallback_content
+                        logger.info(
+                            "[WEBHOOK] Lista extraída em fallback (messageType=%s) sections=%s",
+                            message_type,
+                            len(fallback_il.get('sections', [])),
+                        )
 
         # Garantir que content é sempre string antes de usar (evita quebra em log/save)
         if not isinstance(content, str):
@@ -2993,6 +3044,28 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 message_defaults['metadata']['interactive_reply_buttons'] = safe_irb
             except (TypeError, ValueError) as _e:
                 logger.debug("interactive_reply_buttons_metadata não serializável: %s", _e)
+
+        # Lista interativa (listMessage Evolution): metadata para exibir lista no frontend
+        if interactive_list_metadata:
+            try:
+                import json
+                il = interactive_list_metadata
+                safe_il = {
+                    'body_text': (il.get('body_text') or '')[:1024],
+                    'button_text': (il.get('button_text') or '')[:20],
+                    'header_text': (il.get('header_text') or '')[:60],
+                    'footer_text': (il.get('footer_text') or '')[:60],
+                    'sections': list(il.get('sections') or [])[:10],
+                }
+                json.dumps(safe_il)
+                message_defaults['metadata']['interactive_list'] = safe_il
+            except (TypeError, ValueError) as _e:
+                logger.debug("interactive_list_metadata não serializável: %s", _e)
+        if list_reply_metadata:
+            try:
+                message_defaults['metadata']['list_reply'] = dict(list_reply_metadata)
+            except (TypeError, ValueError) as _e:
+                logger.debug("list_reply_metadata não serializável: %s", _e)
         
         # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
         if mentions_list:
@@ -3304,6 +3377,25 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 elif new_has_real and not existing_has_real:
                     merged_metadata['interactive_reply_buttons'] = new_irb
                     logger.info("🔄 [WEBHOOK] Usando interactive_reply_buttons do webhook (títulos reais)")
+                # Preservar interactive_list da mensagem enviada se webhook vier sem sections/rows completas
+                existing_il = existing_metadata.get('interactive_list')
+                new_il = new_metadata.get('interactive_list')
+                existing_il_rich = (
+                    isinstance(existing_il, dict)
+                    and (existing_il.get('sections') or [])
+                    and any((s.get('rows') or []) for s in (existing_il.get('sections') or []))
+                )
+                new_il_rich = (
+                    isinstance(new_il, dict)
+                    and (new_il.get('sections') or [])
+                    and any((s.get('rows') or []) for s in (new_il.get('sections') or []))
+                )
+                if existing_il_rich and not new_il_rich:
+                    merged_metadata['interactive_list'] = existing_il
+                    logger.info("🔄 [WEBHOOK] Preservando interactive_list da mensagem enviada (evitar perda de sections/rows)")
+                elif new_il_rich:
+                    merged_metadata['interactive_list'] = new_il
+                    logger.info("🔄 [WEBHOOK] Usando interactive_list do webhook")
             
             # ✅ IMPORTANTE: Se metadata existente tem reply_to, preservar (não sobrescrever)
             if 'reply_to' in existing_metadata and 'reply_to' not in new_metadata:
@@ -3377,6 +3469,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     if existing_metadata.get('interactive_reply_buttons') and not new_has_real_titles:
                         merged_metadata['interactive_reply_buttons'] = existing_metadata['interactive_reply_buttons']
                         logger.info("🔄 [WEBHOOK] Preservando interactive_reply_buttons na mensagem vinculada (botões para quem recebe)")
+                    existing_il = existing_metadata.get('interactive_list')
+                    new_il = new_metadata.get('interactive_list')
+                    if isinstance(existing_il, dict) and (existing_il.get('sections') or []) and not (
+                        isinstance(new_il, dict) and any((s.get('rows') or []) for s in (new_il.get('sections') or []))
+                    ):
+                        merged_metadata['interactive_list'] = existing_il
+                        logger.info("🔄 [WEBHOOK] Preservando interactive_list na mensagem vinculada")
                     candidate.message_id = message_id
                     candidate.metadata = merged_metadata
                     candidate.save(update_fields=['message_id', 'metadata'])

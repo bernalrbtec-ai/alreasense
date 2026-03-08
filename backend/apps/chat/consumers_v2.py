@@ -294,6 +294,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         wa_template_id = data.get('wa_template_id')  # ✅ Meta 24h: envio por template
         template_body_parameters = data.get('template_body_parameters', data.get('body_parameters', []))
         interactive_reply_buttons = data.get('interactive_reply_buttons')  # ✅ Meta 24h: botões (só Meta)
+        interactive_list = data.get('interactive_list')  # ✅ Meta 24h: lista interativa (só Meta)
 
         # ✅ Conflito: não permitir template e interativo no mesmo payload
         if wa_template_id and interactive_reply_buttons:
@@ -302,6 +303,22 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 'message': 'Envie apenas template ou mensagem com botões, não ambos.',
                 'error_code': 'TEMPLATE_AND_BUTTONS',
             }))
+            return
+        if (wa_template_id or interactive_reply_buttons) and interactive_list:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Envie apenas uma opção: template, botões ou lista. Não combine com lista.',
+                'error_code': 'TEMPLATE_BUTTONS_AND_LIST',
+            }))
+            logger.info("interactive_list rejeitado: combinação inválida com template ou botões (conversation_id=%s)", conversation_id)
+            return
+        if interactive_list and attachment_urls:
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Não é possível enviar lista com anexos.',
+                'error_code': 'LIST_AND_ATTACHMENTS',
+            }))
+            logger.info("interactive_list rejeitado: anexos presentes (conversation_id=%s)", conversation_id)
             return
 
         # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
@@ -314,23 +331,131 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         if interactive_reply_buttons:
             logger.critical(f"   interactive_reply_buttons: presente (Meta 24h)")
 
-        # Mensagem válida se tiver conteúdo, anexos, template ou interativo com body_text + botões
+        # Mensagem válida se tiver conteúdo, anexos, template ou interativo (botões ou lista)
         if not content and not attachment_urls and not wa_template_id:
-            if not interactive_reply_buttons:
+            if not interactive_reply_buttons and not interactive_list:
                 await self.send(text_data=json.dumps({
                     'type': 'error',
                     'message': 'Mensagem vazia'
                 }))
                 return
-            body_text = (interactive_reply_buttons or {}).get('body_text') or ''
-            buttons = (interactive_reply_buttons or {}).get('buttons') or []
-            if not (isinstance(body_text, str) and body_text.strip()) or not (isinstance(buttons, list) and 1 <= len(buttons) <= 3):
-                await self.send(text_data=json.dumps({
-                    'type': 'error',
-                    'message': 'Mensagem com botões precisa de corpo e 1 a 3 botões.',
-                    'error_code': 'INVALID_INTERACTIVE',
-                }))
-                return
+            if interactive_reply_buttons:
+                body_text = (interactive_reply_buttons or {}).get('body_text') or ''
+                buttons = (interactive_reply_buttons or {}).get('buttons') or []
+                if not (isinstance(body_text, str) and body_text.strip()) or not (isinstance(buttons, list) and 1 <= len(buttons) <= 3):
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Mensagem com botões precisa de corpo e 1 a 3 botões.',
+                        'error_code': 'INVALID_INTERACTIVE',
+                    }))
+                    return
+            elif interactive_list:
+                body_text = (interactive_list or {}).get('body_text') or ''
+                button_text = (interactive_list or {}).get('button_text') or ''
+                sections = (interactive_list or {}).get('sections') or []
+                if not (isinstance(body_text, str) and body_text.strip()):
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Lista precisa de corpo (body_text).',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: body_text vazio (conversation_id=%s)", conversation_id)
+                    return
+                if not (isinstance(button_text, str) and button_text.strip()):
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Lista precisa do texto do botão (button_text).',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: button_text vazio (conversation_id=%s)", conversation_id)
+                    return
+                if not isinstance(sections, list) or len(sections) == 0:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Lista precisa de pelo menos uma seção com opções.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: seções vazias (conversation_id=%s)", conversation_id)
+                    return
+                total_rows = 0
+                all_ids = set()
+                for sec in sections:
+                    if not isinstance(sec, dict):
+                        continue
+                    rows = sec.get('rows') or []
+                    if not isinstance(rows, list):
+                        continue
+                    for r in rows:
+                        if total_rows >= 10:
+                            await self.send(text_data=json.dumps({
+                                'type': 'error',
+                                'message': 'Máximo 10 opções no total.',
+                                'error_code': 'INVALID_INTERACTIVE_LIST',
+                            }))
+                            logger.info("interactive_list rejeitado: mais de 10 rows (conversation_id=%s)", conversation_id)
+                            return
+                        if not isinstance(r, dict):
+                            continue
+                        if not (r.get('title') or '').strip():
+                            await self.send(text_data=json.dumps({
+                                'type': 'error',
+                                'message': 'Cada opção deve ter um título (não vazio).',
+                                'error_code': 'INVALID_INTERACTIVE_LIST',
+                            }))
+                            logger.info("interactive_list rejeitado: opção sem título (conversation_id=%s)", conversation_id)
+                            return
+                        rid = (r.get('id') or '').strip()
+                        if rid in all_ids:
+                            await self.send(text_data=json.dumps({
+                                'type': 'error',
+                                'message': 'IDs das opções devem ser únicos.',
+                                'error_code': 'INVALID_INTERACTIVE_LIST',
+                            }))
+                            logger.info("interactive_list rejeitado: ids duplicados (conversation_id=%s)", conversation_id)
+                            return
+                        all_ids.add(rid)
+                        total_rows += 1
+                if total_rows < 1:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Lista precisa de pelo menos uma opção.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: nenhuma row válida (conversation_id=%s)", conversation_id)
+                    return
+                # Limites Meta: rejeitar se exceder (não truncar)
+                if len(body_text) > 1024:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Corpo da mensagem deve ter no máximo 1024 caracteres.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: body_text excede 1024 (conversation_id=%s)", conversation_id)
+                    return
+                if len(button_text.strip()) > 20:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Texto do botão deve ter no máximo 20 caracteres.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    logger.info("interactive_list rejeitado: button_text excede 20 (conversation_id=%s)", conversation_id)
+                    return
+                header_text = (interactive_list or {}).get('header_text') or ''
+                footer_text = (interactive_list or {}).get('footer_text') or ''
+                if len((header_text or '').strip()) > 60:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Cabeçalho deve ter no máximo 60 caracteres.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    return
+                if len((footer_text or '').strip()) > 60:
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Rodapé deve ter no máximo 60 caracteres.',
+                        'error_code': 'INVALID_INTERACTIVE_LIST',
+                    }))
+                    return
 
         if interactive_reply_buttons:
             body_text = (interactive_reply_buttons.get('body_text') or '').strip().replace('\x00', '')[:1024]
@@ -375,13 +500,15 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         else:
             interactive_reply_buttons = None
 
-        # Feature flag por tenant: só aceitar interactive_reply_buttons se o tenant permitir
-        if interactive_reply_buttons:
+        # Feature flag por tenant: só aceitar interactive_reply_buttons ou interactive_list se o tenant permitir
+        if interactive_reply_buttons or interactive_list:
             allow = await self.get_tenant_allow_meta_interactive_buttons(self.user.tenant_id)
             if not allow:
+                if interactive_list:
+                    logger.info("interactive_list rejeitado: flag desligada (conversation_id=%s)", conversation_id)
                 await self.send(text_data=json.dumps({
                     'type': 'error',
-                    'message': 'Mensagens com botões estão desabilitadas para esta conta. Entre em contato com o administrador.',
+                    'message': 'Mensagens com botões ou lista estão desabilitadas para esta conta. Entre em contato com o administrador.',
                     'error_code': 'INTERACTIVE_BUTTONS_DISABLED',
                 }))
                 return
@@ -389,6 +516,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         # Exibição: quando for interativo, conteúdo exibido é sempre o body_text (consistência com a API)
         if interactive_reply_buttons:
             content = interactive_reply_buttons['body_text']
+        elif interactive_list:
+            content = (interactive_list.get('body_text') or '').strip()[:1024]
 
         # Verificar acesso à conversa (mesmo critério do subscribe: tenant + departamento)
         has_access = await self.check_conversation_access(conversation_id)
@@ -404,16 +533,26 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }))
             return
 
-        # Meta: mensagem com botões só é permitida em conversa individual (API Meta não suporta interativo em grupo/broadcast)
-        if interactive_reply_buttons:
+        # Meta: mensagem com botões ou lista só é permitida em conversa individual (API Meta não suporta interativo em grupo/broadcast)
+        if interactive_reply_buttons or interactive_list:
             conv_type = await self.get_conversation_type(conversation_id)
             if conv_type and conv_type != 'individual':
                 await self.send(text_data=json.dumps({
                     'type': 'error',
-                    'message': 'Mensagem com botões só está disponível para conversas individuais.',
+                    'message': 'Mensagem com botões ou lista só está disponível para conversas individuais.',
                     'error_code': 'INTERACTIVE_GROUP_NOT_ALLOWED',
                 }))
                 return
+            if interactive_list:
+                is_meta = await self.get_conversation_is_meta_provider(conversation_id)
+                if not is_meta:
+                    logger.info("interactive_list rejeitado: instância não é Meta (conversation_id=%s)", conversation_id)
+                    await self.send(text_data=json.dumps({
+                        'type': 'error',
+                        'message': 'Lista interativa só está disponível para instâncias Meta (WhatsApp Business).',
+                        'error_code': 'INTERACTIVE_LIST_NOT_META',
+                    }))
+                    return
 
         # Cria mensagem no banco (create_message ainda valida tenant para defesa em profundidade)
         try:
@@ -429,6 +568,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 wa_template_id=wa_template_id,
                 template_body_parameters=template_body_parameters,
                 interactive_reply_buttons=interactive_reply_buttons,
+                interactive_list=interactive_list,
             )
         except Exception as e:
             logger.error(f"❌ [CHAT WS V2] Erro ao criar mensagem: {e}", exc_info=True)
@@ -831,7 +971,25 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return True
 
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None):
+    def get_conversation_is_meta_provider(self, conversation_id):
+        """Retorna True se a conversa usa instância Meta (WhatsApp Cloud API)."""
+        from django.db.models import Q
+        from apps.chat.models import Conversation
+        from apps.notifications.models import WhatsAppInstance
+        try:
+            conv = Conversation.objects.filter(id=conversation_id).values_list('tenant_id', 'instance_name').first()
+            if not conv or not conv[1]:
+                return False
+            tenant_id, instance_name = conv
+            inst = WhatsAppInstance.objects.filter(tenant_id=tenant_id).filter(
+                Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
+            ).first()
+            return inst and getattr(inst, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+        except Exception:
+            return False
+
+    @database_sync_to_async
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None, interactive_list=None):
         """
         Cria mensagem no banco.
 
@@ -1029,6 +1187,42 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                     'body_text': (interactive_reply_buttons.get('body_text') or '').strip()[:1024],
                     'buttons': list(interactive_reply_buttons.get('buttons') or [])[:3],
                 }
+            # Meta 24h: mensagem interativa com lista (só Meta); cap 10 rows no total no metadata
+            if interactive_list and isinstance(interactive_list, dict):
+                il = interactive_list
+                sections_in = (il.get('sections') or []) if isinstance(il.get('sections'), list) else []
+                sections_out = []
+                total_rows = 0
+                for s in sections_in[:10]:
+                    if not isinstance(s, dict):
+                        continue
+                    sec_title = (s.get('title') or '').strip()[:24]
+                    rows_out = []
+                    for r in (s.get('rows') or []):
+                        if total_rows >= 10:
+                            break
+                        if not isinstance(r, dict):
+                            continue
+                        row_title = (r.get('title') or '').strip()
+                        if not row_title:
+                            continue
+                        rows_out.append({
+                            'id': (r.get('id') or '').strip()[:100],
+                            'title': row_title[:24],
+                            'description': (r.get('description') or '').strip()[:72],
+                        })
+                        total_rows += 1
+                    if rows_out:
+                        sections_out.append({'title': sec_title, 'rows': rows_out})
+                # Só gravar interactive_list se houver ao menos uma seção com rows (evita estado inconsistente)
+                if sections_out:
+                    metadata['interactive_list'] = {
+                        'body_text': (il.get('body_text') or '').strip()[:1024],
+                        'button_text': (il.get('button_text') or '').strip()[:20],
+                        'header_text': (il.get('header_text') or '').strip()[:60],
+                        'footer_text': (il.get('footer_text') or '').strip()[:60],
+                        'sections': sections_out,
+                    }
 
             message = Message.objects.create(
                 conversation=conversation,

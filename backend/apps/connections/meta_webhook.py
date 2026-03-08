@@ -367,6 +367,13 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 title = (list_reply.get('title') or list_reply.get('id') or '').strip()
                 content = title or 'Resposta de lista'
                 metadata_extra['list_reply'] = {'id': list_reply.get('id'), 'title': title}
+                if list_reply.get('description'):
+                    metadata_extra['list_reply']['description'] = (list_reply.get('description') or '')[:72]
+                logger.info(
+                    "[META WEBHOOK] list_reply processado conversation_id=%s title=%s (provider=meta)",
+                    str(conversation.id),
+                    (title or list_reply.get('id') or '')[:50],
+                )
             else:
                 content = '[interactive]'
         elif msg_type in ('image', 'video', 'document', 'audio'):

@@ -6,6 +6,7 @@ import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File,
 import type { Message } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getMessagePreviewText } from '../utils/messageUtils';
 
 interface MessageInfoModalProps {
   message: Message;
@@ -211,10 +212,7 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Conteúdo</p>
                   <p className="text-sm text-gray-600 dark:text-gray-400 break-words">
-                    {(() => {
-                      const c = String(message.content ?? '');
-                      return c.trim() === '[button]' || c.trim() === '[interactive]' ? 'Resposta de botão' : c.trim() === '[templateMessage]' ? 'Mensagem de template' : c.trim() === '[buttonsMessage]' ? 'Mensagem com botões' : c;
-                    })()}
+                    {getMessagePreviewText(String(message.content ?? ''), message.metadata as Record<string, unknown> | undefined) || String(message.content ?? '')}
                   </p>
                 </div>
               </div>

@@ -443,10 +443,24 @@ export function useChatSocket(conversationId?: string) {
     return chatWebSocketManager.sendChatMessageWithButtons(conversationId, bodyText, buttons);
   }, [isConnected]);
 
+  const sendMessageWithList = useCallback((
+    conversationId: string,
+    bodyText: string,
+    buttonText: string,
+    sections: Array<{ title?: string; rows: Array<{ id: string; title: string; description?: string }> }>,
+    headerText?: string,
+    footerText?: string,
+    replyTo?: string,
+  ): boolean => {
+    if (!isConnected) return false;
+    return chatWebSocketManager.sendChatMessageWithList(conversationId, bodyText, buttonText, sections, headerText, footerText, replyTo);
+  }, [isConnected]);
+
   return {
     sendMessage,
     sendMessageAsTemplate,
     sendMessageWithButtons,
+    sendMessageWithList,
     sendTyping,
     markAsSeen,
     isConnected,
