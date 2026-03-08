@@ -338,8 +338,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   /** Qual ação de retry está em andamento: 'simple' = Tentar novamente, 'fallback' = Sim (outra instância). Usado para mostrar "Enviando..." só no botão clicado. */
   const [retryActionKind, setRetryActionKind] = useState<'simple' | 'fallback' | null>(null);
-  /** Modal da lista interativa (estilo WhatsApp): título + seções/rows; null = fechado. */
-  const [interactiveListModal, setInteractiveListModal] = useState<{ title: string; sections: InteractiveListSection[]; footer?: string } | null>(null);
+  /** Modal da lista interativa (estilo WhatsApp): título + seções/rows; replyToMessageId = mensagem recebida (opções clicáveis). */
+  const [interactiveListModal, setInteractiveListModal] = useState<{ title: string; sections: InteractiveListSection[]; footer?: string; replyToMessageId?: string } | null>(null);
   const interactiveListButtonRef = useRef<HTMLButtonElement | null>(null);
 
   console.log('✅ [MessageList] Estados inicializados');
@@ -1393,11 +1393,13 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                     rows: Array.isArray(sec.rows) ? sec.rows : [],
                   }));
 
+                  const isIncomingList = messageItem.direction === 'incoming';
                   const openListModal = () => {
                     setInteractiveListModal({
                       title: buttonLabel,
                       sections: sectionsForModal,
                       footer: il.footer_text ? String(il.footer_text) : undefined,
+                      replyToMessageId: isIncomingList && messageItem.id ? String(messageItem.id) : undefined,
                     });
                   };
 
@@ -1573,7 +1575,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
         />
       )}
 
-      {/* Modal da lista interativa (opções estilo WhatsApp) */}
+      {/* Modal da lista interativa (opções estilo WhatsApp); mensagem recebida = opções clicáveis para enviar resposta */}
       {interactiveListModal && (
         <InteractiveListModal
           title={interactiveListModal.title}
@@ -1583,6 +1585,15 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
             setInteractiveListModal(null);
             setTimeout(() => interactiveListButtonRef.current?.focus(), 0);
           }}
+          onSelectOption={
+            interactiveListModal.replyToMessageId && typeof onSendReplyButtonClick === 'function'
+              ? (payload) => {
+                  onSendReplyButtonClick(payload, interactiveListModal.replyToMessageId!);
+                  setInteractiveListModal(null);
+                  setTimeout(() => interactiveListButtonRef.current?.focus(), 0);
+                }
+              : undefined
+          }
         />
       )}
 

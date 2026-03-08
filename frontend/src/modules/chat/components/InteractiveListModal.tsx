@@ -1,7 +1,7 @@
 /**
  * Modal de opções da lista interativa (estilo WhatsApp).
- * Exibe título (button_text), seções/rows e footer; somente leitura.
- * Bloqueia scroll do body quando aberto; anima entrada e saída.
+ * Exibe título (button_text), seções/rows e footer.
+ * Se onSelectOption for passado (mensagem recebida), as opções são clicáveis e enviam a resposta.
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { X } from 'lucide-react';
@@ -18,9 +18,11 @@ interface InteractiveListModalProps {
   sections: InteractiveListSection[];
   footer?: string;
   onClose: () => void;
+  /** Se definido, as opções são clicáveis; ao clicar chama com o texto da opção (title ou id) e fecha o modal. */
+  onSelectOption?: (payload: string) => void;
 }
 
-export function InteractiveListModal({ title, sections, footer, onClose }: InteractiveListModalProps) {
+export function InteractiveListModal({ title, sections, footer, onClose, onSelectOption }: InteractiveListModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
@@ -115,12 +117,29 @@ export function InteractiveListModal({ title, sections, footer, onClose }: Inter
                     <ul className="divide-y divide-gray-100 dark:divide-gray-700 rounded-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
                       {rows.map((row, ri) => {
                         const rowTitle = (row.title ?? row.id ?? '').toString().trim() || '—';
+                        const payload = (row.title ?? row.id ?? '').toString().trim() || row.id?.toString() || '';
+                        const isClickable = !!onSelectOption && !!payload;
                         return (
-                          <li key={ri} className="px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/50">
-                            <span className="font-medium">{rowTitle}</span>
-                            {row.description ? (
-                              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{row.description}</span>
-                            ) : null}
+                          <li key={ri} className={isClickable ? '' : 'px-3 py-2.5'}>
+                            {isClickable ? (
+                              <button
+                                type="button"
+                                onClick={() => onSelectOption(payload)}
+                                className="w-full text-left px-3 py-2.5 text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 active:bg-gray-100 dark:active:bg-gray-700 transition-colors cursor-pointer border-0"
+                              >
+                                <span className="font-medium">{rowTitle}</span>
+                                {row.description ? (
+                                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{row.description}</span>
+                                ) : null}
+                              </button>
+                            ) : (
+                              <>
+                                <span className="font-medium">{rowTitle}</span>
+                                {row.description ? (
+                                  <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{row.description}</span>
+                                ) : null}
+                              </>
+                            )}
                           </li>
                         );
                       })}
