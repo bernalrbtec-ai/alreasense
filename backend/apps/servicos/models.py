@@ -58,3 +58,19 @@ class RedisUsageSample(models.Model):
 
     def __str__(self):
         return f"RedisUsage @ {self.sampled_at}"
+
+
+class PostgresOverviewSample(models.Model):
+    """Amostra de overview PostgreSQL (conexões e tamanho do banco) para gráfico na aba Serviços."""
+
+    sampled_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    connection_count = models.IntegerField()
+    database_size_bytes = models.BigIntegerField()
+
+    class Meta:
+        db_table = "servicos_postgresoverview_sample"
+        managed = False
+        ordering = ["-sampled_at"]
+
+    def __str__(self):
+        return f"PostgresOverview @ {self.sampled_at}"

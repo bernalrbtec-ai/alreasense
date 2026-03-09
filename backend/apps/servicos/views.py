@@ -14,7 +14,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import RedisCleanupLog, RedisUsageSample
+from .models import PostgresOverviewSample, RedisCleanupLog, RedisUsageSample
 from .redis_cleanup import SCAN_COUNT, _get_cache_key_prefix, _get_client, run_redis_cleanup
 
 logger = logging.getLogger(__name__)
@@ -573,6 +573,8 @@ RABBITMQ_KNOWN_QUEUES = [
     "billing.upcoming",
     "billing.notification",
 ]
+# Filas opcionais: não listar como aviso quando não existirem (ex.: campaigns.dlq só existe com campanhas)
+RABBITMQ_OPTIONAL_QUEUES = frozenset(["campaigns.dlq"])
 
 
 def _overview_rabbitmq_info() -> dict[str, Any]:
@@ -587,6 +589,8 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
             "active_campaign_threads": 0,
             "queues": [],
             "warnings": [],
+            "warnings_queues_not_found": [],
+            "warnings_channel_errors": [],
         }
     try:
         import pika
@@ -605,6 +609,8 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
             "active_campaign_threads": 0,
             "queues": [],
             "warnings": [],
+            "warnings_queues_not_found": [],
+            "warnings_channel_errors": [],
         }
     consumer_running = False
     active_threads = 0
@@ -617,13 +623,14 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
     except Exception:
         pass
     queues = []
-    warnings = []
+    queues_not_found: list[str] = []
+    channel_errors: list[str] = []
     for qname in RABBITMQ_KNOWN_QUEUES:
         try:
             result = channel.queue_declare(queue=qname, passive=True)
             frame = getattr(result, "method", result) if result else None
             if frame is None:
-                warnings.append(f"Fila {qname}: sem retorno")
+                channel_errors.append(qname)
                 continue
             queues.append({
                 "name": qname,
@@ -631,11 +638,27 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
                 "consumers": getattr(frame, "consumer_count", 0),
             })
         except Exception as e:
-            warnings.append(f"Fila {qname}: {str(e)[:80]}")
+            err_str = str(e)
+            is_not_found = "NOT_FOUND" in err_str or "no queue" in err_str.lower()
+            if is_not_found and qname in RABBITMQ_OPTIONAL_QUEUES:
+                continue
+            if is_not_found:
+                queues_not_found.append(qname)
+            else:
+                channel_errors.append(qname)
     try:
         conn.close()
     except Exception:
         pass
+    warnings_summary: list[str] = []
+    if queues_not_found:
+        n = len(queues_not_found)
+        names = ", ".join(queues_not_found)
+        warnings_summary.append(f"{n} fila(s) não encontrada(s): {names}")
+    if channel_errors:
+        n = len(channel_errors)
+        names = ", ".join(channel_errors)
+        warnings_summary.append(f"{n} fila(s) com canal fechado ou erro: {names}")
     return {
         "config_ok": True,
         "error": None,
@@ -643,7 +666,9 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
         "consumer_running": consumer_running,
         "active_campaign_threads": active_threads,
         "queues": queues,
-        "warnings": warnings,
+        "warnings": warnings_summary,
+        "warnings_queues_not_found": queues_not_found,
+        "warnings_channel_errors": channel_errors,
     }
 
 
@@ -681,13 +706,15 @@ def _overview_postgres_info() -> dict[str, Any]:
             cursor.execute(
                 "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
             )
-            connection_count = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            connection_count = row[0] if row is not None else None
     except Exception as e:
         connection_count = None
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT pg_database_size(current_database())")
-            database_size_bytes = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            database_size_bytes = row[0] if row is not None else None
     except Exception as e:
         database_size_bytes = None
     if database_size_bytes is not None:
@@ -731,10 +758,62 @@ def _overview_postgres_info() -> dict[str, Any]:
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def postgres_overview(request):
-    """Overview PostgreSQL: conexões, tamanho do banco, maiores tabelas."""
+    """Overview PostgreSQL: conexões, tamanho do banco, maiores tabelas, histórico e pico 24h."""
     if not _is_superadmin(request):
         return Response(
             {"error": "Acesso negado. Apenas superadmin."},
             status=status.HTTP_403_FORBIDDEN,
         )
-    return Response(_overview_postgres_info())
+    data = _overview_postgres_info()
+    # Amostras usam a tabela servicos_postgresoverview_sample (criada via scripts/sql/servicos_postgresoverview_sample.sql)
+    if (
+        data.get("config_ok")
+        and data.get("connection_count") is not None
+        and data.get("database_size_bytes") is not None
+    ):
+        try:
+            last_sample = PostgresOverviewSample.objects.order_by("-sampled_at").first()
+            now = timezone.now()
+            if last_sample is None or (now - last_sample.sampled_at).total_seconds() >= REDIS_USAGE_SAMPLE_INTERVAL_SECONDS:
+                PostgresOverviewSample.objects.create(
+                    connection_count=data["connection_count"],
+                    database_size_bytes=data["database_size_bytes"],
+                )
+            cutoff = now - timezone.timedelta(days=REDIS_USAGE_SAMPLE_RETENTION_DAYS)
+            try:
+                PostgresOverviewSample.objects.filter(sampled_at__lt=cutoff).delete()
+            except Exception as cleanup_err:
+                logger.warning("Postgres overview sample cleanup (retention): %s", cleanup_err)
+            samples = list(
+                PostgresOverviewSample.objects.filter(sampled_at__gte=cutoff).order_by("sampled_at")[:1008]
+            )
+            data["usage_history"] = [
+                {
+                    "sampled_at": s.sampled_at.isoformat(),
+                    "connection_count": s.connection_count,
+                    "database_size_bytes": s.database_size_bytes,
+                }
+                for s in samples
+            ]
+            if samples:
+                last_24h = now - timezone.timedelta(hours=24)
+                recent = [s for s in samples if s.sampled_at >= last_24h]
+                if recent:
+                    data["peak_24h_connections"] = max(s.connection_count for s in recent)
+                    data["peak_24h_size_bytes"] = max(s.database_size_bytes for s in recent)
+                else:
+                    data["peak_24h_connections"] = max(s.connection_count for s in samples)
+                    data["peak_24h_size_bytes"] = max(s.database_size_bytes for s in samples)
+            else:
+                data["peak_24h_connections"] = None
+                data["peak_24h_size_bytes"] = None
+        except Exception as e:
+            logger.warning("Postgres usage history: %s", e)
+            data["usage_history"] = []
+            data["peak_24h_connections"] = None
+            data["peak_24h_size_bytes"] = None
+    else:
+        data["usage_history"] = []
+        data["peak_24h_connections"] = None
+        data["peak_24h_size_bytes"] = None
+    return Response(data)

@@ -142,6 +142,10 @@ interface RabbitMQOverview {
   active_campaign_threads: number
   queues: { name: string; messages_ready: number; consumers: number }[]
   warnings: string[]
+  /** Filas não encontradas (404); opcionais como campaigns.dlq não entram aqui */
+  warnings_queues_not_found?: string[]
+  /** Filas com canal fechado ou outro erro de conexão */
+  warnings_channel_errors?: string[]
 }
 
 interface PostgresOverview {
@@ -152,6 +156,13 @@ interface PostgresOverview {
   database_size_human: string | null
   top_tables: { name: string; size_bytes: number }[]
   warnings: string[]
+  usage_history?: {
+    sampled_at: string
+    connection_count: number
+    database_size_bytes: number
+  }[]
+  peak_24h_connections?: number | null
+  peak_24h_size_bytes?: number | null
 }
 
 type TabId = 'proxy' | 'redis' | 'rabbitmq' | 'postgres'
@@ -1059,11 +1070,11 @@ export default function ServicosPage() {
                   </div>
                 )}
 
-                {redisOverview.warnings && redisOverview.warnings.length > 0 && (
+                {(redisOverview.warnings?.length ?? 0) > 0 && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
                     <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
-                      {redisOverview.warnings.map((w, i) => (
+                      {(redisOverview.warnings ?? []).map((w, i) => (
                         <li key={i}>{w}</li>
                       ))}
                     </ul>
@@ -1211,7 +1222,7 @@ export default function ServicosPage() {
                     <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{rabbitmqOverview.active_campaign_threads} thread(s)</p>
                   </div>
                 </div>
-                {rabbitmqOverview.queues.length > 0 && (
+                {(rabbitmqOverview.queues?.length ?? 0) > 0 && (
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Filas</p>
                     <div className="overflow-x-auto">
@@ -1224,7 +1235,7 @@ export default function ServicosPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {rabbitmqOverview.queues.map((q) => (
+                          {(rabbitmqOverview.queues ?? []).map((q) => (
                             <tr key={q.name} className="border-b border-gray-100 dark:border-gray-800">
                               <td className="py-2 font-mono text-xs">{q.name}</td>
                               <td className="py-2">{q.messages_ready}</td>
@@ -1236,16 +1247,36 @@ export default function ServicosPage() {
                     </div>
                   </div>
                 )}
-                {rabbitmqOverview.warnings.length > 0 && (
-                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
-                    <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
-                      {rabbitmqOverview.warnings.map((w, i) => (
-                        <li key={i}>{w}</li>
-                      ))}
-                    </ul>
+                {(rabbitmqOverview.warnings_queues_not_found?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Filas não encontradas</p>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      {rabbitmqOverview.warnings_queues_not_found!.length} fila(s):{' '}
+                      {rabbitmqOverview.warnings_queues_not_found!.join(', ')}
+                    </p>
                   </div>
                 )}
+                {(rabbitmqOverview.warnings_channel_errors?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Erro de canal/conexão</p>
+                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
+                      {rabbitmqOverview.warnings_channel_errors!.length} fila(s) com canal fechado ou erro:{' '}
+                      {rabbitmqOverview.warnings_channel_errors!.join(', ')}
+                    </p>
+                  </div>
+                )}
+                {(rabbitmqOverview.warnings?.length ?? 0) > 0 &&
+                  (rabbitmqOverview.warnings_queues_not_found?.length ?? 0) === 0 &&
+                  (rabbitmqOverview.warnings_channel_errors?.length ?? 0) === 0 && (
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
+                      <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
+                      <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
+                        {(rabbitmqOverview.warnings ?? []).map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
               </div>
             ) : (
               <p className="text-sm text-gray-500 dark:text-gray-400">Carregue os dados com Atualizar.</p>
@@ -1270,7 +1301,7 @@ export default function ServicosPage() {
               </div>
             ) : postgresOverview ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Configuração</p>
                     <div className="mt-1 flex items-center gap-2">
@@ -1283,15 +1314,131 @@ export default function ServicosPage() {
                     </div>
                   </div>
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Conexões ativas</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Conexões ativas (atual)</p>
                     <p className="mt-1 font-medium">{postgresOverview.connection_count != null ? postgresOverview.connection_count : '—'}</p>
                   </div>
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Tamanho do banco</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Tamanho do banco (atual)</p>
                     <p className="mt-1 font-medium">{postgresOverview.database_size_human ?? '—'}</p>
                   </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Pico 24h – conexões</p>
+                    <p className="mt-1 font-medium">
+                      {postgresOverview.peak_24h_connections != null ? postgresOverview.peak_24h_connections : '—'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Pico 24h – tamanho</p>
+                    <p className="mt-1 font-medium">
+                      {postgresOverview.peak_24h_size_bytes != null
+                        ? postgresOverview.peak_24h_size_bytes >= 1024 ** 3
+                          ? `${(postgresOverview.peak_24h_size_bytes / 1024 ** 3).toFixed(2)} GB`
+                          : postgresOverview.peak_24h_size_bytes >= 1024 ** 2
+                            ? `${(postgresOverview.peak_24h_size_bytes / 1024 ** 2).toFixed(2)} MB`
+                            : `${(postgresOverview.peak_24h_size_bytes / 1024).toFixed(1)} KB`
+                        : '—'}
+                    </p>
+                  </div>
                 </div>
-                {postgresOverview.top_tables.length > 0 && (
+                {(postgresOverview.usage_history?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-6">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Indicadores ao longo do tempo</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 -mt-4">
+                      Amostras a cada 10 min; últimos 7 dias.
+                    </p>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Conexões x data/hora (horários de pico)</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart
+                            data={postgresOverview.usage_history!.map((s) => ({
+                              ...s,
+                              time: new Date(s.sampled_at).toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }),
+                              connections: s.connection_count,
+                            }))}
+                            margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                          >
+                            <defs>
+                              <linearGradient id="pg-conn-grad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                            <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
+                            <Tooltip
+                              formatter={(value: number) => [value, 'Conexões']}
+                              labelFormatter={(label) => label}
+                              contentStyle={{ borderRadius: 8 }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="connections"
+                              name="Conexões"
+                              stroke="#0ea5e9"
+                              fill="url(#pg-conn-grad)"
+                              strokeWidth={2}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Uso de espaço (tamanho do banco) x data/hora</p>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart
+                            data={postgresOverview.usage_history!.map((s) => ({
+                              ...s,
+                              time: new Date(s.sampled_at).toLocaleString('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }),
+                              size_mb: Math.round((s.database_size_bytes / 1024 / 1024) * 100) / 100,
+                            }))}
+                            margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                          >
+                            <defs>
+                              <linearGradient id="pg-size-grad" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                            <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                            <YAxis
+                              tick={{ fontSize: 10 }}
+                              tickFormatter={(v) => `${v} MB`}
+                              label={{ value: 'MB', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }}
+                            />
+                            <Tooltip
+                              formatter={(value: number) => [`${value} MB`, 'Tamanho (MB)']}
+                              labelFormatter={(label) => label}
+                              contentStyle={{ borderRadius: 8 }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="size_mb"
+                              name="Tamanho (MB)"
+                              stroke="#10b981"
+                              fill="url(#pg-size-grad)"
+                              strokeWidth={2}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {(postgresOverview.top_tables?.length ?? 0) > 0 && (
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Maiores tabelas</p>
                     <div className="overflow-x-auto">
@@ -1303,7 +1450,7 @@ export default function ServicosPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {postgresOverview.top_tables.map((t) => (
+                          {(postgresOverview.top_tables ?? []).map((t) => (
                             <tr key={t.name} className="border-b border-gray-100 dark:border-gray-800">
                               <td className="py-2 font-mono text-xs">{t.name}</td>
                               <td className="py-2 text-right">
@@ -1320,11 +1467,11 @@ export default function ServicosPage() {
                     </div>
                   </div>
                 )}
-                {postgresOverview.warnings.length > 0 && (
+                {(postgresOverview.warnings?.length ?? 0) > 0 && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
                     <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
                     <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
-                      {postgresOverview.warnings.map((w, i) => (
+                      {(postgresOverview.warnings ?? []).map((w, i) => (
                         <li key={i}>{w}</li>
                       ))}
                     </ul>
