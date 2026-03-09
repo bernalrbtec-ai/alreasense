@@ -3,6 +3,7 @@
  * Lista fluxos, CRUD de nós e arestas, preview e envio de teste.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Plus,
   Edit,
@@ -13,6 +14,9 @@ import {
   Inbox,
   Play,
   X,
+  Zap,
+  Image as ImageIcon,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
@@ -21,8 +25,8 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import FlowCanvas from '../components/flow/FlowCanvas'
 import { api } from '../lib/api'
-import { useAuthStore } from '../stores/authStore'
 
 function getApiError(e: any): string {
   const data = e?.response?.data
@@ -57,7 +61,7 @@ interface Flow {
 interface FlowNode {
   id: string
   flow: string
-  node_type: 'list' | 'buttons'
+  node_type: 'list' | 'buttons' | 'message' | 'image' | 'file'
   name: string
   order: number
   is_start: boolean
@@ -67,6 +71,7 @@ interface FlowNode {
   footer_text?: string
   sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>
   buttons: Array<{ id: string; title: string }>
+  media_url?: string
   edges_out?: FlowEdge[]
 }
 
@@ -87,11 +92,32 @@ interface DepartmentOption {
   color?: string
 }
 
-const defaultSectionsJson = '[{"title":"Opções","rows":[{"id":"op1","title":"Opção 1","description":""},{"id":"op2","title":"Opção 2","description":""}]}]'
-const defaultButtonsJson = '[{"id":"btn1","title":"Botão 1"},{"id":"btn2","title":"Botão 2"}]'
+type SectionForm = { title: string; rows: { id: string; title: string; description: string }[] }
+type ButtonForm = { id: string; title: string }
+
+const defaultSections: SectionForm[] = [{ title: 'Opções', rows: [{ id: 'op1', title: 'Opção 1', description: '' }, { id: 'op2', title: 'Opção 2', description: '' }] }]
+const defaultButtons: ButtonForm[] = [{ id: 'btn1', title: 'Botão 1' }, { id: 'btn2', title: 'Botão 2' }]
+
+function parseSectionsSafe(val: unknown): SectionForm[] {
+  if (!Array.isArray(val) || val.length === 0) return defaultSections
+  return val.slice(0, 10).map((sec) => {
+    const s = sec && typeof sec === 'object' && sec !== null ? sec as Record<string, unknown> : {}
+    const rows = Array.isArray(s.rows) ? s.rows.slice(0, 10).map((r: unknown) => {
+      const row = r && typeof r === 'object' && r !== null ? r as Record<string, unknown> : {}
+      return { id: String(row.id ?? ''), title: String(row.title ?? ''), description: String(row.description ?? '') }
+    }) : []
+    return { title: String(s.title ?? ''), rows: rows.length ? rows : [{ id: 'op1', title: '', description: '' }] }
+  })
+}
+function parseButtonsSafe(val: unknown): ButtonForm[] {
+  if (!Array.isArray(val) || val.length === 0) return defaultButtons
+  return val.slice(0, 3).map((b: unknown) => {
+    const o = b && typeof b === 'object' && b !== null ? b as Record<string, unknown> : {}
+    return { id: String(o.id ?? ''), title: String(o.title ?? '') }
+  })
+}
 
 export default function FlowPage() {
-  const { user } = useAuthStore()
   const [flows, setFlows] = useState<Flow[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -110,7 +136,15 @@ export default function FlowPage() {
   // Confirm delete
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<FlowNode | null>(null)
   const [confirmDeleteEdge, setConfirmDeleteEdge] = useState<FlowEdge | null>(null)
+  const [confirmDeleteFlow, setConfirmDeleteFlow] = useState<Flow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // Edit flow modal
+  const [editFlowOpen, setEditFlowOpen] = useState(false)
+  const [editFlowName, setEditFlowName] = useState('')
+  const [editFlowScope, setEditFlowScope] = useState<'inbox' | 'department'>('inbox')
+  const [editFlowDepartmentId, setEditFlowDepartmentId] = useState<string | null>(null)
+  const [savingFlow, setSavingFlow] = useState(false)
 
   // Node form (add / edit)
   const [nodeFormOpen, setNodeFormOpen] = useState(false)
@@ -123,8 +157,9 @@ export default function FlowPage() {
   const [nodeButtonText, setNodeButtonText] = useState('')
   const [nodeHeaderText, setNodeHeaderText] = useState('')
   const [nodeFooterText, setNodeFooterText] = useState('')
-  const [nodeSectionsJson, setNodeSectionsJson] = useState(defaultSectionsJson)
-  const [nodeButtonsJson, setNodeButtonsJson] = useState(defaultButtonsJson)
+  const [nodeSections, setNodeSections] = useState<SectionForm[]>(defaultSections)
+  const [nodeButtons, setNodeButtons] = useState<ButtonForm[]>(defaultButtons)
+  const [nodeMediaUrl, setNodeMediaUrl] = useState('')
   const [savingNode, setSavingNode] = useState(false)
 
   // Edge form (add / edit)
@@ -224,6 +259,72 @@ export default function FlowPage() {
     }
   }
 
+  const openEditFlow = () => {
+    if (!selectedFlow) return
+    setEditFlowName(selectedFlow.name)
+    setEditFlowScope((selectedFlow.scope as 'inbox' | 'department') || 'inbox')
+    setEditFlowDepartmentId(selectedFlow.department || null)
+    setEditFlowOpen(true)
+  }
+
+  const handleSaveFlow = async () => {
+    if (!selectedFlow?.id || savingFlow) return
+    const name = editFlowName.trim()
+    if (!name) {
+      toast.error('Nome do fluxo é obrigatório')
+      return
+    }
+    if (editFlowScope === 'department' && !editFlowDepartmentId) {
+      toast.error('Selecione o departamento')
+      return
+    }
+    setSavingFlow(true)
+    try {
+      const { data } = await api.patch(`/chat/flows/${selectedFlow.id}/`, {
+        name,
+        scope: editFlowScope,
+        department: editFlowScope === 'department' ? editFlowDepartmentId : null,
+      })
+      toast.success('Fluxo atualizado')
+      setEditFlowOpen(false)
+      await fetchFlows()
+      setSelectedFlow({
+        id: data?.id ?? selectedFlow.id,
+        name: data?.name ?? name,
+        scope: data?.scope ?? editFlowScope,
+        department: data?.department ?? null,
+        department_name: data?.department_name ?? null,
+        is_active: data?.is_active ?? selectedFlow.is_active,
+      })
+      selectedFlowIdRef.current = selectedFlow.id
+      await fetchFlowDetail(selectedFlow.id)
+    } catch (e: any) {
+      toast.error(getApiError(e))
+    } finally {
+      setSavingFlow(false)
+    }
+  }
+
+  const handleDeleteFlowClick = () => selectedFlow && setConfirmDeleteFlow(selectedFlow)
+  const handleDeleteFlowConfirm = async () => {
+    const flow = confirmDeleteFlow
+    setConfirmDeleteFlow(null)
+    if (!flow?.id) return
+    setDeletingId(flow.id)
+    try {
+      await api.delete(`/chat/flows/${flow.id}/`)
+      toast.success('Fluxo excluído')
+      await fetchFlows()
+      setSelectedFlow(null)
+      setFlowDetail(null)
+      selectedFlowIdRef.current = null
+    } catch (e: any) {
+      toast.error(getApiError(e))
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const handleSendTest = async () => {
     if (!selectedFlow?.id || !testPhone.trim()) {
       toast.error('Selecione um fluxo e informe o número')
@@ -252,8 +353,9 @@ export default function FlowPage() {
     setNodeButtonText('Ver opções')
     setNodeHeaderText('')
     setNodeFooterText('')
-    setNodeSectionsJson(defaultSectionsJson)
-    setNodeButtonsJson(defaultButtonsJson)
+    setNodeSections(defaultSections)
+    setNodeButtons(defaultButtons)
+    setNodeMediaUrl('')
     setNodeFormOpen(true)
   }
 
@@ -267,8 +369,9 @@ export default function FlowPage() {
     setNodeButtonText(n.button_text || '')
     setNodeHeaderText(n.header_text || '')
     setNodeFooterText(n.footer_text || '')
-    setNodeSectionsJson(JSON.stringify(n.sections || [], null, 2))
-    setNodeButtonsJson(JSON.stringify(n.buttons || [], null, 2))
+    setNodeSections(parseSectionsSafe(n.sections))
+    setNodeButtons(parseButtonsSafe(n.buttons))
+    setNodeMediaUrl(n.media_url || '')
     setNodeFormOpen(true)
   }
 
@@ -280,36 +383,66 @@ export default function FlowPage() {
     let sections: FlowNode['sections'] = []
     let buttons: FlowNode['buttons'] = []
     if (nodeType === 'list') {
-      try {
-        sections = JSON.parse(nodeSectionsJson) as FlowNode['sections']
-        if (!Array.isArray(sections) || sections.length === 0) {
-          toast.error('Seções: informe um array com ao menos uma seção')
-          return
-        }
-        const hasRows = sections.every((sec) => sec && typeof sec === 'object' && Array.isArray(sec.rows) && sec.rows.length > 0)
-        if (!hasRows) {
-          toast.error('Cada seção deve ter ao menos uma linha (id e title)')
-          return
-        }
-      } catch {
-        toast.error('Seções: JSON inválido. Use o formato [{"title":"...","rows":[{"id":"...","title":"..."}]}]')
+      if (nodeSections.length === 0) {
+        toast.error('Adicione ao menos uma seção')
         return
       }
-    } else {
-      try {
-        buttons = JSON.parse(nodeButtonsJson) as FlowNode['buttons']
-        if (!Array.isArray(buttons) || buttons.length < 1 || buttons.length > 3) {
-          toast.error('Botões: informe um array com 1 a 3 itens')
+      const ids = new Set<string>()
+      for (const sec of nodeSections) {
+        if (!sec.title.trim()) {
+          toast.error('Cada seção precisa de um título')
           return
         }
-      } catch {
-        toast.error('Botões: JSON inválido. Use o formato [{"id":"...","title":"..."}]')
+        if (!sec.rows.length) {
+          toast.error('Cada seção precisa de ao menos uma linha')
+          return
+        }
+        for (const row of sec.rows) {
+          if (!row.id.trim() || !row.title.trim()) {
+            toast.error('Cada linha precisa de id e título')
+            return
+          }
+          if (ids.has(row.id.trim())) {
+            toast.error(`ID duplicado: "${row.id}". Use ids únicos.`)
+            return
+          }
+          ids.add(row.id.trim())
+        }
+      }
+      sections = nodeSections.slice(0, 10).map((sec) => ({
+        title: sec.title.trim(),
+        rows: sec.rows.slice(0, 10).map((r) => ({ id: r.id.trim(), title: r.title.trim(), description: (r.description || '').trim() })),
+      }))
+    } else if (nodeType === 'buttons') {
+      if (nodeButtons.length < 1 || nodeButtons.length > 3) {
+        toast.error('Informe entre 1 e 3 botões')
         return
       }
+      const ids = new Set<string>()
+      for (const b of nodeButtons) {
+        if (!b.id.trim() || !b.title.trim()) {
+          toast.error('Cada botão precisa de id e título')
+          return
+        }
+        if (ids.has(b.id.trim())) {
+          toast.error(`ID duplicado: "${b.id}". Use ids únicos.`)
+          return
+        }
+        ids.add(b.id.trim())
+      }
+      buttons = nodeButtons.slice(0, 3).map((b) => ({ id: b.id.trim(), title: b.title.trim() }))
+    }
+    if (nodeType === 'message' && !nodeBodyText.trim()) {
+      toast.error('Texto da mensagem é obrigatório')
+      return
+    }
+    if ((nodeType === 'image' || nodeType === 'file') && !nodeMediaUrl.trim()) {
+      toast.error('URL da mídia é obrigatória para este tipo')
+      return
     }
     setSavingNode(true)
     try {
-      const payload = {
+      const payload: Record<string, unknown> = {
         flow: selectedFlow.id,
         node_type: nodeType,
         name: nodeName.trim(),
@@ -322,6 +455,7 @@ export default function FlowPage() {
         sections: nodeType === 'list' ? sections : [],
         buttons: nodeType === 'buttons' ? buttons : [],
       }
+      if (nodeType === 'image' || nodeType === 'file') payload.media_url = nodeMediaUrl.trim()
       if (editingNode) {
         await api.patch(`/chat/flow-nodes/${editingNode.id}/`, payload)
         toast.success('Nó atualizado')
@@ -376,6 +510,7 @@ export default function FlowPage() {
   }
 
   const handleSaveEdge = async () => {
+    if (savingEdge) return
     if (!edgeFromNodeId || !edgeOptionId.trim()) {
       toast.error('Nó de origem e ID da opção são obrigatórios')
       return
@@ -435,11 +570,12 @@ export default function FlowPage() {
       if (e.key === 'Escape') {
         if (nodeFormOpen) setNodeFormOpen(false)
         else if (edgeFormOpen) setEdgeFormOpen(false)
+        else if (editFlowOpen) setEditFlowOpen(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodeFormOpen, edgeFormOpen])
+  }, [nodeFormOpen, edgeFormOpen, editFlowOpen])
 
   const previewLines: string[] = []
   if (flowDetail?.nodes) {
@@ -454,8 +590,26 @@ export default function FlowPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <LoadingSpinner />
+      <div className="max-w-5xl mx-auto p-6 space-y-6 animate-fade-in">
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-56 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse" />
+          <div className="h-10 w-32 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="p-4">
+            <div className="h-5 w-20 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mb-4" />
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-10 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+              ))}
+            </div>
+          </Card>
+          <div className="md:col-span-2 space-y-4">
+            <Card className="p-4 h-[420px] flex items-center justify-center">
+              <LoadingSpinner />
+            </Card>
+          </div>
+        </div>
       </div>
     )
   }
@@ -463,15 +617,23 @@ export default function FlowPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">Fluxos (lista e botões)</h1>
-        <Button onClick={() => setCreateOpen(true)}>
+        <h1 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Fluxos</h1>
+        <Button onClick={() => setCreateOpen(true)} className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
           <Plus className="h-4 w-4 mr-2" />
           Novo fluxo
         </Button>
       </div>
 
+      <AnimatePresence>
       {createOpen && (
-        <Card className="p-6">
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2 }}
+          className="overflow-hidden"
+        >
+        <Card className="p-6 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
           <h2 className="text-lg font-medium mb-4">Criar fluxo</h2>
           <div className="space-y-4">
             <div>
@@ -527,15 +689,21 @@ export default function FlowPage() {
             </div>
           </div>
         </Card>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="p-4">
-          <h3 className="font-medium mb-2">Fluxos</h3>
+        <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm transition-shadow hover:shadow-md">
+          <h3 className="font-medium mb-3 text-gray-900 dark:text-gray-100">Fluxos</h3>
           {flows.length === 0 ? (
-            <div className="text-center py-6 text-gray-500">
-              <p className="text-sm mb-2">Nenhum fluxo ainda.</p>
-              <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+              <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
+                <Zap className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+              </div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nenhum fluxo ainda</p>
+              <p className="text-xs mb-4">Crie o primeiro para configurar lista e botões por Inbox ou departamento.</p>
+              <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)} className="rounded-lg">
                 <Plus className="h-4 w-4 mr-1" /> Criar primeiro fluxo
               </Button>
             </div>
@@ -546,15 +714,15 @@ export default function FlowPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedFlow(f)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm ${
+                  className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 ${
                     selectedFlow?.id === f.id
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
-                      : 'hover:bg-gray-100 dark:hover:bg-gray-800'
+                      ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-800 dark:text-accent-200 font-medium shadow-sm'
+                      : 'hover:bg-gray-100 dark:hover:bg-gray-800/80 text-gray-700 dark:text-gray-300'
                   }`}
                 >
-                  {f.name}
-                  <span className="text-xs text-gray-500 ml-1">
-                    {f.scope === 'inbox' ? 'Inbox' : (f.department_name || '')}
+                  <span className="block truncate">{f.name}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 block">
+                    {f.scope === 'inbox' ? 'Inbox' : (f.department_name || 'Departamento')}
                   </span>
                 </button>
               </li>
@@ -565,20 +733,66 @@ export default function FlowPage() {
 
         <div className="md:col-span-2 space-y-4">
           {selectedFlow && detailLoading && (
-            <Card className="p-8 flex items-center justify-center min-h-[200px]">
-              <LoadingSpinner />
-            </Card>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-4"
+            >
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 h-[420px] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                  <LoadingSpinner />
+                  <span className="text-sm text-gray-500 dark:text-gray-400">Carregando fluxo…</span>
+                </div>
+              </Card>
+              <Card className="p-4 rounded-xl">
+                <div className="h-4 w-32 rounded bg-gray-200 dark:bg-gray-700 animate-pulse mb-3" />
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 rounded-lg bg-gray-100 dark:bg-gray-800 animate-pulse" />
+                  ))}
+                </div>
+              </Card>
+            </motion.div>
           )}
+          <AnimatePresence mode="wait">
           {selectedFlow && !detailLoading && flowDetail && (
-            <>
-              <Card className="p-4">
-                <h3 className="font-medium mb-2">Preview do fluxo</h3>
-                <pre className="text-xs bg-gray-50 dark:bg-gray-900 p-3 rounded overflow-auto max-h-48">
+            <motion.div
+              key={flowDetail.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm transition-shadow hover:shadow-md">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Canvas do fluxo</h3>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={openEditFlow} aria-label="Editar fluxo">
+                      <Edit className="h-3 w-3 mr-1" /> Editar fluxo
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleDeleteFlowClick} disabled={!!deletingId} aria-label="Excluir fluxo" className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20">
+                      <Trash2 className="h-3 w-3 mr-1" /> Excluir fluxo
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Clique em um nó para editar. Arraste para reposicionar.</p>
+                <FlowCanvas
+                  nodes={flowDetail.nodes ?? []}
+                  onNodeClick={(nodeId) => {
+                    const node = flowDetail.nodes?.find((n) => n.id === nodeId)
+                    if (node) openEditNode(node)
+                  }}
+                />
+              </Card>
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">Preview (texto)</h3>
+                <pre className="text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg overflow-auto max-h-48 border border-gray-100 dark:border-gray-800">
                   {previewLines.length ? previewLines.join('\n') : 'Nenhum nó ainda. Adicione um nó abaixo.'}
                 </pre>
               </Card>
-              <Card className="p-4">
-                <h3 className="font-medium mb-2">Enviar passo inicial (teste)</h3>
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">Enviar passo inicial (teste)</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
                   Use um número que já tenha conversa no sistema.
                 </p>
@@ -595,25 +809,29 @@ export default function FlowPage() {
                   </Button>
                 </div>
               </Card>
-              <Card className="p-4">
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium">Nós ({flowDetail.nodes?.length || 0})</h3>
-                  <Button size="sm" onClick={openAddNode}>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Nós ({flowDetail.nodes?.length || 0})</h3>
+                  <Button size="sm" onClick={openAddNode} className="rounded-lg transition-all duration-200 hover:scale-[1.02]">
                     <Plus className="h-4 w-4 mr-1" /> Adicionar nó
                   </Button>
                 </div>
                 <ul className="space-y-3">
                   {(flowDetail.nodes || []).map((n) => (
-                    <li key={n.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                    <li key={n.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 transition-colors duration-200 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
                       <div className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
-                          {n.node_type === 'list' ? <List className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
-                          <span className="font-medium">{n.name}</span>
-                          {n.is_start && <span className="text-xs bg-green-100 dark:bg-green-900/30 px-1.5 rounded">início</span>}
+                          {n.node_type === 'list' && <List className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
+                          {n.node_type === 'buttons' && <MessageSquare className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
+                          {(n.node_type === 'message' || !['list', 'buttons', 'image', 'file'].includes(n.node_type)) && <MessageSquare className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
+                          {n.node_type === 'image' && <ImageIcon className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
+                          {n.node_type === 'file' && <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{n.name}</span>
+                          {n.is_start && <span className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full font-medium">início</span>}
                         </span>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="outline" onClick={() => openEditNode(n)} aria-label={`Editar nó ${n.name}`}><Edit className="h-3 w-3" /></Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDeleteNodeClick(n)} disabled={deletingId === n.id} aria-label={`Excluir nó ${n.name}`}><Trash2 className="h-3 w-3 text-red-600" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditNode(n)} aria-label={`Editar nó ${n.name}`} className="rounded-lg transition-opacity hover:opacity-90"><Edit className="h-3 w-3" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteNodeClick(n)} disabled={deletingId === n.id} aria-label={`Excluir nó ${n.name}`} className="rounded-lg text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="h-3 w-3" /></Button>
                         </div>
                       </div>
                       <div className="mt-2 pl-6">
@@ -625,9 +843,9 @@ export default function FlowPage() {
                             {(n.edges_out || []).map((e) => (
                               <li key={e.id} className="flex items-center justify-between text-sm">
                                 <span><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{e.option_id}</code> → {e.to_node_name || e.target_department_name || 'Encerrar'}</span>
-                                <div className="flex gap-1">
-                                  <button type="button" onClick={() => openEditEdge(e)} className="text-blue-600 dark:text-blue-400 hover:underline">Editar</button>
-                                  <button type="button" onClick={() => handleDeleteEdgeClick(e)} disabled={deletingId === e.id} className="text-red-600 dark:text-red-400 hover:underline">Excluir</button>
+                                <div className="flex gap-2">
+                                  <button type="button" onClick={() => openEditEdge(e)} className="text-accent-600 dark:text-accent-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80">Editar</button>
+                                  <button type="button" onClick={() => handleDeleteEdgeClick(e)} disabled={deletingId === e.id} className="text-red-600 dark:text-red-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50">Excluir</button>
                                 </div>
                               </li>
                             ))}
@@ -641,29 +859,55 @@ export default function FlowPage() {
                   ))}
                 </ul>
               </Card>
-            </>
+            </motion.div>
           )}
+          </AnimatePresence>
           {!selectedFlow && !detailLoading && (
-            <Card className="p-8 text-center text-gray-500">
-              Selecione um fluxo na lista para ver o preview e editar nós e arestas, ou crie um novo fluxo.
-            </Card>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card className="p-12 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 text-center">
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
+                  <MessageSquare className="h-7 w-7 text-gray-400 dark:text-gray-500" />
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um fluxo</p>
+                <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
+                  Escolha um fluxo na lista ao lado para ver o canvas, editar nós e arestas, ou crie um novo.
+                </p>
+              </Card>
+            </motion.div>
           )}
         </div>
       </div>
 
       {/* Modal: Node form */}
+      <AnimatePresence>
       {nodeFormOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
           onClick={() => setNodeFormOpen(false)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="node-form-title"
         >
-          <Card className="w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            className="w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <Card className="p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 id="node-form-title" className="text-lg font-medium">{editingNode ? 'Editar nó' : 'Adicionar nó'}</h2>
-              <button type="button" onClick={() => setNodeFormOpen(false)} className="text-gray-500 hover:text-gray-700" aria-label="Fechar"><X className="h-5 w-5" /></button>
+              <h2 id="node-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingNode ? 'Editar nó' : 'Adicionar nó'}</h2>
+              <button type="button" onClick={() => setNodeFormOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -675,10 +919,13 @@ export default function FlowPage() {
                 <select
                   className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                   value={nodeType}
-                  onChange={(e) => setNodeType(e.target.value as 'list' | 'buttons')}
+                  onChange={(e) => setNodeType(e.target.value as 'list' | 'buttons' | 'message' | 'image' | 'file')}
                 >
+                  <option value="message">Mensagem (texto)</option>
                   <option value="list">Lista</option>
                   <option value="buttons">Botões</option>
+                  <option value="image">Imagem</option>
+                  <option value="file">Arquivo</option>
                 </select>
               </div>
               <div className="flex gap-4">
@@ -691,15 +938,23 @@ export default function FlowPage() {
                   <span className="text-sm">Nó inicial</span>
                 </label>
               </div>
-              <div>
-                <Label>Corpo (texto da mensagem)</Label>
-                <textarea
-                  className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 min-h-[60px]"
-                  value={nodeBodyText}
-                  onChange={(e) => setNodeBodyText(e.target.value)}
-                  placeholder="Texto exibido antes da lista/botões"
-                />
-              </div>
+              {(nodeType === 'message' || nodeType === 'list' || nodeType === 'buttons') && (
+                <div>
+                  <Label>Corpo (texto da mensagem)</Label>
+                  <textarea
+                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 min-h-[60px]"
+                    value={nodeBodyText}
+                    onChange={(e) => setNodeBodyText(e.target.value)}
+                    placeholder="Texto exibido antes da lista/botões"
+                  />
+                </div>
+              )}
+              {(nodeType === 'image' || nodeType === 'file') && (
+                <div>
+                  <Label>URL da mídia</Label>
+                  <Input value={nodeMediaUrl} onChange={(e) => setNodeMediaUrl(e.target.value)} placeholder="https://..." />
+                </div>
+              )}
               {nodeType === 'list' && (
                 <div>
                   <Label>Texto do botão (lista)</Label>
@@ -716,24 +971,54 @@ export default function FlowPage() {
               </div>
               {nodeType === 'list' && (
                 <div>
-                  <Label>Seções (JSON)</Label>
-                  <textarea
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 font-mono text-sm min-h-[100px]"
-                    value={nodeSectionsJson}
-                    onChange={(e) => setNodeSectionsJson(e.target.value)}
-                    placeholder='[{"title":"...","rows":[{"id":"...","title":"...","description":"..."}]}]'
-                  />
+                  <Label>Seções (máx. 10 seções, 10 linhas cada)</Label>
+                  <div className="space-y-3 mt-1">
+                    {nodeSections.map((sec, si) => (
+                      <div key={si} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+                        <div className="flex gap-2 items-center">
+                          <Input value={sec.title} onChange={(e) => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, title: e.target.value } : s))} placeholder="Título da seção" className="flex-1" />
+                          {nodeSections.length > 1 && (
+                            <Button type="button" size="sm" variant="outline" onClick={() => setNodeSections((prev) => prev.filter((_, i) => i !== si))}>Remover</Button>
+                          )}
+                        </div>
+                        {sec.rows.map((row, ri) => (
+                          <div key={ri} className="flex gap-2 items-center pl-2">
+                            <Input value={row.id} onChange={(e) => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, id: e.target.value } : r) } : s))} placeholder="id" className="w-24" />
+                            <Input value={row.title} onChange={(e) => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, title: e.target.value } : r) } : s))} placeholder="Título" className="flex-1" />
+                            <Input value={row.description} onChange={(e) => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, rows: s.rows.map((r, j) => j === ri ? { ...r, description: e.target.value } : r) } : s))} placeholder="Descrição (opcional)" className="flex-1" />
+                            {sec.rows.length > 1 && (
+                              <Button type="button" size="sm" variant="outline" onClick={() => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, rows: s.rows.filter((_, j) => j !== ri) } : s))}>−</Button>
+                            )}
+                          </div>
+                        ))}
+                        {sec.rows.length < 10 && (
+                          <Button type="button" size="sm" variant="outline" className="ml-2" onClick={() => setNodeSections((prev) => prev.map((s, i) => i === si ? { ...s, rows: [...s.rows, { id: `op${s.rows.length + 1}`, title: '', description: '' }] } : s))}>+ Linha</Button>
+                        )}
+                      </div>
+                    ))}
+                    {nodeSections.length < 10 && (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setNodeSections((prev) => [...prev, { title: '', rows: [{ id: 'op1', title: '', description: '' }] }])}>+ Seção</Button>
+                    )}
+                  </div>
                 </div>
               )}
               {nodeType === 'buttons' && (
                 <div>
-                  <Label>Botões (JSON, máx. 3)</Label>
-                  <textarea
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 font-mono text-sm min-h-[80px]"
-                    value={nodeButtonsJson}
-                    onChange={(e) => setNodeButtonsJson(e.target.value)}
-                    placeholder='[{"id":"...","title":"..."}]'
-                  />
+                  <Label>Botões (1 a 3)</Label>
+                  <div className="space-y-2 mt-1">
+                    {nodeButtons.map((btn, bi) => (
+                      <div key={bi} className="flex gap-2 items-center">
+                        <Input value={btn.id} onChange={(e) => setNodeButtons((prev) => prev.map((b, i) => i === bi ? { ...b, id: e.target.value } : b))} placeholder="id" className="w-28" />
+                        <Input value={btn.title} onChange={(e) => setNodeButtons((prev) => prev.map((b, i) => i === bi ? { ...b, title: e.target.value } : b))} placeholder="Título do botão" className="flex-1" />
+                        {nodeButtons.length > 1 && (
+                          <Button type="button" size="sm" variant="outline" onClick={() => setNodeButtons((prev) => prev.filter((_, i) => i !== bi))}>Remover</Button>
+                        )}
+                      </div>
+                    ))}
+                    {nodeButtons.length < 3 && (
+                      <Button type="button" size="sm" variant="outline" onClick={() => setNodeButtons((prev) => [...prev, { id: `btn${prev.length + 1}`, title: '' }])}>+ Botão</Button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -742,22 +1027,35 @@ export default function FlowPage() {
               <Button variant="outline" onClick={() => setNodeFormOpen(false)}>Cancelar</Button>
             </div>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* Modal: Edge form */}
+      <AnimatePresence>
       {edgeFormOpen && flowDetail?.nodes && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
           onClick={() => setEdgeFormOpen(false)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="edge-form-title"
         >
-          <Card className="w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+          <Card className="w-full max-w-md p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 id="edge-form-title" className="text-lg font-medium">{editingEdge ? 'Editar aresta' : 'Adicionar aresta'}</h2>
-              <button type="button" onClick={() => setEdgeFormOpen(false)} className="text-gray-500 hover:text-gray-700" aria-label="Fechar"><X className="h-5 w-5" /></button>
+              <h2 id="edge-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingEdge ? 'Editar aresta' : 'Adicionar aresta'}</h2>
+              <button type="button" onClick={() => setEdgeFormOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -825,8 +1123,10 @@ export default function FlowPage() {
               <Button variant="outline" onClick={() => setEdgeFormOpen(false)}>Cancelar</Button>
             </div>
           </Card>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <ConfirmDialog
         show={!!confirmDeleteNode}
@@ -846,6 +1146,99 @@ export default function FlowPage() {
         onConfirm={handleDeleteEdgeConfirm}
         onCancel={() => setConfirmDeleteEdge(null)}
       />
+      <ConfirmDialog
+        show={!!confirmDeleteFlow}
+        title="Excluir fluxo"
+        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? Todos os nós e arestas serão removidos.` : ''}
+        confirmText="Excluir"
+        variant="danger"
+        onConfirm={handleDeleteFlowConfirm}
+        onCancel={() => setConfirmDeleteFlow(null)}
+      />
+
+      {/* Modal: Edit flow */}
+      <AnimatePresence>
+      {editFlowOpen && selectedFlow && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          onClick={() => setEditFlowOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-flow-title"
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.2 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+          <Card className="w-full max-w-md p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 id="edit-flow-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar fluxo</h2>
+              <button type="button" onClick={() => setEditFlowOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label>Nome</Label>
+                <Input
+                  value={editFlowName}
+                  onChange={(e) => setEditFlowName(e.target.value)}
+                  placeholder="Ex: Menu Inbox"
+                />
+              </div>
+              <div>
+                <Label>Escopo</Label>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={editFlowScope === 'inbox'}
+                      onChange={() => { setEditFlowScope('inbox'); setEditFlowDepartmentId(null) }}
+                    />
+                    <Inbox className="h-4 w-4" /> Inbox
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      checked={editFlowScope === 'department'}
+                      onChange={() => setEditFlowScope('department')}
+                    />
+                    <Building2 className="h-4 w-4" /> Departamento
+                  </label>
+                </div>
+              </div>
+              {editFlowScope === 'department' && (
+                <div>
+                  <Label>Departamento</Label>
+                  <select
+                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                    value={editFlowDepartmentId || ''}
+                    onChange={(e) => setEditFlowDepartmentId(e.target.value || null)}
+                  >
+                    <option value="">Selecione</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <Button onClick={handleSaveFlow} disabled={savingFlow}>
+                {savingFlow ? <LoadingSpinner size="sm" className="mr-1" /> : null}
+                {savingFlow ? 'Salvando…' : 'Salvar'}
+              </Button>
+              <Button variant="outline" onClick={() => setEditFlowOpen(false)} disabled={savingFlow}>Cancelar</Button>
+            </div>
+          </Card>
+          </motion.div>
+        </motion.div>
+      )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 # Scripts SQL das migrations (Sense)
 
-Estrutura dos scripts SQL equivalentes às migrations do Django, para auditoria, provisionamento manual de banco e rollback.
+Estrutura dos scripts SQL equivalentes às migrations do Django, para **auditoria e provisionamento manual** de banco. O projeto não utiliza cancelamento de migrations em produção; o escopo de fluxos segue apenas o [Plano de canvas de fluxos](../PLANO_CANVAS_FLUXO.md).
 
 ## Organização
 
@@ -16,6 +16,7 @@ Ordem de aplicação deve respeitar as dependências entre apps (ver [MIGRATIONS
 |---------|------------------------|----|------|
 | tenancy | 0001_initial           | [tenancy/0001_initial.up.sql](tenancy/0001_initial.up.sql) | — (noop) |
 | chat    | 0017_flow_schema       | [chat/0017_flow_schema.up.sql](chat/0017_flow_schema.up.sql) | [chat/0017_flow_schema.down.sql](chat/0017_flow_schema.down.sql) |
+| chat    | 0018_flow_node_media_url (canvas) | [chat/0018_flow_node_media_url.up.sql](chat/0018_flow_node_media_url.up.sql) | — (opcional: remover coluna manualmente) |
 | billing | 0003_billing_api_initial | [billing/0003_billing_api_initial.up.sql](billing/0003_billing_api_initial.up.sql) | — (noop) |
 
 ## Como gerar o SQL das demais migrations

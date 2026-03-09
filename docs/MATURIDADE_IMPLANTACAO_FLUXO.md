@@ -1,23 +1,36 @@
-# Maturidade e implantação: migrations + flow engine
+# Maturidade e implantação: fluxos (backend + frontend)
 
 ## Escopo do que está pronto para implantar
+
+### Backend
 
 | Componente | Alteração | Impacto |
 |------------|-----------|---------|
 | **authn 0003** | State: `CreateModel(Department)` via SeparateDatabaseAndState | Apenas estado do Django; banco já era criado pelo RunPython. |
 | **chat 0001** | State: `CreateModel(Conversation, Message, MessageAttachment)` via SeparateDatabaseAndState | Apenas estado do Django; tabelas já eram criadas pelo RunSQL. |
+| **0017_flow_schema** | RunSQL flow_schema.sql; reverse_sql para rollback das tabelas de fluxo | Cria chat_flow, chat_flow_node, chat_flow_edge, chat_conversation_flow_state. |
+| **0018 (opcional)** | Script SQL `docs/sql/chat/0018_flow_node_media_url.up.sql` | Adiciona coluna `media_url` em chat_flow_node se faltar (tipos image/file). |
 | **flow_engine.py** | `process_flow_reply`: atomic + lock na mensagem, guards, log para departamento inexistente | Comportamento das transições mantido; menos race e mais robustez. |
 
-**Não alterado:** 0017_flow_schema (continua igual). Banco que já rodou `flow_schema_complete.sql` não é alterado pelas migrations; o `migrate` só passa a conseguir **aplicar** 0017 sem ValueError.
+### Frontend (canvas + CRUD completo)
+
+| Componente | Situação |
+|------------|----------|
+| **FlowPage** | Lista fluxos, criar/selecionar, skeleton de loading, empty states. |
+| **Editar e excluir fluxo** | Modal editar (nome, escopo, departamento) com PATCH; excluir com confirmação e DELETE; refetch e setSelectedFlow(null) após exclusão. |
+| **Edição sem JSON** | Formulários estruturados: lista (até 10 seções, 10 linhas cada), botões (1–3), tipos message/image/file com media_url; validação de ids únicos. |
+| **Canvas (React Flow)** | Exibição de nós e arestas; clique no nó abre edição; sincronização por assinatura (não reseta a cada re-render). |
+| **UX** | Modais com backdrop blur e animação (framer-motion); transições em listas e cards; ícones por tipo de nó; double submit evitado. |
 
 ---
 
 ## O que foi verificado
 
-- **Migrations:** Ordem de dependências (authn 0003 → chat 0001 → chat 0017) e referências `authn.department`, `chat.conversation` conferidas. `migrate --plan` executado com sucesso (exit 0).
-- **Flow engine:** Lógica de próximo nó, transferir e encerrar revisada; lock com `select_for_update`; idempotência com `flow_reply_processed`; tratamento de exceção; guards para `conversation`/`message`/`message.pk`; aviso quando departamento da aresta não existe.
+- **Migrations:** Ordem de dependências (authn 0003 → chat 0001 → chat 0017) e referências conferidas; `migrate --plan` executado com sucesso. Script 0018 (media_url) executado com sucesso no ambiente do desenvolvedor.
+- **Flow engine:** Lógica de próximo nó, transferir e encerrar revisada; lock com `select_for_update`; idempotência com `flow_reply_processed`; guards; aviso quando departamento da aresta não existe.
+- **Frontend:** FlowPage com CRUD de fluxo, canvas (React Flow), edição sem JSON e editar/excluir; double submit e refetch evitados; canvas sincronizado por assinatura.
 - **Linter:** Sem erros nos arquivos alterados.
-- **Reversão:** Migrations não alteram esquema em ambientes que já tinham as tabelas; flow_engine só adiciona comportamento defensivo (não remove caminhos existentes).
+- **Reversão:** Migrations não alteram esquema em ambientes que já tinham as tabelas; flow_engine e frontend só adicionam comportamento (não removem caminhos existentes).
 
 ---
 
@@ -37,10 +50,9 @@ Nenhum risco alto identificado para o escopo atual (migrations + flow engine).
 ## Checklist pré-implantação
 
 - [ ] Backup do banco antes de rodar `migrate` (recomendado em produção).
-- [ ] Em ambiente com banco já existente: tabelas `authn_department`, `chat_conversation`, `chat_flow`, etc. já existem; `migrate` só marcará 0017 como aplicada (e não reexecutará o RunSQL destrutivo).
-- [ ] Dependências do projeto instaladas (incl. reportlab se usar campaigns); `python manage.py check` sem erros.
-- [ ] Rodar `python manage.py migrate` (ou `migrate --plan` primeiro) e confirmar que termina sem ValueError.
-- [ ] Após deploy: testar um fluxo (lista ou botões) de ponta a ponta: início, escolher opção, próximo nó e, se aplicável, transferir/encerrar.
+- [ ] Dependências instaladas (backend e frontend, incl. `@xyflow/react`); `python manage.py check` sem erros.
+- [ ] Rodar `python manage.py migrate` (ou `migrate --plan` primeiro); se a tabela `chat_flow_node` foi criada sem `media_url`, executar `docs/sql/chat/0018_flow_node_media_url.up.sql` antes ou após o migrate.
+- [ ] Após deploy: testar um fluxo de ponta a ponta: na UI criar/editar fluxo, adicionar nó (lista ou botões), aresta, envio de teste; em conversa real: início, escolher opção, próximo nó ou transferir/encerrar.
 
 ---
 
@@ -59,10 +71,16 @@ Nenhum risco alto identificado para o escopo atual (migrations + flow engine).
 2. Em produção, faça backup do banco antes do `migrate`.
 3. Após o deploy, rode um teste rápido de fluxo (início → opção → próximo nó ou transferir/encerrar) para validar em runtime.
 
-**Fora deste escopo:** O **plano** de canvas + edição sem JSON e editar/excluir fluxo é documentação para implementação futura; a implantação atual não inclui mudanças de frontend. Ou seja: pode implantar as alterações de backend/migrations com segurança; o frontend do fluxo segue como está até a implementação do plano.
+**Frontend (canvas + CRUD):** O [Plano de canvas de fluxos](PLANO_CANVAS_FLUXO.md) foi implementado: canvas com React Flow, edição sem JSON e editar/excluir fluxo. A UI está integrada à API existente; sem mudanças destrutivas.
 
 ---
 
-## Resumo em uma frase
+## Resumo: pode levar para produção?
 
-**As alterações em migrations (authn 0003, chat 0001) e no flow_engine estão maduras para implantação; o risco é baixo e as verificações e mitigações estão documentadas. Pode implantar seguindo o checklist acima.**
+**Sim. Está maduro para produção** no escopo atual (fluxos por Inbox/departamento, lista e botões, canvas, edição sem JSON, editar/excluir fluxo), desde que:
+
+1. **Backend:** Migrations aplicadas (0017; 0018 se a tabela foi criada sem `media_url`). Backup do banco antes do `migrate` em produção.
+2. **Ambiente:** Dependências instaladas; `manage.py check` sem erros (ou `--skip-checks` se for prática do ambiente).
+3. **Pós-deploy:** Teste rápido de ponta a ponta: criar fluxo → adicionar nó (lista ou botões) → aresta → enviar teste; ou conversa real com escolha de opção e próximo nó/transferir/encerrar.
+
+Riscos permanecem **baixos**; mitigações (lock, idempotência, validações, guards) estão em vigor. Melhorias futuras (auditoria, limite de nós, testes automatizados) não bloqueiam o go-live.

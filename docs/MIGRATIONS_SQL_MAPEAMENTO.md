@@ -1,6 +1,6 @@
 # Mapeamento de migrations e scripts SQL (Sense)
 
-Este documento mapeia todas as migrations dos apps do projeto, suas dependências e onde está o SQL equivalente (arquivo externo, RunSQL inline ou sqlmigrate).
+Este documento mapeia todas as migrations dos apps do projeto, suas dependências e onde está o SQL equivalente (arquivo externo, RunSQL inline ou sqlmigrate). Os scripts em `docs/sql/` são para **auditoria e provisionamento**; o projeto não utiliza cancelamento de migrations. Escopo de fluxos: [Plano de canvas de fluxos](PLANO_CANVAS_FLUXO.md).
 
 ## Ordem de aplicação (dependências entre apps)
 

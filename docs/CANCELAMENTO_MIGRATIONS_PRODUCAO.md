@@ -1,5 +1,9 @@
 # Cancelamento de migrations em produção (Sense)
 
+**Fora de uso.** Este documento não é utilizado no projeto. O escopo de fluxos utiliza apenas o [Plano de canvas de fluxos](PLANO_CANVAS_FLUXO.md). O texto abaixo permanece como referência histórica.
+
+---
+
 Estratégia para reverter ou “cancelar” migrations em produção com segurança. **Cancelar** pode significar (1) desfazer de fato o esquema no banco ou (2) apenas ajustar o estado do Django (metadados) sem rodar SQL.
 
 ---
