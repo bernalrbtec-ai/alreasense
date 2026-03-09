@@ -919,6 +919,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         interactive_reply_buttons_metadata = None  # Preenchido no branch buttonsMessage para exibir botões no frontend
         interactive_list_metadata = None  # Preenchido no branch listMessage para exibir lista no frontend
         list_reply_metadata = None  # Preenchido no branch listResponseMessage (resposta à lista)
+        button_reply_metadata = None  # Preenchido no branch buttonsResponseMessage (resposta a botões)
 
         # ✅ DEBUG: Log do tipo de mensagem recebido
         logger.info(f"🔍 [WEBHOOK UPSERT] MessageType recebido: {message_type}")
@@ -1735,6 +1736,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 content = (content or '').replace('\x00', '')
                 if len(content) > 65536:
                     content = content[:65533].rstrip() + '...'
+                button_reply_metadata = {'id': (selected_id or '').strip(), 'title': (selected_text or content or '').strip()}
                 logger.info("templateButtonReplyMessage/button: exibindo texto do botão: %s", content[:80])
             except Exception as e:
                 logger.warning("Resposta de botão: falha ao extrair payload - %s", e, exc_info=False)
@@ -1804,6 +1806,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     quoted_id = extract_quoted_message(context_info_btn)
                     if quoted_id:
                         quoted_message_id_evolution = quoted_id
+                button_reply_metadata = {'id': (selected_id or '').strip(), 'title': (selected_text or content or '').strip()}
                 logger.info("Resposta de botão (fallback): exibindo texto: %s", content[:80])
             else:
                 logger.warning("Tipo de mensagem não tratado: %s", message_type)
@@ -2490,15 +2493,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     conversation.save(update_fields=['department', 'status'])
                     logger.info(f"✅ [ROUTING] Department forçado após criação: {conversation.department.name}")
                 
-                # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
-                if not from_me:  # Apenas para mensagens recebidas
+                # ✅ Enviar fluxo (lista/botões) ou menu de boas-vindas para conversa nova
+                if not from_me:
                     try:
+                        from apps.chat.services.flow_engine import try_send_flow_start
                         from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        if WelcomeMenuService.should_send_menu(conversation):
-                            logger.info(f"📋 [WELCOME MENU] Enviando menu para nova conversa: {conversation.id}")
+                        if try_send_flow_start(conversation):
+                            logger.info("📋 [FLOW] Fluxo enviado para nova conversa: %s", conversation.id)
+                        elif WelcomeMenuService.should_send_menu(conversation):
+                            logger.info("📋 [WELCOME MENU] Enviando menu para nova conversa: %s", conversation.id)
                             WelcomeMenuService.send_welcome_menu(conversation)
                     except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para nova conversa: {e}", exc_info=True)
+                        logger.error("❌ [FLOW/WELCOME MENU] Erro ao enviar para nova conversa: %s", e, exc_info=True)
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {normalized_phone} (original: {phone}) | Tipo: {conversation_type}")
         logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
@@ -2900,14 +2906,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
                     logger.info(f"   📋 Departamento: {old_department} → {status_str}")
                     
-                    # ✅ CORREÇÃO: Enviar menu APÓS salvar (já verificamos antes de mudar o status)
+                    # ✅ Enviar fluxo ou menu APÓS salvar (já verificamos antes de mudar o status)
                     if should_send_menu_for_closed:
                         try:
+                            from apps.chat.services.flow_engine import try_send_flow_start
                             from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                            logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
-                            WelcomeMenuService.send_welcome_menu(conversation)
+                            if try_send_flow_start(conversation):
+                                logger.info("📋 [FLOW] Fluxo enviado para conversa reaberta: %s", conversation.id)
+                            else:
+                                logger.info("📋 [WELCOME MENU] Enviando menu para conversa reaberta: %s", conversation.id)
+                                WelcomeMenuService.send_welcome_menu(conversation)
                         except Exception as e:
-                            logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para conversa reaberta: {e}", exc_info=True)
+                            logger.error("❌ [FLOW/WELCOME MENU] Erro para conversa reaberta: %s", e, exc_info=True)
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
@@ -3066,6 +3076,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 message_defaults['metadata']['list_reply'] = dict(list_reply_metadata)
             except (TypeError, ValueError) as _e:
                 logger.debug("list_reply_metadata não serializável: %s", _e)
+        if button_reply_metadata:
+            try:
+                message_defaults['metadata']['button_reply'] = dict(button_reply_metadata)
+            except (TypeError, ValueError) as _e:
+                logger.debug("button_reply_metadata não serializável: %s", _e)
         
         # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
         if mentions_list:
@@ -3615,16 +3630,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             except Exception as e:
                 logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
             
-            # ✅ NOVO: Processar resposta do menu de boas-vindas (apenas mensagens recebidas)
+            # ✅ Fluxo: processar resposta a lista/botão quando conversa está em um fluxo (antes do Welcome Menu)
+            flow_processed = False
             try:
-                from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                processed = WelcomeMenuService.process_menu_response(conversation, message)
-                if processed:
-                    logger.info(f"✅ [WELCOME MENU] Resposta do menu processada com sucesso")
-                    # Recarregar conversa para obter status atualizado
+                from apps.chat.services.flow_engine import process_flow_reply
+                flow_processed = process_flow_reply(conversation, message)
+                if flow_processed:
+                    logger.info("✅ [FLOW] Resposta do fluxo processada")
                     conversation.refresh_from_db()
             except Exception as e:
-                logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
+                logger.error("❌ [FLOW] Erro ao processar resposta do fluxo: %s", e, exc_info=True)
+            # ✅ Processar resposta do menu de boas-vindas (apenas se não foi processada pelo fluxo)
+            if not flow_processed:
+                try:
+                    from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                    processed = WelcomeMenuService.process_menu_response(conversation, message)
+                    if processed:
+                        logger.info("✅ [WELCOME MENU] Resposta do menu processada com sucesso")
+                        conversation.refresh_from_db()
+                except Exception as e:
+                    logger.error("❌ [WELCOME MENU] Erro ao processar resposta do menu: %s", e, exc_info=True)
 
             # BIA (Secretária IA): dispara para mensagens incoming no Inbox (inclui conversas reabertas)
             if secretary_responds_instead:

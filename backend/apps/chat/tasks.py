@@ -1422,8 +1422,69 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                                 quoted_message_id,
                             )
                     else:
-                        # Evolution: enviar com botões (sendButtons) para o destinatário ver os botões no WhatsApp
+                        # Evolution: lista (sendList), botões (sendButtons) ou texto
                         meta = message.metadata or {}
+                        interactive_list_evo = meta.get('interactive_list')
+                        if interactive_list_evo and isinstance(interactive_list_evo, dict) and interactive_list_evo.get('body_text') and interactive_list_evo.get('button_text') and (interactive_list_evo.get('sections') or []):
+                            sections_evo = interactive_list_evo.get('sections') or []
+                            last_ok = False
+                            last_data = {}
+                            max_attempts = 3
+                            for attempt in range(max_attempts):
+                                last_ok, last_data = await asyncio.to_thread(
+                                    sender.send_interactive_list,
+                                    recipient_value,
+                                    (interactive_list_evo.get('body_text') or '').strip(),
+                                    (interactive_list_evo.get('button_text') or '').strip(),
+                                    sections_evo,
+                                    interactive_list_evo.get('header_text') or None,
+                                    interactive_list_evo.get('footer_text') or None,
+                                    quoted_message_id,
+                                )
+                                if last_ok:
+                                    break
+                                err_code = last_data.get('error_code')
+                                status_code = last_data.get('status_code')
+                                try:
+                                    status_code_int = int(status_code) if status_code is not None else 0
+                                except (TypeError, ValueError):
+                                    status_code_int = 0
+                                is_transient = err_code in ('RATE_LIMIT', 'EXCEPTION') or status_code_int >= 500
+                                if is_transient and attempt < max_attempts - 1:
+                                    log.warning(
+                                        "[CHAT ENVIO] Evolution send_interactive_list falha transitória (tentativa %s/%s): %s; aguardando 3s",
+                                        attempt + 1, max_attempts, err_code or status_code,
+                                    )
+                                    await asyncio.sleep(3)
+                                else:
+                                    break
+                            if last_ok:
+                                evo_id = _extract_provider_message_id(last_data, provider_kind)
+                                if evo_id:
+                                    close_old_connections()
+                                    await database_sync_to_async(
+                                        Message.objects.filter(id=message.id).update
+                                    )(message_id=evo_id)
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='sent', evolution_status='sent')
+                                from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                                msg_obj = await database_sync_to_async(
+                                    Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                                )(id=message.id)
+                                await database_sync_to_async(broadcast_message_received)(msg_obj)
+                                await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                                log.info("✅ [CHAT ENVIO] Lista interativa enviada (Evolution) conversation_id=%s", str(conversation.id))
+                                return
+                            err = last_data.get('error', '') or str(last_data)
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(status='failed', error_message=err[:500])
+                            log.warning("❌ [CHAT ENVIO] Evolution send_interactive_list falhou: %s", err[:200])
+                            await database_sync_to_async(_broadcast_message_failed)(message.id)
+                            return
                         interactive = meta.get('interactive_reply_buttons')
                         if interactive and interactive.get('body_text') and interactive.get('buttons') and 1 <= len(interactive['buttons']) <= 3:
                             log.info(

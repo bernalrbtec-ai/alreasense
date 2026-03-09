@@ -10,6 +10,8 @@ from datetime import timedelta
 
 # Importar modelos de horários de atendimento
 from .models_business_hours import BusinessHours, AfterHoursMessage, AfterHoursTaskConfig
+# Importar modelos de fluxo (lista/botões por Inbox ou departamento)
+from .models_flow import Flow, FlowNode, FlowEdge, ConversationFlowState
 
 
 class Conversation(models.Model):

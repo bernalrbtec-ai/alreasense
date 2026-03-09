@@ -2,6 +2,7 @@
 Provider Evolution API (Baileys). Encapsula chamadas atuais à Evolution.
 """
 import logging
+import re
 import requests
 from typing import Tuple, Dict, Any, Optional
 
@@ -329,4 +330,120 @@ class EvolutionProvider(WhatsAppSenderBase):
             return False, {'error': r.text[:500], 'status_code': r.status_code, 'response': r.text}
         except Exception as e:
             logger.exception("Evolution send_interactive_reply_buttons error: %s", e)
+            return False, {'error': str(e), 'error_code': 'EXCEPTION'}
+
+    def send_interactive_list(
+        self,
+        phone: str,
+        body_text: str,
+        button_text: str,
+        sections: list,
+        header_text: Optional[str] = None,
+        footer_text: Optional[str] = None,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem interativa tipo lista via Evolution sendList.
+        Evolution API: POST /message/sendList/{instance}, body listMessage (title, description, buttonText, footerText, sections/rows).
+        Mapeia header_text -> listMessage.title; body_text -> description; id -> rowId.
+        """
+        raw_phone = (phone or '').strip()
+        if raw_phone.endswith('@g.us'):
+            return False, {'error': 'lista não suportada em grupos', 'error_code': 'GROUP_NOT_SUPPORTED'}
+        number_digits = self._phone_clean(raw_phone)
+        if not number_digits:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        remote_jid = raw_phone if ('@' in raw_phone) else f'{number_digits}@s.whatsapp.net'
+
+        body_clean = (body_text or '').strip().replace('\x00', '')
+        if not body_clean:
+            return False, {'error': 'Corpo da mensagem (body_text) obrigatório', 'error_code': 'INVALID_BODY'}
+        if len(body_clean) > 1024:
+            return False, {'error': 'body_text deve ter no máximo 1024 caracteres', 'error_code': 'INVALID_BODY'}
+        btn_clean = (button_text or '').strip().replace('\x00', '')[:20]
+        if not btn_clean:
+            return False, {'error': 'Texto do botão (button_text) obrigatório', 'error_code': 'INVALID_BUTTON'}
+        if len((button_text or '').strip()) > 20:
+            return False, {'error': 'button_text deve ter no máximo 20 caracteres', 'error_code': 'INVALID_BUTTON'}
+        if header_text is not None and len((header_text or '').strip()) > 60:
+            return False, {'error': 'header_text deve ter no máximo 60 caracteres', 'error_code': 'INVALID_HEADER'}
+        if footer_text is not None and len((footer_text or '').strip()) > 60:
+            return False, {'error': 'footer_text deve ter no máximo 60 caracteres', 'error_code': 'INVALID_FOOTER'}
+        if not sections or not isinstance(sections, list):
+            return False, {'error': 'Pelo menos uma seção é obrigatória', 'error_code': 'INVALID_SECTIONS'}
+
+        list_sections = []
+        all_row_ids = set()
+        total_rows = 0
+        for sec in sections:
+            if not isinstance(sec, dict):
+                continue
+            sec_title = (sec.get('title') or '').strip()[:24]
+            if len((sec.get('title') or '').strip()) > 24:
+                return False, {'error': 'section.title deve ter no máximo 24 caracteres', 'error_code': 'INVALID_SECTION_TITLE'}
+            rows_raw = sec.get('rows') or []
+            if not isinstance(rows_raw, list):
+                continue
+            rows = []
+            for r in rows_raw:
+                if total_rows >= 10:
+                    return False, {'error': 'Máximo 10 opções (rows) no total', 'error_code': 'INVALID_ROWS'}
+                if not isinstance(r, dict):
+                    continue
+                raw_id = (r.get('id') or '').strip()
+                row_id = (re.sub(r'[^a-zA-Z0-9_-]', '', raw_id))[:100] or str(total_rows)
+                row_title = (r.get('title') or '').strip()
+                if not row_title:
+                    return False, {'error': 'Cada opção deve ter um título (não vazio)', 'error_code': 'INVALID_ROW_TITLE'}
+                if len(row_title) > 24:
+                    return False, {'error': 'row.title deve ter no máximo 24 caracteres', 'error_code': 'INVALID_ROW_TITLE'}
+                row_desc = (r.get('description') or '').strip()[:72]
+                if row_id in all_row_ids:
+                    return False, {'error': 'IDs de opções devem ser únicos em todas as seções', 'error_code': 'INVALID_ROW_IDS'}
+                all_row_ids.add(row_id)
+                row_obj = {'rowId': row_id, 'title': row_title[:24]}
+                if row_desc:
+                    row_obj['description'] = row_desc
+                rows.append(row_obj)
+                total_rows += 1
+            if not rows:
+                return False, {'error': 'Cada seção deve ter pelo menos uma opção (row)', 'error_code': 'INVALID_SECTIONS'}
+            list_sections.append({'title': sec_title or 'Seção', 'rows': rows})
+        if total_rows < 1:
+            return False, {'error': 'Pelo menos uma opção (row) no total', 'error_code': 'INVALID_SECTIONS'}
+
+        title_evolution = (header_text or '').strip()[:60] if header_text else (body_clean[:60] if len(body_clean) > 60 else body_clean)
+        list_message = {
+            'title': title_evolution or 'Mensagem',
+            'description': body_clean[:1024],
+            'buttonText': btn_clean,
+            'footerText': (footer_text or '').strip()[:60],
+            'sections': list_sections,
+        }
+        payload = {
+            'number': remote_jid,
+            'listMessage': list_message,
+        }
+        if quoted_message_id:
+            payload['quoted'] = {
+                'key': {
+                    'id': quoted_message_id,
+                    'remoteJid': remote_jid,
+                },
+            }
+        endpoint = f"{self._base_url}/message/sendList/{self._instance_name}"
+        logger.info(
+            "Enviando lista via Evolution (provider=evolution instance_id=%s) sections=%s rows=%s",
+            str(self.instance.id),
+            len(list_sections),
+            total_rows,
+        )
+        try:
+            r = requests.post(endpoint, json=payload, headers=self._headers(), timeout=15)
+            if r.status_code in (200, 201):
+                return True, (r.json() if r.text else {})
+            return False, {'error': (r.text or '')[:500], 'status_code': r.status_code, 'response': r.text}
+        except Exception as e:
+            logger.exception("Evolution send_interactive_list error: %s", e)
             return False, {'error': str(e), 'error_code': 'EXCEPTION'}

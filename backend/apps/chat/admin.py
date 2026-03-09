@@ -2,8 +2,11 @@
 Admin para Flow Chat.
 """
 from django.contrib import admin
+from django.utils.html import format_html
+
 from apps.chat.models import Conversation, Message, MessageAttachment
 from apps.chat.models_business_hours import BusinessHours, AfterHoursMessage, AfterHoursTaskConfig
+from apps.chat.models_flow import Flow, FlowNode, FlowEdge
 
 
 @admin.register(Conversation)
@@ -210,3 +213,155 @@ class AfterHoursTaskConfigAdmin(admin.ModelAdmin):
         }),
     )
 
+
+# ---------- Fluxos (lista/botões): apenas admin do tenant ----------
+
+def _flow_admin_queryset(request, base_queryset, tenant_field='tenant'):
+    """Restringe ao tenant do usuário; superuser vê todos. tenant_field: 'tenant' (Flow) ou 'flow__tenant' (FlowNode)."""
+    if getattr(request.user, 'is_superuser', False):
+        return base_queryset
+    tenant = getattr(request.user, 'tenant', None)
+    if not tenant:
+        return base_queryset.none()
+    return base_queryset.filter(**{tenant_field: tenant})
+
+
+@admin.register(Flow)
+class FlowAdmin(admin.ModelAdmin):
+    """Admin para Fluxos. Apenas administradores do tenant veem os fluxos do seu tenant."""
+
+    list_display = ['name', 'scope', 'department', 'tenant', 'is_active', 'created_at']
+    list_filter = ['scope', 'is_active', 'tenant']
+    search_fields = ['name', 'tenant__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_editable = ['is_active']
+
+    fieldsets = (
+        (None, {
+            'fields': ('id', 'tenant', 'name', 'scope', 'department', 'is_active')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_queryset(self, request):
+        return _flow_admin_queryset(request, super().get_queryset(request)).select_related('tenant', 'department')
+
+    def has_module_permission(self, request):
+        if getattr(request.user, 'is_superuser', False):
+            return True
+        return getattr(request.user, 'role', None) == 'admin'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'tenant':
+            tenant = getattr(request.user, 'tenant', None)
+            if tenant and not getattr(request.user, 'is_superuser', False):
+                from apps.tenancy.models import Tenant
+                kwargs['queryset'] = Tenant.objects.filter(id=tenant.id)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+class FlowNodeInline(admin.TabularInline):
+    model = FlowNode
+    extra = 0
+    fields = ['name', 'node_type', 'order', 'is_start', 'body_text', 'button_text']
+    show_change_link = True
+
+
+@admin.register(FlowNode)
+class FlowNodeAdmin(admin.ModelAdmin):
+    """Nós do fluxo. Filtrado por tenant (apenas admin do tenant)."""
+
+    list_display = ['name', 'flow', 'node_type', 'order', 'is_start', 'created_at']
+    list_filter = ['node_type', 'is_start', 'flow__tenant']
+    search_fields = ['name', 'flow__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_editable = ['order', 'is_start']
+
+    fieldsets = (
+        (None, {
+            'fields': ('id', 'flow', 'node_type', 'name', 'order', 'is_start')
+        }),
+        ('Conteúdo', {
+            'fields': ('body_text', 'button_text', 'header_text', 'footer_text', 'sections', 'buttons')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related('flow', 'flow__tenant')
+        return _flow_admin_queryset(request, qs, tenant_field='flow__tenant')
+
+    def has_module_permission(self, request):
+        if getattr(request.user, 'is_superuser', False):
+            return True
+        return getattr(request.user, 'role', None) == 'admin'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'flow':
+            from apps.chat.models_flow import Flow
+            base = Flow.objects.all()
+            kwargs['queryset'] = _flow_admin_queryset(request, base).select_related('tenant')
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+
+@admin.register(FlowEdge)
+class FlowEdgeAdmin(admin.ModelAdmin):
+    """Arestas do fluxo. Filtrado por tenant (apenas admin do tenant)."""
+
+    list_display = ['from_node', 'option_id', 'to_node_or_action', 'target_department', 'target_action']
+    list_filter = ['target_action', 'from_node__flow__tenant']
+    search_fields = ['option_id', 'from_node__name', 'to_node__name']
+    readonly_fields = ['id']
+    list_editable = ['target_action']
+
+    def to_node_or_action(self, obj):
+        if obj.to_node_id:
+            return format_html('→ Nó: {}', obj.to_node.name)
+        if obj.target_department_id:
+            return format_html('→ Depto: {}', obj.target_department.name)
+        return '→ Encerrar'
+    to_node_or_action.short_description = 'Destino'
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related('from_node', 'from_node__flow', 'to_node', 'target_department')
+        if getattr(request.user, 'is_superuser', False):
+            return qs
+        tenant = getattr(request.user, 'tenant', None)
+        if not tenant:
+            return qs.none()
+        return qs.filter(from_node__flow__tenant=tenant)
+
+    def has_module_permission(self, request):
+        if getattr(request.user, 'is_superuser', False):
+            return True
+        return getattr(request.user, 'role', None) == 'admin'
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == 'from_node':
+            from apps.chat.models_flow import FlowNode
+            base = FlowNode.objects.all().select_related('flow')
+            if not getattr(request.user, 'is_superuser', False):
+                tenant = getattr(request.user, 'tenant', None)
+                if tenant:
+                    base = base.filter(flow__tenant=tenant)
+            kwargs['queryset'] = base
+        elif db_field.name == 'to_node':
+            from apps.chat.models_flow import FlowNode
+            base = FlowNode.objects.all().select_related('flow')
+            if not getattr(request.user, 'is_superuser', False):
+                tenant = getattr(request.user, 'tenant', None)
+                if tenant:
+                    base = base.filter(flow__tenant=tenant)
+            kwargs['queryset'] = base
+        elif db_field.name == 'target_department':
+            from apps.authn.models import Department
+            tenant = getattr(request.user, 'tenant', None)
+            if tenant and not getattr(request.user, 'is_superuser', False):
+                kwargs['queryset'] = Department.objects.filter(tenant=tenant)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)

@@ -13,6 +13,7 @@ from apps.chat.utils.evolution_list_parsing import (
     parse_list_response,
 )
 from apps.notifications.models import WhatsAppInstance
+from apps.notifications.whatsapp_providers.evolution import EvolutionProvider
 from apps.notifications.whatsapp_providers.meta_cloud import MetaCloudProvider
 
 
@@ -291,15 +292,15 @@ class ConsumerInteractiveListRejectionTests(TestCase):
         self.assertEqual(sent["type"], "error")
         self.assertEqual(sent["error_code"], "INTERACTIVE_BUTTONS_DISABLED")
 
-    @patch("apps.chat.consumers_v2.ChatConsumerV2.get_conversation_is_meta_provider", new_callable=AsyncMock)
+    @patch("apps.chat.consumers_v2.ChatConsumerV2.get_conversation_supports_interactive_list", new_callable=AsyncMock)
     @patch("apps.chat.consumers_v2.ChatConsumerV2.get_conversation_type", new_callable=AsyncMock)
     @patch("apps.chat.consumers_v2.ChatConsumerV2.get_tenant_allow_meta_interactive_buttons", new_callable=AsyncMock)
     @patch("apps.chat.consumers_v2.ChatConsumerV2.check_conversation_access", new_callable=AsyncMock)
-    def test_rejects_list_when_not_meta(self, mock_access, mock_allow, mock_conv_type, mock_is_meta):
+    def test_rejects_list_when_not_meta_nor_evolution(self, mock_access, mock_allow, mock_conv_type, mock_supports_list):
         mock_access.return_value = True
         mock_allow.return_value = True
         mock_conv_type.return_value = "individual"
-        mock_is_meta.return_value = False
+        mock_supports_list.return_value = False
         from apps.chat.consumers_v2 import ChatConsumerV2
 
         scope = {"user": Mock(tenant_id="t1", email="u@t.com")}
@@ -310,7 +311,7 @@ class ConsumerInteractiveListRejectionTests(TestCase):
         consumer.send.assert_called_once()
         sent = json.loads(consumer.send.call_args[0][0])
         self.assertEqual(sent["type"], "error")
-        self.assertEqual(sent["error_code"], "INTERACTIVE_LIST_NOT_META")
+        self.assertEqual(sent["error_code"], "INTERACTIVE_LIST_NOT_SUPPORTED")
 
     @patch("apps.chat.consumers_v2.ChatConsumerV2.get_tenant_allow_meta_interactive_buttons", new_callable=AsyncMock)
     @patch("apps.chat.consumers_v2.ChatConsumerV2.check_conversation_access", new_callable=AsyncMock)
@@ -329,3 +330,57 @@ class ConsumerInteractiveListRejectionTests(TestCase):
         sent = json.loads(consumer.send.call_args[0][0])
         self.assertEqual(sent["type"], "error")
         self.assertEqual(sent["error_code"], "TEMPLATE_BUTTONS_AND_LIST")
+
+
+# --- EvolutionProvider: validações send_interactive_list ---
+
+
+def _make_evolution_instance():
+    """Instância mock Evolution para o provider (não chama API real)."""
+    inst = Mock(spec=WhatsAppInstance)
+    inst.id = 1
+    inst.integration_type = WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
+    inst.instance_name = "evol_instance"
+    return inst
+
+
+class EvolutionSendInteractiveListValidationTests(TestCase):
+    """Validações de EvolutionProvider.send_interactive_list (rejeitar inválidos)."""
+
+    def setUp(self):
+        self.instance = _make_evolution_instance()
+        self.provider = EvolutionProvider(self.instance)
+
+    def test_rejects_empty_body(self):
+        ok, data = self.provider.send_interactive_list(
+            "5511999999999",
+            "",
+            "Ver opções",
+            [{"title": "S1", "rows": [{"id": "r1", "title": "Opção 1"}]}],
+        )
+        self.assertFalse(ok)
+        self.assertIn("error", data)
+        self.assertEqual(data.get("error_code"), "INVALID_BODY")
+
+    def test_rejects_empty_button_text(self):
+        ok, data = self.provider.send_interactive_list(
+            "5511999999999",
+            "Corpo",
+            "",
+            [{"title": "S1", "rows": [{"id": "r1", "title": "Opção 1"}]}],
+        )
+        self.assertFalse(ok)
+        self.assertIn("error", data)
+        self.assertEqual(data.get("error_code"), "INVALID_BUTTON")
+
+    def test_rejects_more_than_10_rows(self):
+        rows = [{"id": f"r{i}", "title": f"Opção {i}"} for i in range(11)]
+        ok, data = self.provider.send_interactive_list(
+            "5511999999999",
+            "Corpo",
+            "Ver opções",
+            [{"title": "S1", "rows": rows}],
+        )
+        self.assertFalse(ok)
+        self.assertIn("error", data)
+        self.assertEqual(data.get("error_code"), "INVALID_ROWS")

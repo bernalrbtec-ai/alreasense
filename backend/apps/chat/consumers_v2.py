@@ -546,13 +546,13 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 }))
                 return
             if interactive_list:
-                is_meta = await self.get_conversation_is_meta_provider(conversation_id)
-                if not is_meta:
-                    logger.info("interactive_list rejeitado: instância não é Meta (conversation_id=%s)", conversation_id)
+                supports_list = await self.get_conversation_supports_interactive_list(conversation_id)
+                if not supports_list:
+                    logger.info("interactive_list rejeitado: instância não é Meta nem Evolution (conversation_id=%s)", conversation_id)
                     await self.send(text_data=json.dumps({
                         'type': 'error',
-                        'message': 'Lista interativa só está disponível para instâncias Meta (WhatsApp Business).',
-                        'error_code': 'INTERACTIVE_LIST_NOT_META',
+                        'message': 'Lista interativa só está disponível para instâncias Meta ou Evolution.',
+                        'error_code': 'INTERACTIVE_LIST_NOT_SUPPORTED',
                     }))
                     return
 
@@ -987,6 +987,30 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
             ).first()
             return inst and getattr(inst, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+        except Exception:
+            return False
+
+    @database_sync_to_async
+    def get_conversation_supports_interactive_list(self, conversation_id):
+        """Retorna True se a conversa usa instância Meta ou Evolution (suportam lista interativa)."""
+        from django.db.models import Q
+        from apps.chat.models import Conversation
+        from apps.notifications.models import WhatsAppInstance
+        try:
+            conv = Conversation.objects.filter(id=conversation_id).values_list('tenant_id', 'instance_name').first()
+            if not conv or not conv[1]:
+                return False
+            tenant_id, instance_name = conv
+            inst = WhatsAppInstance.objects.filter(tenant_id=tenant_id).filter(
+                Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
+            ).first()
+            if not inst:
+                return False
+            it = getattr(inst, 'integration_type', None)
+            return it in (
+                WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION,
+            )
         except Exception:
             return False
 
