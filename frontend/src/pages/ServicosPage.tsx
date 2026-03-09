@@ -770,6 +770,116 @@ export default function ServicosPage() {
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">O que limpar</p>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={redisCleanupProfilePic}
+                          onChange={(e) => setRedisCleanupProfilePic(e.target.checked)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de fotos de perfil (7 dias)</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={redisCleanupWebhook}
+                          onChange={(e) => setRedisCleanupWebhook(e.target.checked)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de webhooks (24h)</span>
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <Button
+                        onClick={handleRedisCleanup}
+                        disabled={isCleaningRedis || !redisOverview.config_ok || (!redisCleanupProfilePic && !redisCleanupWebhook)}
+                      >
+                        {isCleaningRedis ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Executando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Executar limpeza
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Persistência em disco</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Após limpar cache, o Redis pode manter arquivos antigos em disco. Compactar persistência (BGSAVE/BGREWRITEAOF) reescreve os arquivos e pode reduzir o uso de disco. Em Redis gerenciado esses comandos costumam estar desabilitados.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRedisPersistRewrite}
+                      disabled={isPersistRewriting || !redisOverview.config_ok}
+                    >
+                      {isPersistRewriting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Executando...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-4 w-4 mr-2" />
+                          Compactar persistência (disco)
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+
+                {redisStats && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-3">Estatísticas</p>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Últimos 7 dias</p>
+                        <p className="text-lg font-semibold">{Number(redisStats.last_7_days?.total_cleanups) ?? 0} limpezas</p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {(Number(redisStats.last_7_days?.success_rate) || 0).toFixed(1)}% sucesso
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {Number(redisStats.last_7_days?.total_keys_deleted) ?? 0} keys removidas
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Últimos 30 dias</p>
+                        <p className="text-lg font-semibold">{Number(redisStats.last_30_days?.total_cleanups) ?? 0} limpezas</p>
+                        <p className="text-sm text-green-600 dark:text-green-400">
+                          {(Number(redisStats.last_30_days?.success_rate) || 0).toFixed(1)}% sucesso
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {Number(redisStats.last_30_days?.total_keys_deleted) ?? 0} keys removidas
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Média por execução</p>
+                        <p className="text-lg font-semibold">{Number(redisStats.avg_keys_deleted_per_run) || 0} keys</p>
+                        {(Number(redisStats.avg_bytes_freed_per_run) || 0) > 0 && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            ~{((Number(redisStats.avg_bytes_freed_per_run) || 0) / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        )}
+                        {(Number(redisStats.avg_duration_seconds) || 0) > 0 && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            ~{Number(redisStats.avg_duration_seconds).toFixed(1)}s duração
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                   <p className="text-sm text-gray-500 dark:text-gray-400">Projeção de crescimento</p>
                   <p className="mt-1 font-medium">
@@ -899,121 +1009,9 @@ export default function ServicosPage() {
                     </ul>
                   </div>
                 )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">O que limpar</p>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={redisCleanupProfilePic}
-                          onChange={(e) => setRedisCleanupProfilePic(e.target.checked)}
-                          className="rounded border-gray-300 dark:border-gray-600"
-                        />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de fotos de perfil (7 dias)</span>
-                      </label>
-                      <label className="inline-flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={redisCleanupWebhook}
-                          onChange={(e) => setRedisCleanupWebhook(e.target.checked)}
-                          className="rounded border-gray-300 dark:border-gray-600"
-                        />
-                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de webhooks (24h)</span>
-                      </label>
-                    </div>
-                    <div className="mt-3">
-                      <Button
-                        onClick={handleRedisCleanup}
-                        disabled={isCleaningRedis || !redisOverview.config_ok || (!redisCleanupProfilePic && !redisCleanupWebhook)}
-                      >
-                        {isCleaningRedis ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Executando...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Executar limpeza
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Persistência em disco</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                      Após limpar cache, o Redis pode manter arquivos antigos em disco. Compactar persistência (BGSAVE/BGREWRITEAOF) reescreve os arquivos e pode reduzir o uso de disco. Em Redis gerenciado esses comandos costumam estar desabilitados.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRedisPersistRewrite}
-                      disabled={isPersistRewriting || !redisOverview.config_ok}
-                    >
-                      {isPersistRewriting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Executando...
-                        </>
-                      ) : (
-                        <>
-                          <Database className="h-4 w-4 mr-2" />
-                          Compactar persistência (disco)
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
               </div>
             ) : null}
           </Card>
-
-          {redisStats && (
-            <Card className="p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                Estatísticas
-              </h2>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Últimos 7 dias</p>
-                  <p className="text-xl font-semibold">{Number(redisStats.last_7_days?.total_cleanups) ?? 0} limpezas</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    {(Number(redisStats.last_7_days?.success_rate) || 0).toFixed(1)}% sucesso
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {Number(redisStats.last_7_days?.total_keys_deleted) ?? 0} keys removidas
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Últimos 30 dias</p>
-                  <p className="text-xl font-semibold">{Number(redisStats.last_30_days?.total_cleanups) ?? 0} limpezas</p>
-                  <p className="text-sm text-green-600 dark:text-green-400">
-                    {(Number(redisStats.last_30_days?.success_rate) || 0).toFixed(1)}% sucesso
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {Number(redisStats.last_30_days?.total_keys_deleted) ?? 0} keys removidas
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Média por execução</p>
-                  <p className="text-xl font-semibold">{Number(redisStats.avg_keys_deleted_per_run) || 0} keys</p>
-                  {(Number(redisStats.avg_bytes_freed_per_run) || 0) > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      ~{((Number(redisStats.avg_bytes_freed_per_run) || 0) / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  )}
-                  {(Number(redisStats.avg_duration_seconds) || 0) > 0 && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      ~{Number(redisStats.avg_duration_seconds).toFixed(1)}s duração
-                    </p>
-                  )}
-                </div>
-              </div>
-            </Card>
-          )}
 
           <Card className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
