@@ -58,10 +58,10 @@ export function ChatWindow() {
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
 
-  // Callback estável para botões de resposta (reply buttons) na lista de mensagens
+  // Callback para resposta por botão ou lista: envia apenas o texto da escolha, sem assinatura.
   const handleSendReplyButtonClick = useCallback(
     (buttonText: string, replyToMessageId: string) => {
-      sendMessage(buttonText, true, false, replyToMessageId);
+      sendMessage(buttonText, false, false, replyToMessageId);
     },
     [sendMessage]
   );
