@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database } from 'lucide-react'
+import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database, MessageCircle, Server } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -134,7 +134,27 @@ interface RedisCleanupLogEntry {
   error_message: string | null
 }
 
-type TabId = 'proxy' | 'redis'
+interface RabbitMQOverview {
+  config_ok: boolean
+  error?: string | null
+  connection_ok: boolean
+  consumer_running: boolean
+  active_campaign_threads: number
+  queues: { name: string; messages_ready: number; consumers: number }[]
+  warnings: string[]
+}
+
+interface PostgresOverview {
+  config_ok: boolean
+  error?: string | null
+  connection_count: number | null
+  database_size_bytes: number | null
+  database_size_human: string | null
+  top_tables: { name: string; size_bytes: number }[]
+  warnings: string[]
+}
+
+type TabId = 'proxy' | 'redis' | 'rabbitmq' | 'postgres'
 
 export default function ServicosPage() {
   const [activeTab, setActiveTab] = useState<TabId>('proxy')
@@ -159,6 +179,11 @@ export default function ServicosPage() {
   const [redisCleanupProfilePic, setRedisCleanupProfilePic] = useState(true)
   const [redisCleanupWebhook, setRedisCleanupWebhook] = useState(false)
   const [isPersistRewriting, setIsPersistRewriting] = useState(false)
+
+  const [rabbitmqOverview, setRabbitmqOverview] = useState<RabbitMQOverview | null>(null)
+  const [postgresOverview, setPostgresOverview] = useState<PostgresOverview | null>(null)
+  const [isLoadingRabbitmqOverview, setIsLoadingRabbitmqOverview] = useState(false)
+  const [isLoadingPostgresOverview, setIsLoadingPostgresOverview] = useState(false)
 
   const fetchOverview = async () => {
     try {
@@ -261,6 +286,39 @@ export default function ServicosPage() {
     }
   }, [activeTab, redisHistoryPage])
 
+  const fetchRabbitmqOverview = async () => {
+    try {
+      setIsLoadingRabbitmqOverview(true)
+      const res = await api.get<RabbitMQOverview>('/servicos/rabbitmq/overview/')
+      setRabbitmqOverview(res.data)
+    } catch (err: any) {
+      console.error('Erro ao carregar overview RabbitMQ:', err)
+      toast.error(err.response?.data?.error || 'Erro ao carregar overview RabbitMQ')
+      setRabbitmqOverview(null)
+    } finally {
+      setIsLoadingRabbitmqOverview(false)
+    }
+  }
+
+  const fetchPostgresOverview = async () => {
+    try {
+      setIsLoadingPostgresOverview(true)
+      const res = await api.get<PostgresOverview>('/servicos/postgres/overview/')
+      setPostgresOverview(res.data)
+    } catch (err: any) {
+      console.error('Erro ao carregar overview PostgreSQL:', err)
+      toast.error(err.response?.data?.error || 'Erro ao carregar overview PostgreSQL')
+      setPostgresOverview(null)
+    } finally {
+      setIsLoadingPostgresOverview(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'rabbitmq') fetchRabbitmqOverview()
+    if (activeTab === 'postgres') fetchPostgresOverview()
+  }, [activeTab])
+
   const handleRedisCleanup = async () => {
     if (!redisCleanupProfilePic && !redisCleanupWebhook) {
       toast.error('Selecione ao menos um tipo de cache para limpar.')
@@ -353,6 +411,8 @@ export default function ServicosPage() {
   const tabs = [
     { id: 'proxy' as TabId, name: 'Proxy', icon: Settings },
     { id: 'redis' as TabId, name: 'Redis', icon: Database },
+    { id: 'rabbitmq' as TabId, name: 'RabbitMQ', icon: MessageCircle },
+    { id: 'postgres' as TabId, name: 'PostgreSQL', icon: Server },
   ]
 
   return (
@@ -1108,6 +1168,171 @@ export default function ServicosPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
                 Nenhuma limpeza registrada.
               </p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'rabbitmq' && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Overview – RabbitMQ</h2>
+              <Button onClick={fetchRabbitmqOverview} disabled={isLoadingRabbitmqOverview} variant="outline" size="sm">
+                <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingRabbitmqOverview ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+            {isLoadingRabbitmqOverview ? (
+              <div className="flex justify-center py-8">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : rabbitmqOverview ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Configuração</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      {rabbitmqOverview.config_ok ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5 text-amber-500" />
+                      )}
+                      <span className="font-medium">{rabbitmqOverview.config_ok ? 'OK' : (rabbitmqOverview.error || 'Erro')}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Conexão</p>
+                    <p className="mt-1 font-medium">{rabbitmqOverview.connection_ok ? 'Conectado' : '—'}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Consumer campanhas</p>
+                    <p className="mt-1 font-medium">{rabbitmqOverview.consumer_running ? 'Rodando' : 'Parado'}</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{rabbitmqOverview.active_campaign_threads} thread(s)</p>
+                  </div>
+                </div>
+                {rabbitmqOverview.queues.length > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Filas</p>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 dark:border-gray-700">
+                            <th className="py-2 text-left font-medium text-gray-500 dark:text-gray-400">Fila</th>
+                            <th className="py-2 text-left font-medium text-gray-500 dark:text-gray-400">Mensagens</th>
+                            <th className="py-2 text-left font-medium text-gray-500 dark:text-gray-400">Consumidores</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rabbitmqOverview.queues.map((q) => (
+                            <tr key={q.name} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="py-2 font-mono text-xs">{q.name}</td>
+                              <td className="py-2">{q.messages_ready}</td>
+                              <td className="py-2">{q.consumers}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {rabbitmqOverview.warnings.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
+                    <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
+                      {rabbitmqOverview.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Carregue os dados com Atualizar.</p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'postgres' && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Overview – PostgreSQL</h2>
+              <Button onClick={fetchPostgresOverview} disabled={isLoadingPostgresOverview} variant="outline" size="sm">
+                <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingPostgresOverview ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+            {isLoadingPostgresOverview ? (
+              <div className="flex justify-center py-8">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : postgresOverview ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Configuração</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      {postgresOverview.config_ok ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5 text-amber-500" />
+                      )}
+                      <span className="font-medium">{postgresOverview.config_ok ? 'OK' : (postgresOverview.error || 'Erro')}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Conexões ativas</p>
+                    <p className="mt-1 font-medium">{postgresOverview.connection_count != null ? postgresOverview.connection_count : '—'}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Tamanho do banco</p>
+                    <p className="mt-1 font-medium">{postgresOverview.database_size_human ?? '—'}</p>
+                  </div>
+                </div>
+                {postgresOverview.top_tables.length > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Maiores tabelas</p>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-200 dark:border-gray-700">
+                            <th className="py-2 text-left font-medium text-gray-500 dark:text-gray-400">Tabela</th>
+                            <th className="py-2 text-right font-medium text-gray-500 dark:text-gray-400">Tamanho</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {postgresOverview.top_tables.map((t) => (
+                            <tr key={t.name} className="border-b border-gray-100 dark:border-gray-800">
+                              <td className="py-2 font-mono text-xs">{t.name}</td>
+                              <td className="py-2 text-right">
+                                {t.size_bytes >= 1024 ** 3
+                                  ? `${(t.size_bytes / 1024 ** 3).toFixed(2)} GB`
+                                  : t.size_bytes >= 1024 ** 2
+                                    ? `${(t.size_bytes / 1024 ** 2).toFixed(2)} MB`
+                                    : `${(t.size_bytes / 1024).toFixed(1)} KB`}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+                {postgresOverview.warnings.length > 0 && (
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
+                    <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
+                      {postgresOverview.warnings.map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Carregue os dados com Atualizar.</p>
             )}
           </Card>
         </div>

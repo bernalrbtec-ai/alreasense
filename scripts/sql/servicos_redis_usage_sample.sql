@@ -1,5 +1,5 @@
 -- Tabela de amostras de uso Redis para gráfico (memória e AOF)
--- Rodar este SQL manualmente OU usar: python manage.py migrate servicos
+-- Rodar manualmente no PostgreSQL (ex.: psql -U postgres -d seu_banco -f scripts/sql/servicos_redis_usage_sample.sql).
 -- Após rodar: o app servicos grava amostras ao carregar o overview (a cada ~10 min).
 --
 -- Exemplo: psql -U postgres -d seu_banco -f scripts/sql/servicos_redis_usage_sample.sql

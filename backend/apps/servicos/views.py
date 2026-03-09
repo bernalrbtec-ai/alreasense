@@ -124,12 +124,13 @@ def _overview_redis_info() -> dict[str, Any]:
                 except (ValueError, TypeError):
                     pass
             else:
+                # Formato Redis: "keys=12995,expires=0" -> part = "keys=12995", parts = ["keys", "12995"]
                 part = (v or "").split(",", 1)[0]
                 if "=" in part:
                     parts = part.split("=")
-                    if len(parts) >= 3 and parts[1] == "keys":
+                    if len(parts) >= 2 and parts[0] == "keys":
                         try:
-                            keys_total += int(parts[2])
+                            keys_total += int(parts[1])
                         except (ValueError, TypeError):
                             pass
         client.close()
@@ -198,7 +199,10 @@ def redis_overview(request):
                     keys_webhook=data.get("keys_webhook"),
                 )
             cutoff = now - timezone.timedelta(days=REDIS_USAGE_SAMPLE_RETENTION_DAYS)
-            RedisUsageSample.objects.filter(sampled_at__lt=cutoff).delete()
+            try:
+                RedisUsageSample.objects.filter(sampled_at__lt=cutoff).delete()
+            except Exception as cleanup_err:
+                logger.warning("Redis usage sample cleanup (retention): %s", cleanup_err)
             samples = list(
                 RedisUsageSample.objects.filter(sampled_at__gte=cutoff).order_by("sampled_at")[:1008]
             )
@@ -558,3 +562,179 @@ def redis_persist_rewrite(request):
     cache.set(rate_key, 1, timeout=REDIS_PERSIST_REWRITE_RATE_LIMIT_SECONDS)
     data = _redis_persist_rewrite_result()
     return Response(data)
+
+
+# Filas RabbitMQ conhecidas (nome fixo) para overview
+RABBITMQ_KNOWN_QUEUES = [
+    "campaigns.dlq",
+    "chat_process_incoming_media",
+    "chat_process_uploaded_file",
+    "billing.overdue",
+    "billing.upcoming",
+    "billing.notification",
+]
+
+
+def _overview_rabbitmq_info() -> dict[str, Any]:
+    """Overview RabbitMQ: conexão, consumer, filas conhecidas (message_count, consumer_count)."""
+    rabbitmq_url = (getattr(settings, "RABBITMQ_URL", None) or "").strip()
+    if not rabbitmq_url:
+        return {
+            "config_ok": False,
+            "error": "RABBITMQ_URL não configurada",
+            "connection_ok": False,
+            "consumer_running": False,
+            "active_campaign_threads": 0,
+            "queues": [],
+            "warnings": [],
+        }
+    try:
+        import pika
+        params = pika.URLParameters(rabbitmq_url)
+        params.socket_timeout = 5
+        params.blocked_connection_timeout = 5
+        conn = pika.BlockingConnection(params)
+        channel = conn.channel()
+    except Exception as e:
+        logger.warning("RabbitMQ overview connection: %s", e)
+        return {
+            "config_ok": False,
+            "error": str(e)[:200],
+            "connection_ok": False,
+            "consumer_running": False,
+            "active_campaign_threads": 0,
+            "queues": [],
+            "warnings": [],
+        }
+    consumer_running = False
+    active_threads = 0
+    try:
+        from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
+        c = get_rabbitmq_consumer()
+        if c:
+            consumer_running = getattr(c, "running", False)
+            active_threads = len(getattr(c, "consumer_threads", {}) or {})
+    except Exception:
+        pass
+    queues = []
+    warnings = []
+    for qname in RABBITMQ_KNOWN_QUEUES:
+        try:
+            result = channel.queue_declare(queue=qname, passive=True)
+            frame = getattr(result, "method", result) if result else None
+            if frame is None:
+                warnings.append(f"Fila {qname}: sem retorno")
+                continue
+            queues.append({
+                "name": qname,
+                "messages_ready": getattr(frame, "message_count", 0),
+                "consumers": getattr(frame, "consumer_count", 0),
+            })
+        except Exception as e:
+            warnings.append(f"Fila {qname}: {str(e)[:80]}")
+    try:
+        conn.close()
+    except Exception:
+        pass
+    return {
+        "config_ok": True,
+        "error": None,
+        "connection_ok": True,
+        "consumer_running": consumer_running,
+        "active_campaign_threads": active_threads,
+        "queues": queues,
+        "warnings": warnings,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def rabbitmq_overview(request):
+    """Overview RabbitMQ: status, consumer, filas conhecidas."""
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return Response(_overview_rabbitmq_info())
+
+
+def _overview_postgres_info() -> dict[str, Any]:
+    """Overview PostgreSQL: conexões ativas, tamanho do banco, top tabelas."""
+    from django.db import connection
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except Exception as e:
+        return {
+            "config_ok": False,
+            "error": str(e)[:200],
+            "connection_count": None,
+            "database_size_bytes": None,
+            "database_size_human": None,
+            "top_tables": [],
+            "warnings": [],
+        }
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()"
+            )
+            connection_count = cursor.fetchone()[0]
+    except Exception as e:
+        connection_count = None
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_database_size(current_database())")
+            database_size_bytes = cursor.fetchone()[0]
+    except Exception as e:
+        database_size_bytes = None
+    if database_size_bytes is not None:
+        if database_size_bytes >= 1024 ** 3:
+            database_size_human = f"{database_size_bytes / 1024 ** 3:.2f} GB"
+        elif database_size_bytes >= 1024 ** 2:
+            database_size_human = f"{database_size_bytes / 1024 ** 2:.2f} MB"
+        elif database_size_bytes >= 1024:
+            database_size_human = f"{database_size_bytes / 1024:.2f} KB"
+        else:
+            database_size_human = f"{database_size_bytes} B"
+    else:
+        database_size_human = None
+    top_tables = []
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT n.nspname || '.' || c.relname AS name,
+                       pg_total_relation_size(c.oid) AS size_bytes
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.relkind = 'r' AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                ORDER BY pg_total_relation_size(c.oid) DESC
+                LIMIT 10
+            """)
+            for row in cursor.fetchall():
+                top_tables.append({"name": row[0], "size_bytes": row[1]})
+    except Exception as e:
+        pass
+    return {
+        "config_ok": True,
+        "error": None,
+        "connection_count": connection_count,
+        "database_size_bytes": database_size_bytes,
+        "database_size_human": database_size_human,
+        "top_tables": top_tables,
+        "warnings": [],
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def postgres_overview(request):
+    """Overview PostgreSQL: conexões, tamanho do banco, maiores tabelas."""
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return Response(_overview_postgres_info())

@@ -1,10 +1,14 @@
 """
 Testes de fumaça para a API Redis em Serviços (overview, permissões).
 """
+from unittest.mock import MagicMock, patch
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from apps.servicos.views import _overview_redis_info
 from apps.tenancy.models import Tenant
 
 User = get_user_model()
@@ -58,3 +62,50 @@ class RedisServicosAPITestCase(TestCase):
     def test_redis_overview_returns_401_when_unauthenticated(self):
         response = self.client.get("/api/servicos/redis/overview/")
         self.assertEqual(response.status_code, 401)
+
+    def test_rabbitmq_overview_returns_200_for_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.get("/api/servicos/rabbitmq/overview/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("config_ok", data)
+        self.assertIn("connection_ok", data)
+        self.assertIn("queues", data)
+        self.assertIn("warnings", data)
+
+    def test_rabbitmq_overview_returns_403_for_non_superuser(self):
+        self.client.force_authenticate(user=self.normal_user)
+        response = self.client.get("/api/servicos/rabbitmq/overview/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_postgres_overview_returns_200_for_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.get("/api/servicos/postgres/overview/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("config_ok", data)
+        self.assertIn("connection_count", data)
+        self.assertIn("database_size_bytes", data)
+        self.assertIn("top_tables", data)
+
+    def test_postgres_overview_returns_403_for_non_superuser(self):
+        self.client.force_authenticate(user=self.normal_user)
+        response = self.client.get("/api/servicos/postgres/overview/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_redis_overview_keyspace_parses_string_format(self):
+        """Garante que keys_total é extraído do formato Redis 'keys=N,expires=N'."""
+        mock_client = MagicMock()
+        mock_client.info.side_effect = lambda section: {
+            "memory": {"used_memory": 1_000_000, "used_memory_human": "1M"},
+            "persistence": {"aof_enabled": False, "rdb_last_save_time": 0},
+            "keyspace": {"db0": "keys=42,expires=0"},
+        }.get(section, {})
+
+        with patch("apps.servicos.views.redis.Redis.from_url", return_value=mock_client), patch(
+            "apps.servicos.views._get_client", return_value=None
+        ):
+            with patch.object(settings, "REDIS_URL", "redis://localhost/0"):
+                data = _overview_redis_info()
+        self.assertTrue(data.get("config_ok"))
+        self.assertEqual(data.get("keys_total"), 42)

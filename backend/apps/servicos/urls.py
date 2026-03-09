@@ -12,4 +12,6 @@ urlpatterns = [
     path("redis/metrics/", views.redis_metrics),
     path("redis/cleanup/", views.redis_cleanup),
     path("redis/persist-rewrite/", views.redis_persist_rewrite),
+    path("rabbitmq/overview/", views.rabbitmq_overview),
+    path("postgres/overview/", views.postgres_overview),
 ]

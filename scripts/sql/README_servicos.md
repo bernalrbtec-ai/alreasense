@@ -9,3 +9,5 @@ Arquivos existentes para servicos:
 - `servicos_redis_cleanup_log_add_duration.sql` – coluna duration_seconds
 - `servicos_redis_usage_sample.sql` – amostras de uso Redis (gráfico)
 - `servicos_redis_usage_sample_add_breakdown.sql` – colunas keys_profile_pic, keys_webhook
+- `servicos_rabbitmqoverview_sample.sql` – amostras de overview RabbitMQ (filas) para gráfico
+- `servicos_postgresoverview_sample.sql` – amostras de overview PostgreSQL (conexões e tamanho) para gráfico
