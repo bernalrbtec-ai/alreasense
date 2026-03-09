@@ -42,7 +42,9 @@ Estrutura de pastas (monorepo)
 Banco + pgvector
 Extensão e índice
 
-No Railway (ou migration inicial):
+Convenção: alterações de schema (novas colunas, tabelas, índices) devem ser feitas via **scripts SQL** (ex.: `apps/<app>/migrations/NNN_descricao.sql`), **não** via migrations Django (.py). Rodar os scripts manualmente ou no pipeline de deploy.
+
+No Railway (ou script SQL inicial):
 
 CREATE EXTENSION IF NOT EXISTS vector;
 -- 768 dims (ajuste ao seu encoder)

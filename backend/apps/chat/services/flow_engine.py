@@ -172,8 +172,15 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
 def process_flow_reply(conversation: Conversation, message: Message) -> bool:
     """
     Processa resposta a lista/botão quando a conversa está em um fluxo.
+    Transições: próximo nó (to_node), transferir para departamento, ou encerrar.
     Retorna True se processou (e não deve processar Welcome Menu); False caso contrário.
+    Usa lock na mensagem para evitar processamento duplicado (race entre workers).
     """
+    if not conversation or not message:
+        return False
+    if not getattr(message, "pk", None):
+        return False
+
     meta = message.metadata or {}
     list_reply = meta.get("list_reply")
     button_reply = meta.get("button_reply")
@@ -187,92 +194,86 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
     if not option_id:
         return False
 
-    # Idempotência: não processar duas vezes
-    if meta.get("flow_reply_processed"):
-        return True
-
     try:
-        state = ConversationFlowState.objects.select_related("flow", "current_node").filter(
-            conversation_id=conversation.id
-        ).first()
-    except Exception:
-        return False
-
-    if not state:
-        return False
-
-    # Matching com option_id normalizado (Evolution devolve rowId sanitizado)
-    option_id_norm = _normalize_option_id(option_id)
-    edges = list(
-        FlowEdge.objects.select_related("to_node", "to_node__flow", "target_department").filter(
-            from_node_id=state.current_node_id
-        )
-    )
-    edge = None
-    for e in edges:
-        if _normalize_option_id(e.option_id) == option_id_norm:
-            edge = e
-            break
-    if not edge:
-        logger.info("[FLOW] Opção inválida ou sem aresta: conversation=%s option_id=%s", conversation.id, option_id)
-        return False
-
-    if edge.to_node_id:
-        if not edge.to_node:
-            logger.warning("[FLOW] Aresta aponta para nó inexistente (removido?): edge=%s to_node_id=%s", edge.id, edge.to_node_id)
-            return False
-        sent = send_flow_node(conversation, edge.to_node)
-        if sent:
-            state.current_node_id = edge.to_node_id
-            state.save(update_fields=["current_node_id"])
+        with transaction.atomic():
+            # Lock da mensagem para evitar dois workers processarem a mesma resposta
             try:
-                m_meta = dict(message.metadata or {})
-                m_meta["flow_reply_processed"] = True
-                message.metadata = m_meta
-                message.save(update_fields=["metadata"])
-            except Exception as e:
-                logger.warning("[FLOW] Falha ao marcar flow_reply_processed: %s", e)
-            logger.info("[FLOW] Avançou para nó %s conversation=%s", edge.to_node.name, conversation.id)
-            return True
-        return False
-
-    if edge.target_department_id:
-        # Transferir para departamento
-        from apps.chat.services.welcome_menu_service import WelcomeMenuService
-
-        department = Department.objects.filter(id=edge.target_department_id).first()
-        if department:
-            success = WelcomeMenuService._transfer_to_department(conversation, department)
-            state.delete()
-            try:
-                m_meta = dict(message.metadata or {})
-                m_meta["flow_reply_processed"] = True
-                message.metadata = m_meta
-                message.save(update_fields=["metadata"])
+                msg_locked = Message.objects.select_for_update().filter(pk=message.pk).first()
             except Exception:
-                pass
-            logger.info("[FLOW] Transferido para %s conversation=%s", department.name, conversation.id)
-            return success
-        state.delete()
+                msg_locked = None
+            if not msg_locked:
+                return False
+            meta = dict(msg_locked.metadata or {})
+            if meta.get("flow_reply_processed"):
+                return True
+
+            state = ConversationFlowState.objects.select_related("flow", "current_node").filter(
+                conversation_id=conversation.id
+            ).first()
+            if not state:
+                return False
+
+            option_id_norm = _normalize_option_id(option_id)
+            edges = list(
+                FlowEdge.objects.select_related("to_node", "to_node__flow", "target_department").filter(
+                    from_node_id=state.current_node_id
+                )
+            )
+            edge = None
+            for e in edges:
+                if _normalize_option_id(e.option_id) == option_id_norm:
+                    edge = e
+                    break
+            if not edge:
+                logger.info("[FLOW] Opção inválida ou sem aresta: conversation=%s option_id=%s", conversation.id, option_id)
+                return False
+
+            # Marcar como processada antes de enviar para evitar reprocessamento em caso de falha após envio
+            meta["flow_reply_processed"] = True
+            msg_locked.metadata = meta
+            msg_locked.save(update_fields=["metadata"])
+
+            if edge.to_node_id:
+                if not edge.to_node:
+                    logger.warning("[FLOW] Aresta aponta para nó inexistente (removido?): edge=%s to_node_id=%s", edge.id, edge.to_node_id)
+                    return False
+                sent = send_flow_node(conversation, edge.to_node)
+                if sent:
+                    state.current_node_id = edge.to_node_id
+                    state.save(update_fields=["current_node_id"])
+                    logger.info("[FLOW] Avançou para nó %s conversation=%s", edge.to_node.name, conversation.id)
+                    return True
+                return False
+
+            if edge.target_department_id:
+                from apps.chat.services.welcome_menu_service import WelcomeMenuService
+
+                department = Department.objects.filter(id=edge.target_department_id).first()
+                if department:
+                    success = WelcomeMenuService._transfer_to_department(conversation, department)
+                    state.delete()
+                    logger.info("[FLOW] Transferido para %s conversation=%s", department.name, conversation.id)
+                    return success
+                logger.warning(
+                    "[FLOW] Aresta aponta para departamento inexistente (removido?): edge=%s target_department_id=%s",
+                    edge.id,
+                    edge.target_department_id,
+                )
+                state.delete()
+                return False
+
+            if edge.target_action == FlowEdge.TARGET_ACTION_END:
+                from apps.chat.services.welcome_menu_service import WelcomeMenuService
+
+                success = WelcomeMenuService._close_conversation(conversation)
+                state.delete()
+                logger.info("[FLOW] Conversa encerrada conversation=%s", conversation.id)
+                return success
+
+            return False
+    except Exception as e:
+        logger.exception("[FLOW] Erro ao processar resposta do fluxo: %s", e)
         return False
-
-    if edge.target_action == FlowEdge.TARGET_ACTION_END:
-        # Encerrar conversa
-        from apps.chat.services.welcome_menu_service import WelcomeMenuService
-
-        success = WelcomeMenuService._close_conversation(conversation)
-        state.delete()
-        try:
-            m_meta = dict(message.metadata or {})
-            m_meta["flow_reply_processed"] = True
-            message.metadata = m_meta
-            message.save(update_fields=["metadata"])
-        except Exception:
-            pass
-        logger.info("[FLOW] Conversa encerrada conversation=%s", conversation.id)
-        return success
-
-    return False
 
 
 def try_send_flow_start(conversation: Conversation) -> bool:
