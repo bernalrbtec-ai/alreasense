@@ -44,11 +44,13 @@ class RedisCleanupLog(models.Model):
 
 
 class RedisUsageSample(models.Model):
-    """Amostra de uso Redis (memória e AOF) para gráfico ao longo do tempo."""
+    """Amostra de uso Redis (memória, AOF e breakdown por categoria) para gráfico ao longo do tempo."""
 
     sampled_at = models.DateTimeField(auto_now_add=True, db_index=True)
     used_memory = models.BigIntegerField()  # bytes
     aof_current_size = models.BigIntegerField(null=True, blank=True)  # bytes, None se AOF desativado
+    keys_profile_pic = models.IntegerField(null=True, blank=True)  # contagem cache fotos de perfil
+    keys_webhook = models.IntegerField(null=True, blank=True)  # contagem cache webhooks
 
     class Meta:
         db_table = "servicos_redisusagesample"

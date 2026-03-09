@@ -194,6 +194,8 @@ def redis_overview(request):
                 RedisUsageSample.objects.create(
                     used_memory=data["used_memory"],
                     aof_current_size=data.get("persistence") and data["persistence"].get("aof_current_size"),
+                    keys_profile_pic=data.get("keys_profile_pic"),
+                    keys_webhook=data.get("keys_webhook"),
                 )
             cutoff = now - timezone.timedelta(days=REDIS_USAGE_SAMPLE_RETENTION_DAYS)
             RedisUsageSample.objects.filter(sampled_at__lt=cutoff).delete()
@@ -201,7 +203,13 @@ def redis_overview(request):
                 RedisUsageSample.objects.filter(sampled_at__gte=cutoff).order_by("sampled_at")[:1008]
             )
             data["usage_history"] = [
-                {"sampled_at": s.sampled_at.isoformat(), "used_memory": s.used_memory, "aof_current_size": s.aof_current_size}
+                {
+                    "sampled_at": s.sampled_at.isoformat(),
+                    "used_memory": s.used_memory,
+                    "aof_current_size": s.aof_current_size,
+                    "keys_profile_pic": s.keys_profile_pic,
+                    "keys_webhook": s.keys_webhook,
+                }
                 for s in samples
             ]
         except Exception as e:

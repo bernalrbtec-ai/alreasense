@@ -3,6 +3,8 @@ import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, C
 import {
   AreaChart,
   Area,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -87,7 +89,13 @@ interface RedisOverview {
     aof_current_size: number | null
     rdb_last_save_time: number | null
   } | null
-  usage_history?: { sampled_at: string; used_memory: number; aof_current_size: number | null }[]
+  usage_history?: {
+    sampled_at: string
+    used_memory: number
+    aof_current_size: number | null
+    keys_profile_pic?: number | null
+    keys_webhook?: number | null
+  }[]
 }
 
 interface RedisStats {
@@ -837,6 +845,47 @@ export default function ServicosPage() {
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
+                    {(redisOverview.usage_history!.some((s) => s.keys_profile_pic != null || s.keys_webhook != null)) && (
+                      <>
+                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mt-4 mb-2">Keys por categoria</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                          Contagem de keys (fotos de perfil e webhooks) ao longo do tempo. Ajuda a identificar qual categoria cresceu em picos de uso.
+                        </p>
+                        <div className="h-56">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart
+                              data={redisOverview.usage_history!.map((s) => ({
+                                ...s,
+                                time: new Date(s.sampled_at).toLocaleString('pt-BR', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                }),
+                                fotos: s.keys_profile_pic ?? null,
+                                webhook: s.keys_webhook ?? null,
+                              }))}
+                              margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                              <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                              <YAxis tick={{ fontSize: 10 }} label={{ value: 'Keys', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }} />
+                              <Tooltip
+                                formatter={(value: number) => [value != null ? value.toLocaleString('pt-BR') : '—', '']}
+                                labelFormatter={(label) => label}
+                                contentStyle={{ borderRadius: 8 }}
+                              />
+                              {redisOverview.usage_history!.some((s) => s.keys_profile_pic != null) && (
+                                <Line type="monotone" dataKey="fotos" name="Fotos de perfil" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                              )}
+                              {redisOverview.usage_history!.some((s) => s.keys_webhook != null) && (
+                                <Line type="monotone" dataKey="webhook" name="Webhooks" stroke="#06b6d4" strokeWidth={2} dot={{ r: 2 }} connectNulls />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -851,72 +900,72 @@ export default function ServicosPage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 pt-4">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">O que limpar</p>
-                  <div className="flex flex-wrap gap-4">
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={redisCleanupProfilePic}
-                        onChange={(e) => setRedisCleanupProfilePic(e.target.checked)}
-                        className="rounded border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">Cache de fotos de perfil (7 dias)</span>
-                    </label>
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={redisCleanupWebhook}
-                        onChange={(e) => setRedisCleanupWebhook(e.target.checked)}
-                        className="rounded border-gray-300 dark:border-gray-600"
-                      />
-                      <span className="text-sm text-gray-700 dark:text-gray-300">Cache de webhooks (24h)</span>
-                    </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">O que limpar</p>
+                    <div className="flex flex-wrap gap-4">
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={redisCleanupProfilePic}
+                          onChange={(e) => setRedisCleanupProfilePic(e.target.checked)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de fotos de perfil (7 dias)</span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={redisCleanupWebhook}
+                          onChange={(e) => setRedisCleanupWebhook(e.target.checked)}
+                          className="rounded border-gray-300 dark:border-gray-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">Cache de webhooks (24h)</span>
+                      </label>
+                    </div>
+                    <div className="mt-3">
+                      <Button
+                        onClick={handleRedisCleanup}
+                        disabled={isCleaningRedis || !redisOverview.config_ok || (!redisCleanupProfilePic && !redisCleanupWebhook)}
+                      >
+                        {isCleaningRedis ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Executando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Executar limpeza
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-
-                <div className="pt-2">
-                  <Button
-                    onClick={handleRedisCleanup}
-                    disabled={isCleaningRedis || !redisOverview.config_ok || (!redisCleanupProfilePic && !redisCleanupWebhook)}
-                  >
-                    {isCleaningRedis ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Executando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Executar limpeza
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Persistência em disco</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                    Após limpar cache, o Redis pode manter arquivos antigos em disco. Compactar persistência (BGSAVE/BGREWRITEAOF) reescreve os arquivos e pode reduzir o uso de disco. Em Redis gerenciado esses comandos costumam estar desabilitados.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRedisPersistRewrite}
-                    disabled={isPersistRewriting || !redisOverview.config_ok}
-                  >
-                    {isPersistRewriting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Executando...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="h-4 w-4 mr-2" />
-                        Compactar persistência (disco)
-                      </>
-                    )}
-                  </Button>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Persistência em disco</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Após limpar cache, o Redis pode manter arquivos antigos em disco. Compactar persistência (BGSAVE/BGREWRITEAOF) reescreve os arquivos e pode reduzir o uso de disco. Em Redis gerenciado esses comandos costumam estar desabilitados.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRedisPersistRewrite}
+                      disabled={isPersistRewriting || !redisOverview.config_ok}
+                    >
+                      {isPersistRewriting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Executando...
+                        </>
+                      ) : (
+                        <>
+                          <Database className="h-4 w-4 mr-2" />
+                          Compactar persistência (disco)
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : null}
