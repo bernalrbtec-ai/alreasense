@@ -284,6 +284,7 @@ const DEFAULT_AI_MODELS: string[] = []
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
+  const isTenantAdmin = Boolean(user?.is_admin || user?.role === 'admin' || user?.is_superuser)
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'flow' | 'ai'>('instances')
   const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories' | 'auditoria-ia'>('config')
@@ -617,11 +618,11 @@ export default function ConfigurationsPage() {
     if (activeTab === 'business-hours') {
       fetchBusinessHoursData()
     }
-    if (activeTab === 'welcome-menu' && user?.is_admin) {
+    if (activeTab === 'welcome-menu' && isTenantAdmin) {
       // ✅ CORREÇÃO: Sempre recarregar quando entrar na aba (garantir dados atualizados)
       fetchWelcomeMenuConfig()
     }
-    if (activeTab === 'ai' && user?.is_admin) {
+    if (activeTab === 'ai' && isTenantAdmin) {
       fetchAiSettings()
       fetchSecretaryProfile()
       setGatewayAuditOffset(0)
@@ -633,7 +634,7 @@ export default function ConfigurationsPage() {
     if (activeTab === 'smtp') {
       fetchSmtpConfigs()
     }
-  }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
+  }, [activeTab, selectedBusinessHoursDept, isTenantAdmin])
 
   // Fechar modal de templates Meta com Escape (só se o modal de criar/editar não estiver aberto)
   useEffect(() => {
@@ -1871,7 +1872,7 @@ export default function ConfigurationsPage() {
             <Clock className="h-4 w-4 inline mr-2" />
             Horários de Atendimento
           </button>
-          {user?.is_admin && (
+          {isTenantAdmin && (
             <button
               onClick={() => setActiveTab('ai')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -1884,7 +1885,7 @@ export default function ConfigurationsPage() {
               IA / Assistentes
             </button>
           )}
-          {user?.is_admin && (
+          {isTenantAdmin && (
             <button
               onClick={() => setActiveTab('welcome-menu')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
@@ -1897,7 +1898,7 @@ export default function ConfigurationsPage() {
               Menu de Boas-Vindas
             </button>
           )}
-          {user?.is_admin && (
+          {isTenantAdmin && (
             <button
               onClick={() => navigate('/configurations/flows')}
               className="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500"
@@ -2457,7 +2458,7 @@ export default function ConfigurationsPage() {
         <NotificationSettings />
       )}
 
-      {activeTab === 'ai' && user?.is_admin && (
+      {activeTab === 'ai' && isTenantAdmin && (
         <div className="space-y-6">
           <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
             <button
@@ -4087,7 +4088,7 @@ export default function ConfigurationsPage() {
       )}
 
       {/* Tab Content - Menu de Boas-Vindas (Apenas Admin) */}
-      {activeTab === 'welcome-menu' && user?.is_admin && (
+      {activeTab === 'welcome-menu' && isTenantAdmin && (
         <div className="space-y-6">
           {!welcomeMenuConfig ? (
             <div className="flex items-center justify-center h-64">
