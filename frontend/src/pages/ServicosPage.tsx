@@ -135,6 +135,7 @@ export default function ServicosPage() {
   const [redisHistoryPage, setRedisHistoryPage] = useState(1)
   const [redisCleanupProfilePic, setRedisCleanupProfilePic] = useState(true)
   const [redisCleanupWebhook, setRedisCleanupWebhook] = useState(false)
+  const [isPersistRewriting, setIsPersistRewriting] = useState(false)
 
   const fetchOverview = async () => {
     try {
@@ -264,6 +265,32 @@ export default function ServicosPage() {
       await fetchRedisOverview()
     } finally {
       setIsCleaningRedis(false)
+    }
+  }
+
+  const handleRedisPersistRewrite = async () => {
+    try {
+      setIsPersistRewriting(true)
+      const { data } = await api.post<{ bgsave: string; bgrewriteaof: string; message: string }>(
+        '/servicos/redis/persist-rewrite/'
+      )
+      const ok = data.bgsave === 'ok' || data.bgrewriteaof === 'ok'
+      if (ok) {
+        toast.success(data.message || 'Compactação de persistência iniciada.')
+      } else if (data.bgsave === 'disabled' && data.bgrewriteaof === 'disabled') {
+        toast.info(data.message || 'Comandos de disco desabilitados (comum em Redis gerenciado).')
+      } else {
+        toast.warning(data.message || 'Resultado parcial.')
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Erro ao solicitar compactação'
+      if (err.response?.status === 429) {
+        toast.error('Aguarde 1 minuto antes de tentar novamente.')
+      } else {
+        toast.error(msg)
+      }
+    } finally {
+      setIsPersistRewriting(false)
     }
   }
 
@@ -765,6 +792,31 @@ export default function ServicosPage() {
                       <>
                         <RefreshCw className="h-4 w-4 mr-2" />
                         Executar limpeza
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">Persistência em disco</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    Após limpar cache, o Redis pode manter arquivos antigos em disco. Compactar persistência (BGSAVE/BGREWRITEAOF) reescreve os arquivos e pode reduzir o uso de disco. Em Redis gerenciado esses comandos costumam estar desabilitados.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRedisPersistRewrite}
+                    disabled={isPersistRewriting || !redisOverview.config_ok}
+                  >
+                    {isPersistRewriting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Executando...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="h-4 w-4 mr-2" />
+                        Compactar persistência (disco)
                       </>
                     )}
                   </Button>

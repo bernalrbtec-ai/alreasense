@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 import redis
+from redis.exceptions import ResponseError
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import status
@@ -22,6 +23,8 @@ logger = logging.getLogger(__name__)
 REDIS_CLEANUP_RATE_LIMIT_SECONDS = 30
 # Logs "running" mais antigos que este valor (minutos) são marcados como failed
 STALE_RUNNING_LOGS_MINUTES = 15
+# Mínimo de segundos entre dois pedidos de persist-rewrite (disco) por usuário
+REDIS_PERSIST_REWRITE_RATE_LIMIT_SECONDS = 60
 
 
 def mark_stale_redis_cleanup_logs(minutes: int = STALE_RUNNING_LOGS_MINUTES) -> int:
@@ -422,3 +425,88 @@ def redis_cleanup(request):
             "error_message": None,
         }
     )
+
+
+def _redis_persist_rewrite_result() -> dict[str, Any]:
+    """
+    Tenta executar BGSAVE e BGREWRITEAOF no Redis padrão.
+    Retorna dict com bgsave, bgrewriteaof ("ok"|"disabled"|"error"), message.
+    Persistência é por instância; usa REDIS_URL (DB 0).
+    """
+    red = (getattr(settings, "REDIS_URL", "") or "").strip()
+    if not red:
+        return {"bgsave": "error", "bgrewriteaof": "error", "message": "Redis não configurado."}
+
+    result = {"bgsave": "ok", "bgrewriteaof": "ok", "message": ""}
+    messages = []
+
+    try:
+        client = redis.Redis.from_url(
+            red,
+            decode_responses=True,
+            socket_connect_timeout=5,
+            socket_timeout=30,
+        )
+        client.ping()
+    except Exception as e:
+        return {"bgsave": "error", "bgrewriteaof": "error", "message": f"Redis indisponível: {str(e)[:200]}"}
+
+    try:
+        try:
+            client.bgsave()
+            messages.append("BGSAVE iniciado.")
+        except ResponseError as e:
+            err = str(e).lower()
+            if "disabled" in err or "not allowed" in err or "denied" in err:
+                result["bgsave"] = "disabled"
+                messages.append("BGSAVE desabilitado (comum em Redis gerenciado).")
+            else:
+                result["bgsave"] = "error"
+                messages.append(f"BGSAVE: {str(e)[:150]}")
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            result["bgsave"] = "error"
+            messages.append(f"BGSAVE: {str(e)[:150]}")
+
+        try:
+            client.bgrewriteaof()
+            messages.append("BGREWRITEAOF iniciado.")
+        except ResponseError as e:
+            err = str(e).lower()
+            if "disabled" in err or "not allowed" in err or "denied" in err or "no append only" in err:
+                result["bgrewriteaof"] = "disabled"
+                messages.append("BGREWRITEAOF desabilitado ou AOF não ativo.")
+            else:
+                result["bgrewriteaof"] = "error"
+                messages.append(f"BGREWRITEAOF: {str(e)[:150]}")
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            result["bgrewriteaof"] = "error"
+            messages.append(f"BGREWRITEAOF: {str(e)[:150]}")
+    finally:
+        client.close()
+
+    result["message"] = " ".join(messages).strip() or "Nenhuma ação executada."
+    return result
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def redis_persist_rewrite(request):
+    """
+    Solicita ao Redis reescrever persistência em disco (BGSAVE + BGREWRITEAOF).
+    Pode reduzir uso de disco após limpeza de keys. Em Redis gerenciado os comandos podem estar desabilitados.
+    """
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    from django.core.cache import cache
+    rate_key = f"redis_persist_rewrite_rate_limit:{getattr(request.user, 'id', 0)}"
+    if cache.get(rate_key):
+        return Response(
+            {"error": f"Aguarde {REDIS_PERSIST_REWRITE_RATE_LIMIT_SECONDS} segundos antes de tentar novamente."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+    cache.set(rate_key, 1, timeout=REDIS_PERSIST_REWRITE_RATE_LIMIT_SECONDS)
+    data = _redis_persist_rewrite_result()
+    return Response(data)
