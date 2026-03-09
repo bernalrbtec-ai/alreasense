@@ -559,7 +559,7 @@ export function ConversationList() {
                       : getDisplayName(conversationItem)
                     }
                   </h3>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0 flex items-center gap-1">
+                  <span className="text-xs text-gray-500 dark:text-gray-300 ml-2 flex-shrink-0 flex items-center gap-1">
                     {waitingForResponseMode ? (
                       <>
                         <CircleDot className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
@@ -610,7 +610,7 @@ export function ConversationList() {
                 <div className="flex items-center justify-between">
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
                   {conversationItem.last_message ? (
-                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
                       {/* Mensagem apagada: indicar sem exibir conteúdo */}
                       {conversationItem.last_message?.is_deleted
                         ? 'Mensagem apagada'
@@ -626,7 +626,7 @@ export function ConversationList() {
                     </p>
                   ) : (
                     // ✅ CORREÇÃO: Para conversas novas sem mensagens, mostrar texto estático ao invés de loading infinito
-                    <p className="text-sm text-gray-400 dark:text-gray-500 italic truncate">
+                    <p className="text-sm text-gray-400 dark:text-gray-400 italic truncate">
                       Nova conversa
                     </p>
                   )}

@@ -970,8 +970,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
               <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-700 mb-2">Nenhuma mensagem ainda</h3>
-          <p className="text-sm text-gray-500 text-center max-w-xs">
+          <h3 className="text-lg font-medium text-gray-700 dark:text-gray-200 mb-2">Nenhuma mensagem ainda</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
             Comece a conversa enviando uma mensagem!
           </p>
         </div>
@@ -1110,7 +1110,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   ${isSystemNotification
                     ? 'bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600'
                     : messageItem.direction === 'outgoing'
-                    ? 'bg-[#d9fdd3] dark:bg-green-900/30 text-gray-900 dark:text-gray-100'
+                    ? 'bg-[#d9fdd3] dark:bg-green-800/80 text-gray-900 dark:text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
                   }
                 `}
@@ -1134,7 +1134,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   <div className="flex justify-between items-center gap-2 mb-1 min-h-0">
                     <div className="min-w-0 flex-1">
                       {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
-                        <p className="text-xs font-semibold text-green-600 truncate">
+                        <p className="text-xs font-semibold text-green-600 dark:text-green-400 truncate">
                           {messageItem.sender_name || messageItem.sender_phone}
                         </p>
                       )}

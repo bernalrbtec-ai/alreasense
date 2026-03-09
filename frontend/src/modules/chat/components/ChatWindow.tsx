@@ -843,7 +843,7 @@ export function ChatWindow() {
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
               {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
               {(instanceFriendlyName || instanceName) && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200 rounded-full text-xs font-medium">
                   📱 {instanceFriendlyName || instanceName}
                 </span>
               )}
