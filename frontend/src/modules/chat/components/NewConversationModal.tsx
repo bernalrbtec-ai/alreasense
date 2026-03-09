@@ -7,6 +7,7 @@ import { PhoneInputWithDDD } from '@/components/PhoneInputWithDDD';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { useTheme } from '@/hooks/useTheme';
 import { showErrorToast } from '@/lib/toastHelper';
 
 interface Contact {
@@ -33,6 +34,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const { setActiveConversation, addConversation, activeDepartment, departments } = useChatStore();
   const { user } = useAuthStore();
   const { can_access_all_departments, departmentIds } = usePermissions();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -409,11 +412,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-xl font-bold">Nova Conversa</h2>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Nova Conversa</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-gray-400 hover:text-gray-600 dark:text-gray-400 dark:hover:text-gray-300 transition-colors"
           >
             <X className="h-6 w-6" />
           </button>
@@ -421,12 +424,12 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
 
         {/* ✅ MULTI-INSTÂNCIA: Seletor de instância (só quando > 1) */}
         {instances.length > 1 && (
-          <div className="px-4 pt-4 pb-2 border-b border-border">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-200 dark:border-gray-600">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Enviar por</label>
             <select
               value={selectedInstanceId ?? ''}
               onChange={(e) => setSelectedInstanceId(e.target.value || null)}
-              className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800 text-sm"
             >
               {instances.map((inst) => (
                 <option key={inst.id} value={inst.id}>
@@ -439,12 +442,12 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
 
         {/* Departamento (só quando usuário tem 2+ departamentos) */}
         {userDepartments.length > 1 && (
-          <div className="px-4 pt-4 pb-2 border-b border-border">
+          <div className="px-4 pt-4 pb-2 border-b border-gray-200 dark:border-gray-600">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Iniciar no departamento</label>
             <select
               value={selectedDepartmentId ?? ''}
               onChange={(e) => setSelectedDepartmentId(e.target.value || null)}
-              className="w-full px-3 py-2 border border-border bg-background text-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background text-sm"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800 text-sm"
             >
               {userDepartments.map((d: { id: string; name: string }) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
@@ -454,9 +457,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         )}
 
         {/* Search Input */}
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-gray-200 dark:border-gray-600">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-500" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400" />
             <input
               type="text"
               placeholder="Buscar por nome ou telefone..."
@@ -467,11 +470,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                   setPhoneInput(e.target.value);
                 }
               }}
-              className="w-full pl-10 pr-4 py-2 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800"
               autoFocus
             />
             {isSearching && (
-              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 animate-spin" />
+              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400 animate-spin" />
             )}
           </div>
         </div>
@@ -479,9 +482,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         {/* Results */}
         <div className="flex-1 overflow-y-auto p-4">
           {searchQuery.length < 2 ? (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+            <div className="text-center py-8">
               <Search className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
-              <p>Digite um nome ou telefone para buscar</p>
+              <p className="text-gray-500 dark:text-gray-400">Digite um nome ou telefone para buscar</p>
             </div>
           ) : contacts.length > 0 ? (
             <div className="space-y-2">
@@ -496,9 +499,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                     <User className="h-5 w-5 text-gray-600 dark:text-gray-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-gray-900 truncate">{contact.name}</div>
-                    <div className="text-sm text-gray-500 flex items-center gap-1">
-                      <Phone className="h-3 w-3" />
+                    <div className="font-medium text-gray-900 dark:text-gray-100 truncate">{contact.name}</div>
+                    <div className="text-sm text-gray-500 dark:text-gray-300 flex items-center gap-1">
+                      <Phone className="h-3 w-3 text-gray-500 dark:text-gray-400" />
                       <span>{formatPhone(contact.phone)}</span>
                     </div>
                     {contact.tags && contact.tags.length > 0 && (
@@ -506,12 +509,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                         {contact.tags.slice(0, 2).map((tag) => (
                           <span
                             key={tag.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-                            style={{
-                              backgroundColor: `${tag.color}20`,
-                              color: tag.color,
-                              border: `1px solid ${tag.color}40`
-                            }}
+                            className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border"
+                            style={isDark
+                              ? { backgroundColor: 'rgb(55 65 81)', color: 'rgb(229 231 235)', border: '1px solid rgb(75 85 99)' }
+                              : { backgroundColor: `${tag.color}20`, color: tag.color, border: `1px solid ${tag.color}40` }
+                            }
                           >
                             {tag.name}
                           </span>
@@ -562,14 +564,14 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
             </div>
           ) : isSearching ? (
             <div className="text-center py-8">
-              <Loader2 className="h-8 w-8 mx-auto mb-4 text-gray-400 animate-spin" />
+              <Loader2 className="h-8 w-8 mx-auto mb-4 text-gray-400 dark:text-gray-300 animate-spin" />
               <p className="text-gray-500 dark:text-gray-400">Buscando...</p>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-              <p>Nenhum resultado encontrado</p>
+            <div className="text-center py-8">
+              <p className="text-gray-500 dark:text-gray-400">Nenhum resultado encontrado</p>
               {isPhone && !isValidPhone && (
-                <p className="text-sm text-red-500 mt-2">Telefone inválido</p>
+                <p className="text-sm text-red-500 dark:text-red-400 mt-2">Telefone inválido</p>
               )}
             </div>
           )}
