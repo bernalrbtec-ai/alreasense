@@ -1,8 +1,9 @@
 # Generated manually for Department model and departments ManyToMany field
 
-from django.db import migrations, models
-import django.db.models.deletion
 import uuid
+
+import django.db.models.deletion
+from django.db import migrations, models
 
 
 def setup_department_if_not_exist(apps, schema_editor):
@@ -82,6 +83,25 @@ class Migration(migrations.Migration):
         migrations.RunPython(
             setup_department_if_not_exist,
             reverse_code=migrations.RunPython.noop
+        ),
+        # Atualiza apenas o estado das migrations (tabela já criada acima) para que
+        # outras apps (ex.: chat 0017) possam referenciar authn.department.
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.CreateModel(
+                    name="Department",
+                    fields=[
+                        ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                        ("name", models.CharField(max_length=100)),
+                        ("color", models.CharField(default="#3b82f6", max_length=7)),
+                        ("ai_enabled", models.BooleanField(default=False)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                        ("tenant", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="departments", to="tenancy.tenant")),
+                    ],
+                    options={},
+                ),
+            ],
         ),
     ]
 

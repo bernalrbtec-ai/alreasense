@@ -1,5 +1,8 @@
 # Generated migration for Flow Chat module
-from django.db import migrations
+import uuid
+
+import django.db.models.deletion
+from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
@@ -7,8 +10,8 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('tenancy', '0001_initial'),
-        ('authn', '0003_add_departments'),
+        ("tenancy", "0001_initial"),
+        ("authn", "0003_add_departments"),
     ]
 
     operations = [
@@ -81,5 +84,65 @@ class Migration(migrations.Migration):
             DROP TABLE IF EXISTS chat_message CASCADE;
             DROP TABLE IF EXISTS chat_conversation CASCADE;
             """
-        )
+        ),
+        # Atualiza apenas o estado das migrations (tabelas já criadas acima) para que
+        # outras migrations (ex.: 0017_flow_schema) possam referenciar chat.conversation.
+        migrations.SeparateDatabaseAndState(
+            state_operations=[
+                migrations.CreateModel(
+                    name="Conversation",
+                    fields=[
+                        ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                        ("contact_phone", models.CharField(max_length=20)),
+                        ("contact_name", models.CharField(blank=True, max_length=255, null=True)),
+                        ("status", models.CharField(default="open", max_length=20)),
+                        ("last_message_at", models.DateTimeField(blank=True, null=True)),
+                        ("unread_count", models.IntegerField(default=0)),
+                        ("metadata", models.JSONField(default=dict)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                        ("assigned_to", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="+", to="authn.user")),
+                        ("department", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="conversations", to="authn.department")),
+                        ("tenant", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="conversations", to="tenancy.tenant")),
+                    ],
+                    options={},
+                ),
+                migrations.CreateModel(
+                    name="Message",
+                    fields=[
+                        ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                        ("content", models.TextField(blank=True, null=True)),
+                        ("direction", models.CharField(default="incoming", max_length=10)),
+                        ("status", models.CharField(default="sent", max_length=20)),
+                        ("is_internal", models.BooleanField(default=False)),
+                        ("metadata", models.JSONField(default=dict)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("updated_at", models.DateTimeField(auto_now=True)),
+                        ("conversation", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="messages", to="chat.conversation")),
+                        ("sender", models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name="+", to="authn.user")),
+                    ],
+                    options={},
+                ),
+                migrations.CreateModel(
+                    name="MessageAttachment",
+                    fields=[
+                        ("id", models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                        ("file_type", models.CharField(max_length=50)),
+                        ("file_path", models.CharField(blank=True, max_length=500, null=True)),
+                        ("file_url", models.CharField(blank=True, max_length=500, null=True)),
+                        ("original_filename", models.CharField(blank=True, max_length=255, null=True)),
+                        ("size_bytes", models.BigIntegerField(default=0)),
+                        ("storage_type", models.CharField(default="local", max_length=10)),
+                        ("is_image", models.BooleanField(default=False)),
+                        ("is_video", models.BooleanField(default=False)),
+                        ("is_audio", models.BooleanField(default=False)),
+                        ("expires_at", models.DateTimeField(blank=True, null=True)),
+                        ("created_at", models.DateTimeField(auto_now_add=True)),
+                        ("message", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="attachments", to="chat.message")),
+                        ("tenant", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="+", to="tenancy.tenant")),
+                    ],
+                    options={},
+                ),
+            ],
+        ),
     ]
