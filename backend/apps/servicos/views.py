@@ -14,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from .models import RedisCleanupLog
-from .redis_cleanup import _get_cache_key_prefix, _get_client, run_redis_cleanup
+from .redis_cleanup import SCAN_COUNT, _get_cache_key_prefix, _get_client, run_redis_cleanup
 
 logger = logging.getLogger(__name__)
 
@@ -104,15 +104,21 @@ def _overview_redis_info() -> dict[str, Any]:
         info_keyspace = client.info("keyspace") or {}
         keys_total = 0
         for v in info_keyspace.values():
-            # formato: "db0=keys=5,expires=0"
-            part = (v or "").split(",", 1)[0]
-            if "=" in part:
-                parts = part.split("=")
-                if len(parts) >= 3 and parts[1] == "keys":
-                    try:
-                        keys_total += int(parts[2])
-                    except (ValueError, TypeError):
-                        pass
+            # Formato pode ser string "keys=5,expires=0" ou dict {"keys": 5, "expires": 0}
+            if isinstance(v, dict):
+                try:
+                    keys_total += int(v.get("keys", 0) or 0)
+                except (ValueError, TypeError):
+                    pass
+            else:
+                part = (v or "").split(",", 1)[0]
+                if "=" in part:
+                    parts = part.split("=")
+                    if len(parts) >= 3 and parts[1] == "keys":
+                        try:
+                            keys_total += int(parts[2])
+                        except (ValueError, TypeError):
+                            pass
         client.close()
     except Exception as e:
         warnings.append(f"Contagem total de keys: {e}")
