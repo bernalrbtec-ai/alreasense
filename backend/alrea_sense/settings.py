@@ -55,6 +55,7 @@ LOCAL_APPS = [
     'apps.campaigns',
     'apps.chat',  # Flow Chat
     'apps.proxy',  # Rotação de proxies Webshare → Evolution
+    'apps.servicos',  # Serviços (Redis limpeza, etc.)
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

@@ -41,6 +41,7 @@ urlpatterns = [
     path('api/campaigns/', include('apps.campaigns.urls')),
     path('api/chat/', include('apps.chat.urls')),  # Flow Chat
     path('api/proxy/', include('apps.proxy.urls')),
+    path('api/servicos/', include('apps.servicos.urls')),
     # Webhook Evolution - rotas diretas (com e sem barra final)
     path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct-slash'),
     path('webhooks/evolution', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct'),
