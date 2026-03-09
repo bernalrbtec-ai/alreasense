@@ -45,6 +45,8 @@ class RedisServicosAPITestCase(TestCase):
         self.assertIn("used_memory_human", data)
         self.assertIn("last_cleanup", data)
         self.assertIn("warnings", data)
+        self.assertIn("usage_history", data)
+        self.assertIsInstance(data["usage_history"], list)
 
     def test_redis_overview_returns_403_for_non_superuser(self):
         self.client.force_authenticate(user=self.normal_user)

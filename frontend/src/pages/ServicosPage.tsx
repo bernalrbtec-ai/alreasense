@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react'
 import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database } from 'lucide-react'
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -73,6 +82,12 @@ interface RedisOverview {
   } | null
   growth_projection: { keys_per_day_estimate?: number; message: string } | null
   warnings: string[]
+  persistence?: {
+    aof_enabled: boolean
+    aof_current_size: number | null
+    rdb_last_save_time: number | null
+  } | null
+  usage_history?: { sampled_at: string; used_memory: number; aof_current_size: number | null }[]
 }
 
 interface RedisStats {
@@ -245,11 +260,14 @@ export default function ServicosPage() {
     }
     try {
       setIsCleaningRedis(true)
-      await api.post('/servicos/redis/cleanup/', {
+      const { data } = await api.post<{ persist_rewrite?: { message: string } }>('/servicos/redis/cleanup/', {
         profile_pic: redisCleanupProfilePic,
         webhook: redisCleanupWebhook,
       })
-      toast.success('Limpeza Redis iniciada com sucesso')
+      toast.success('Limpeza Redis concluída com sucesso.')
+      if (data?.persist_rewrite?.message) {
+        toast.info(data.persist_rewrite.message)
+      }
       await fetchRedisOverview()
       await fetchRedisStats()
       await fetchRedisHistory()
@@ -706,6 +724,14 @@ export default function ServicosPage() {
                       </p>
                     )}
                   </div>
+                  {redisOverview.persistence?.aof_enabled && redisOverview.persistence?.aof_current_size != null && (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Espaço em disco (AOF)</p>
+                      <p className="mt-1 font-medium">
+                        {(redisOverview.persistence.aof_current_size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Última limpeza</p>
                     <p className="mt-1 text-sm">
@@ -742,6 +768,77 @@ export default function ServicosPage() {
                     {redisOverview.growth_projection?.message ?? 'N/A'}
                   </p>
                 </div>
+
+                {(redisOverview.usage_history?.length ?? 0) > 0 && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Uso ao longo do tempo</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Memória Redis (e AOF em disco quando disponível). Amostras a cada 10 min; últimos 7 dias.
+                    </p>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart
+                          data={redisOverview.usage_history!.map((s) => ({
+                            ...s,
+                            time: new Date(s.sampled_at).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }),
+                            memory_mb: Math.round((s.used_memory / 1024 / 1024) * 100) / 100,
+                            aof_mb:
+                              s.aof_current_size != null
+                                ? Math.round((s.aof_current_size / 1024 / 1024) * 100) / 100
+                                : null,
+                          }))}
+                          margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+                        >
+                          <defs>
+                            <linearGradient id="redis-mem-grad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="redis-aof-grad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.3} />
+                              <stop offset="100%" stopColor="#06b6d4" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                          <XAxis dataKey="time" tick={{ fontSize: 10 }} />
+                          <YAxis
+                            tick={{ fontSize: 10 }}
+                            tickFormatter={(v) => `${v} MB`}
+                            label={{ value: 'MB', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }}
+                          />
+                          <Tooltip
+                            formatter={(value: number) => [`${value} MB`, '']}
+                            labelFormatter={(label) => label}
+                            contentStyle={{ borderRadius: 8 }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="memory_mb"
+                            name="Memória"
+                            stroke="#8b5cf6"
+                            fill="url(#redis-mem-grad)"
+                            strokeWidth={2}
+                          />
+                          {redisOverview.usage_history!.some((s) => s.aof_current_size != null) && (
+                            <Area
+                              type="monotone"
+                              dataKey="aof_mb"
+                              name="Disco (AOF)"
+                              stroke="#06b6d4"
+                              fill="url(#redis-aof-grad)"
+                              strokeWidth={2}
+                            />
+                          )}
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
 
                 {redisOverview.warnings && redisOverview.warnings.length > 0 && (
                   <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">

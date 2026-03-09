@@ -41,3 +41,18 @@ class RedisCleanupLog(models.Model):
 
     def __str__(self):
         return f"RedisCleanup #{self.id} - {self.status} ({self.started_at})"
+
+
+class RedisUsageSample(models.Model):
+    """Amostra de uso Redis (memória e AOF) para gráfico ao longo do tempo."""
+
+    sampled_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    used_memory = models.BigIntegerField()  # bytes
+    aof_current_size = models.BigIntegerField(null=True, blank=True)  # bytes, None se AOF desativado
+
+    class Meta:
+        db_table = "servicos_redisusagesample"
+        ordering = ["-sampled_at"]
+
+    def __str__(self):
+        return f"RedisUsage @ {self.sampled_at}"
