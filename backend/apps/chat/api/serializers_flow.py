@@ -52,6 +52,7 @@ class FlowNodeSerializer(serializers.ModelSerializer):
             "footer_text",
             "sections",
             "buttons",
+            "media_url",
             "edges_out",
             "created_at",
             "updated_at",
@@ -77,6 +78,7 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             "footer_text",
             "sections",
             "buttons",
+            "media_url",
             "created_at",
             "updated_at",
         ]
@@ -88,32 +90,63 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Nome do nó é obrigatório.")
         return name
 
+    def _get_attr_or_instance(self, attrs, key, default=""):
+        """Em PATCH, usa valor da instance quando o campo não vem no body. Em create (instance None), retorna default."""
+        if key in attrs:
+            return attrs.get(key) or default
+        if self.instance is None:
+            return default
+        return getattr(self.instance, key, None) or default
+
     def validate(self, attrs):
         node_type = attrs.get("node_type") or (self.instance.node_type if self.instance else None)
-        if node_type == FlowNode.NODE_TYPE_LIST:
-            body = (attrs.get("body_text") or "").strip()
-            btn = (attrs.get("button_text") or "").strip()
+        if node_type == FlowNode.NODE_TYPE_MESSAGE:
+            body = str(self._get_attr_or_instance(attrs, "body_text", "")).strip()[:4096]
+            if not body:
+                raise serializers.ValidationError({"body_text": "Texto da mensagem é obrigatório."})
+            attrs["body_text"] = body
+        elif node_type == FlowNode.NODE_TYPE_IMAGE:
+            media_url = str(self._get_attr_or_instance(attrs, "media_url", "")).strip()[:1024]
+            if not media_url:
+                raise serializers.ValidationError({"media_url": "URL da imagem é obrigatória."})
+            attrs["media_url"] = media_url
+            if "body_text" in attrs:
+                attrs["body_text"] = attrs["body_text"] or ""
+        elif node_type == FlowNode.NODE_TYPE_FILE:
+            media_url = str(self._get_attr_or_instance(attrs, "media_url", "")).strip()[:1024]
+            if not media_url:
+                raise serializers.ValidationError({"media_url": "URL do arquivo é obrigatória."})
+            attrs["media_url"] = media_url
+            if "body_text" in attrs:
+                attrs["body_text"] = attrs["body_text"] or ""
+        elif node_type == FlowNode.NODE_TYPE_LIST:
+            body = str(self._get_attr_or_instance(attrs, "body_text", "")).strip()
+            btn = str(self._get_attr_or_instance(attrs, "button_text", "")).strip()
             if not body:
                 raise serializers.ValidationError({"body_text": "Corpo da mensagem é obrigatório para lista."})
             if not btn:
                 raise serializers.ValidationError({"button_text": "Texto do botão é obrigatório para lista."})
-            sections = attrs.get("sections")
+            sections = attrs.get("sections") if "sections" in attrs else getattr(self.instance, "sections", None)
             if not sections or not isinstance(sections, list):
                 raise serializers.ValidationError({"sections": "Lista exige ao menos uma seção com linhas."})
+            if len(sections) > 10:
+                raise serializers.ValidationError({"sections": "No máximo 10 seções."})
             for i, sec in enumerate(sections):
                 if not isinstance(sec, dict):
                     raise serializers.ValidationError({"sections": f"Seção {i + 1}: deve ser um objeto com title e rows."})
                 rows = sec.get("rows")
                 if not rows or not isinstance(rows, list):
                     raise serializers.ValidationError({"sections": f"Seção {i + 1}: use title e rows (array de itens com id e title)."})
+                if len(rows) > 10:
+                    raise serializers.ValidationError({"sections": f"Seção {i + 1}: no máximo 10 linhas."})
                 for j, row in enumerate(rows):
                     if not isinstance(row, dict) or not row.get("id") or not row.get("title"):
                         raise serializers.ValidationError({"sections": f"Seção {i + 1}, linha {j + 1}: use id e title."})
         elif node_type == FlowNode.NODE_TYPE_BUTTONS:
-            body = (attrs.get("body_text") or "").strip()
+            body = str(self._get_attr_or_instance(attrs, "body_text", "")).strip()
             if not body:
                 raise serializers.ValidationError({"body_text": "Corpo da mensagem é obrigatório para botões."})
-            buttons = attrs.get("buttons")
+            buttons = attrs.get("buttons") if "buttons" in attrs else getattr(self.instance, "buttons", None)
             if not buttons or not isinstance(buttons, list):
                 raise serializers.ValidationError({"buttons": "Botões exige um array com 1 a 3 itens."})
             if len(buttons) < 1 or len(buttons) > 3:
@@ -121,6 +154,12 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             for i, b in enumerate(buttons):
                 if not isinstance(b, dict) or not b.get("id") or not b.get("title"):
                     raise serializers.ValidationError({"buttons": f"Botão {i + 1}: use id e title."})
+        else:
+            valid_types = [FlowNode.NODE_TYPE_MESSAGE, FlowNode.NODE_TYPE_IMAGE, FlowNode.NODE_TYPE_FILE, FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS]
+            if not node_type:
+                raise serializers.ValidationError({"node_type": "Tipo do nó é obrigatório."})
+            if node_type not in valid_types:
+                raise serializers.ValidationError({"node_type": f"Tipo de nó inválido. Use: {', '.join(valid_types)}."})
         return attrs
 
 

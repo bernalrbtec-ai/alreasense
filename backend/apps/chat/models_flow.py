@@ -55,11 +55,17 @@ class Flow(models.Model):
 
 
 class FlowNode(models.Model):
-    """Etapa do fluxo: lista ou botões."""
+    """Etapa do fluxo: mensagem, imagem, arquivo, lista ou botões."""
 
+    NODE_TYPE_MESSAGE = "message"
+    NODE_TYPE_IMAGE = "image"
+    NODE_TYPE_FILE = "file"
     NODE_TYPE_LIST = "list"
     NODE_TYPE_BUTTONS = "buttons"
     NODE_TYPE_CHOICES = [
+        (NODE_TYPE_MESSAGE, "Mensagem (texto)"),
+        (NODE_TYPE_IMAGE, "Imagem"),
+        (NODE_TYPE_FILE, "Arquivo"),
         (NODE_TYPE_LIST, "Lista"),
         (NODE_TYPE_BUTTONS, "Botões"),
     ]
@@ -111,6 +117,15 @@ class FlowNode(models.Model):
         blank=True,
         verbose_name="Botões",
         help_text='[{"id": "...", "title": "..."}]',
+    )
+
+    # Mídia (imagem/arquivo): URL acessível pela instância (ex: /media/ hash ou URL pública)
+    media_url = models.CharField(
+        max_length=1024,
+        blank=True,
+        default="",
+        verbose_name="URL da mídia",
+        help_text="Para tipo imagem ou arquivo: URL da imagem/documento (até 1024 caracteres).",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

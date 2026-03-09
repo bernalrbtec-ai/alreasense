@@ -978,6 +978,13 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
         
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
+        flow_media_url = (message.metadata or {}).get('flow_media_url') or ''
+        flow_media_type = (message.metadata or {}).get('flow_media_type') or ''
+        # Garantir string para evitar edge case (metadata vindo de outra fonte)
+        if not isinstance(flow_media_url, str):
+            flow_media_url = str(flow_media_url) if flow_media_url else ''
+        if not isinstance(flow_media_type, str):
+            flow_media_type = str(flow_media_type) if flow_media_type else ''
         include_signature = message.metadata.get('include_signature', True) if message.metadata else True  # ✅ Por padrão inclui assinatura
         reply_to_uuid = message.metadata.get('reply_to') if message.metadata else None  # ✅ UUID interno da mensagem sendo respondida
         
@@ -1261,7 +1268,53 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                         if not last_ok:
                             break
                 else:
-                    # Texto puro (sem anexo nem localização)
+                    # Texto puro (sem anexo nem localização) ou mídia de fluxo (flow_media_url)
+                    meta = message.metadata or {}
+                    flow_url = (meta.get('flow_media_url') or '').strip()[:1024]
+                    flow_type = (meta.get('flow_media_type') or '').strip().lower()
+                    if flow_url and flow_type in ('image', 'document'):
+                        mime = 'image/jpeg' if flow_type == 'image' else 'application/octet-stream'
+                        fname = 'image.jpg' if flow_type == 'image' else 'document'
+                        last_ok, last_data = await asyncio.to_thread(
+                            sender.send_media,
+                            recipient_value,
+                            flow_url,
+                            mime,
+                            content_for_send or content or None,
+                            fname,
+                            quoted_message_id,
+                            quoted_remote_jid=quoted_remote_jid,
+                            quoted_message_content=quoted_content,
+                            quoted_from_me=bool(original_message and original_message.direction == 'outgoing'),
+                            quoted_participant=quoted_participant,
+                        )
+                        if last_ok:
+                            evo_id = _extract_provider_message_id(last_data, provider_kind)
+                            if evo_id:
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(message_id=evo_id)
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(status='sent', evolution_status='sent')
+                            from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                            msg_obj = await database_sync_to_async(
+                                Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                            )(id=message.id)
+                            await database_sync_to_async(broadcast_message_received)(msg_obj)
+                            await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                            log.info("✅ [CHAT ENVIO] Mídia de fluxo enviada (provider=%s)", provider_kind)
+                            return
+                        err = last_data.get('error', '') or str(last_data)
+                        close_old_connections()
+                        await database_sync_to_async(
+                            Message.objects.filter(id=message.id).update
+                        )(status='failed', error_message=err[:500])
+                        log.warning("❌ [CHAT ENVIO] Envio de mídia de fluxo falhou: %s", err[:200])
+                        await database_sync_to_async(_broadcast_message_failed)(message.id)
+                        return
                     # Meta: fora da janela 24h só pode enviar por template; dentro 24h pode enviar texto, botões ou lista
                     if provider_kind == 'meta':
                         from apps.chat.whatsapp_24h import is_within_24h_window
@@ -1565,6 +1618,31 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
             return
         
         # Envia via Evolution API (path legado quando get_sender não usado)
+        # ✅ No path Evolution, content_for_send não foi definido; calcular com mesma lógica de assinatura.
+        content_for_send_evo = content or ''
+        if include_signature and content_for_send_evo:
+            msg_with_sender = await database_sync_to_async(
+                Message.objects.select_related('sender').filter(id=message.id).first
+            )()
+            if msg_with_sender:
+                sender_obj = msg_with_sender.sender
+                sender_name_evo = (getattr(msg_with_sender, 'sender_name', None) or '').strip()
+                full_name_evo = None
+                if sender_obj:
+                    full_name_evo = f"{getattr(sender_obj, 'first_name', '') or ''} {getattr(sender_obj, 'last_name', '') or ''}".strip() or None
+                elif sender_name_evo:
+                    full_name_evo = sender_name_evo
+                if full_name_evo:
+                    content_stripped_evo = content_for_send_evo.strip()
+                    prefix_disse_evo = f"{full_name_evo} disse:"
+                    already_has_disse_evo = content_stripped_evo.lower().startswith(prefix_disse_evo.lower())
+                    already_has_asterisk_evo = content_stripped_evo.startswith(f"*{full_name_evo}:*")
+                    if already_has_disse_evo:
+                        body_evo = content_stripped_evo[len(prefix_disse_evo):].lstrip("\n\t ")
+                        content_for_send_evo = f"*{full_name_evo}:*\n\n" + (body_evo or content_stripped_evo)
+                    elif not already_has_asterisk_evo:
+                        content_for_send_evo = f"*{full_name_evo}:*\n\n" + content_for_send_evo
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = instance.api_url.rstrip('/')
             
@@ -1594,11 +1672,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                     'name': str(loc_name)[:255] if loc_name else 'Localização',
                     'address': str(loc_address)[:500] if loc_address else str(loc_name)[:500] or 'Localização',
                 }
-                # Adicionar quoted se for resposta
-                if quoted_message_id and quoted_remote_jid:
+                # Adicionar quoted se for resposta (Evolution: key com remoteJid e participant em grupos)
+                if quoted_message_id and quoted_remote_jid and original_message:
+                    quoted_key_loc = {
+                        'id': quoted_message_id,
+                        'remoteJid': quoted_remote_jid,
+                        'fromMe': original_message.direction == 'outgoing',
+                    }
+                    if quoted_participant and getattr(original_message.conversation, 'conversation_type', None) == 'group':
+                        quoted_key_loc['participant'] = quoted_participant
                     payload['quoted'] = {
-                        'key': {'id': quoted_message_id},
-                        'message': {'conversation': (content or '')[:100] or '.'}
+                        'key': quoted_key_loc,
+                        'message': {'conversation': ((original_message.content or '') or content or '.')[:100]}
                     }
                 endpoint = f"{base_url}/message/sendLocation/{instance.instance_name}"
                 log.info(f"📍 [CHAT] Enviando localização via sendLocation | lat={loc_lat} lng={loc_lng}")
@@ -1637,6 +1722,68 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                     )(status='failed', error_message=str(e)[:500])
                     await database_sync_to_async(_broadcast_message_failed)(message.id)
                 # ✅ CRÍTICO: Retornar após tentar localização (sucesso ou falha) para não cair no envio de texto
+                return
+            
+            # Mídia de fluxo (nó tipo imagem/arquivo): enviar via sendMedia (Evolution API)
+            # Compatível com formato Evolution: options.quoted e participant em grupos.
+            flow_type_clean = (str(flow_media_type).strip().lower() if flow_media_type else '')
+            flow_url_clean = (str(flow_media_url).strip())[:1024] if flow_media_url else ''
+            if not attachment_urls and flow_url_clean and flow_type_clean in ('image', 'document'):
+                mediatype = 'image' if flow_type_clean == 'image' else 'document'
+                payload = {
+                    'number': recipient_value,
+                    'media': flow_url_clean,
+                    'mediatype': mediatype,
+                    'fileName': 'image.jpg' if mediatype == 'image' else 'document',
+                }
+                caption_text = (content_for_send_evo if content_for_send_evo is not None else content or '').strip()[:1024]
+                if caption_text:
+                    payload['caption'] = caption_text
+                if quoted_message_id and quoted_remote_jid and original_message:
+                    quoted_key = {
+                        'remoteJid': quoted_remote_jid,
+                        'fromMe': original_message.direction == 'outgoing',
+                        'id': quoted_message_id,
+                    }
+                    if quoted_participant and getattr(original_message.conversation, 'conversation_type', None) == 'group':
+                        quoted_key['participant'] = quoted_participant
+                    payload['options'] = {
+                        'quoted': {
+                            'key': quoted_key,
+                            'message': {'conversation': ((original_message.content or '') or content or '.')[:100]},
+                        }
+                    }
+                endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
+                log.info("📎 [CHAT] Enviando mídia de fluxo via sendMedia | type=%s", mediatype)
+                try:
+                    resp = await client.post(endpoint, headers=headers, json=payload)
+                    if resp.status_code in (200, 201):
+                        data = resp.json() if resp.text else {}
+                        evo_id = (data.get('key') or {}).get('id')
+                        if evo_id:
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(message_id=evo_id, status='sent', evolution_status='sent')
+                        from apps.chat.utils.websocket import broadcast_message_received
+                        msg_obj = await database_sync_to_async(
+                            Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                        )(id=message.id)
+                        await database_sync_to_async(broadcast_message_received)(msg_obj)
+                        log.info("✅ [CHAT] Mídia de fluxo enviada com sucesso")
+                        return
+                    err_text = resp.text[:500] if resp.text else ''
+                    log.error("❌ [CHAT] sendMedia (fluxo) falhou: %s - %s", resp.status_code, err_text)
+                    await database_sync_to_async(
+                        Message.objects.filter(id=message.id).update
+                    )(status='failed', error_message=err_text[:500])
+                    await database_sync_to_async(_broadcast_message_failed)(message.id)
+                except Exception as e:
+                    log.error("❌ [CHAT] Erro ao enviar mídia de fluxo: %s", e, exc_info=True)
+                    await database_sync_to_async(
+                        Message.objects.filter(id=message.id).update
+                    )(status='failed', error_message=str(e)[:500])
+                    await database_sync_to_async(_broadcast_message_failed)(message.id)
                 return
             
             # Se tiver anexos, envia cada um
@@ -1724,7 +1871,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                             
                             # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
                             # O participant é obrigatório para grupos quando a mensagem original foi enviada por outro participante
-                            if quoted_participant and original_message.conversation.conversation_type == 'group':
+                            if quoted_participant and getattr(original_message.conversation, 'conversation_type', None) == 'group':
                                 quoted_key['participant'] = quoted_participant
                                 logger.info(f"💬 [CHAT ENVIO] Adicionando participant ao quoted.key (grupo, áudio): {_mask_remote_jid(quoted_participant)}")
                             
@@ -1824,7 +1971,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                             
                             # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
                             # O participant é obrigatório para grupos quando a mensagem original foi enviada por outro participante
-                            if quoted_participant and original_message.conversation.conversation_type == 'group':
+                            if quoted_participant and getattr(original_message.conversation, 'conversation_type', None) == 'group':
                                 quoted_key['participant'] = quoted_participant
                                 logger.info(f"💬 [CHAT ENVIO] Adicionando participant ao quoted.key (grupo): {_mask_remote_jid(quoted_participant)}")
                             
@@ -1919,7 +2066,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                                 }
                                 
                                 # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
-                                if quoted_participant and original_message.conversation.conversation_type == 'group':
+                                if quoted_participant and getattr(original_message.conversation, 'conversation_type', None) == 'group':
                                     quoted_key['participant'] = quoted_participant
                                     logger.info(f"💬 [CHAT ENVIO FALLBACK] Adicionando participant ao quoted.key (grupo, áudio): {_mask_remote_jid(quoted_participant)}")
                                 
@@ -2029,8 +2176,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                     if not final_number.startswith('+'):
                         final_number = f'+{final_number.lstrip("+")}'
                 
+                # ✅ Path Evolution: usar content_for_send_evo (com assinatura se aplicável)
+                text_to_send = (content_for_send_evo or content or '').strip()
                 # ✅ CORREÇÃO: Validar que conteúdo não está vazio após processamento
-                if not content or not content.strip():
+                if not text_to_send:
                     logger.error(f"❌ [CHAT ENVIO] Conteúdo vazio após processamento! message_id={message_id}")
                     message.status = 'failed'
                     message.error_message = 'Conteúdo da mensagem está vazio'
@@ -2042,14 +2191,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                 
                 # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
                 # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/0nthjkr/send-text
-                # ✅ LOG CRÍTICO: Verificar conteúdo original vs conteúdo para envio
+                # ✅ LOG CRÍTICO: Verificar conteúdo original vs conteúdo para envio (Evolution: content_for_send_evo)
                 logger.critical(f"✍️ [CHAT ENVIO] ====== CRIANDO PAYLOAD DE TEXTO ======")
                 logger.critical(f"   content original (sem assinatura, primeiros 150 chars): {content[:150] if content else 'VAZIO'}...")
-                logger.critical(f"   content_for_send (com assinatura, primeiros 150 chars): {content_for_send[:150] if content_for_send else 'VAZIO'}...")
-                logger.critical(f"   content tem assinatura? {'*' in content[:50] if content else False}")
-                logger.critical(f"   content_for_send tem assinatura? {'*' in content_for_send[:50] if content_for_send else False}")
+                logger.critical(f"   text_to_send (com assinatura se aplicável, primeiros 150 chars): {text_to_send[:150] if text_to_send else 'VAZIO'}...")
                 logger.critical(f"   content length: {len(content) if content else 0}")
-                logger.critical(f"   content_for_send length: {len(content_for_send) if content_for_send else 0}")
+                logger.critical(f"   text_to_send length: {len(text_to_send)}")
                 
                 # ✅ VALIDAÇÃO CRÍTICA FINAL: Verificar se final_number corresponde ao conversation_type
                 logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO FINAL DO DESTINATÁRIO ======")
@@ -2075,10 +2222,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                         raise ValueError(f"Conversa é individual mas destinatário é grupo: {_mask_remote_jid(final_number)}")
                     logger.critical(f"✅ [SEGURANÇA] Destinatário INDIVIDUAL validado: {_mask_remote_jid(final_number)}")
                 
-                # ✅ CORREÇÃO: Usar content_for_send (com assinatura) para envio, mas manter content original no banco
+                # ✅ Path Evolution: usar text_to_send (content_for_send_evo, com assinatura se aplicável)
                 payload = {
                     'number': final_number,
-                    'text': content_for_send.strip()  # ✅ Usar content_for_send (pode ter assinatura)
+                    'text': text_to_send
                 }
                 
                 logger.critical(f"✅ [SEGURANÇA] Payload criado com destinatário validado:")

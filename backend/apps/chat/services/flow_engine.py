@@ -57,13 +57,20 @@ def _normalize_option_id(raw: str) -> str:
 
 
 def _build_interactive_list_payload(node: FlowNode) -> Dict[str, Any]:
-    """Monta payload interactive_list a partir do nó (tipo list)."""
+    """Monta payload interactive_list a partir do nó (tipo list). Limites: 10 seções, 10 linhas por seção."""
+    sections = list(node.sections or [])[:10]
+    out_sections = []
+    for sec in sections:
+        if not isinstance(sec, dict):
+            continue
+        rows = (sec.get("rows") or []) if isinstance(sec.get("rows"), list) else []
+        out_sections.append({**sec, "rows": rows[:10]})
     return {
         "body_text": (node.body_text or "").strip()[:1024],
         "button_text": (node.button_text or "").strip()[:20],
         "header_text": (node.header_text or "").strip()[:60],
         "footer_text": (node.footer_text or "").strip()[:60],
-        "sections": list(node.sections or [])[:10],
+        "sections": out_sections,
     }
 
 
@@ -78,29 +85,67 @@ def _build_interactive_buttons_payload(node: FlowNode) -> Dict[str, Any]:
 
 def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Message]:
     """
-    Cria mensagem com lista ou botões do nó e enfileira envio.
+    Cria mensagem (texto, imagem, arquivo, lista ou botões) do nó e enfileira envio.
     Retorna a mensagem criada ou None.
+
+    Compatível com Evolution API e Meta Cloud API:
+    - message: texto puro (ambos).
+    - image/file: envio via send_media do provider (Evolution ou Meta); Meta exige
+      media_url acessível publicamente (GET pela Meta); Evolution aceita URL interna.
+    - list/buttons: interactive_list / interactive_reply_buttons (ambos).
     """
     from apps.chat.tasks import send_message_to_evolution
 
-    if conversation.tenant_id != node.flow.tenant_id:
+    if not conversation or not node:
+        logger.warning("[FLOW] conversation ou node ausente")
+        return None
+    try:
+        flow_tenant_id = node.flow.tenant_id
+    except Exception:
+        logger.warning("[FLOW] Nó sem fluxo acessível (flow_id=%s)", getattr(node, "flow_id", None))
+        return None
+    if not conversation.tenant_id or conversation.tenant_id != flow_tenant_id:
         logger.warning("[FLOW] Tenant da conversa não coincide com o do fluxo: conversation=%s node.flow=%s", conversation.id, node.flow_id)
         return None
 
-    if node.node_type == FlowNode.NODE_TYPE_LIST:
+    content = ""
+    metadata = {"flow_node_id": str(node.id), "flow_id": str(node.flow_id)}
+
+    if node.node_type == FlowNode.NODE_TYPE_MESSAGE:
+        content = (node.body_text or "").strip()
+        if not content:
+            logger.warning("[FLOW] Nó mensagem sem texto: %s", node.id)
+            return None
+    elif node.node_type == FlowNode.NODE_TYPE_IMAGE:
+        media_url = (node.media_url or "").strip()[:1024]
+        if not media_url:
+            logger.warning("[FLOW] Nó imagem sem media_url: %s", node.id)
+            return None
+        content = (node.body_text or "").strip()[:1024]
+        metadata["flow_media_url"] = media_url
+        metadata["flow_media_type"] = "image"
+    elif node.node_type == FlowNode.NODE_TYPE_FILE:
+        media_url = (node.media_url or "").strip()[:1024]
+        if not media_url:
+            logger.warning("[FLOW] Nó arquivo sem media_url: %s", node.id)
+            return None
+        content = (node.body_text or "").strip()[:1024]
+        metadata["flow_media_url"] = media_url
+        metadata["flow_media_type"] = "document"
+    elif node.node_type == FlowNode.NODE_TYPE_LIST:
         payload = _build_interactive_list_payload(node)
         if not payload.get("body_text") or not payload.get("button_text") or not payload.get("sections"):
             logger.warning("[FLOW] Nó lista inválido (body/button/sections): %s", node.id)
             return None
         content = payload["body_text"]
-        metadata = {"interactive_list": payload, "flow_node_id": str(node.id), "flow_id": str(node.flow_id)}
+        metadata["interactive_list"] = payload
     elif node.node_type == FlowNode.NODE_TYPE_BUTTONS:
         payload = _build_interactive_buttons_payload(node)
         if not payload.get("body_text") or not payload.get("buttons"):
             logger.warning("[FLOW] Nó botões inválido (body/buttons): %s", node.id)
             return None
         content = payload["body_text"]
-        metadata = {"interactive_reply_buttons": payload, "flow_node_id": str(node.id), "flow_id": str(node.flow_id)}
+        metadata["interactive_reply_buttons"] = payload
     else:
         logger.warning("[FLOW] Tipo de nó desconhecido: %s", node.node_type)
         return None
@@ -256,17 +301,26 @@ def try_send_flow_start(conversation: Conversation) -> bool:
         logger.warning("[FLOW] Fluxo sem nó inicial: %s", flow.id)
         return False
 
-    message = send_flow_node(conversation, start_node)
-    if not message:
-        return False
-
+    # Criar estado primeiro (evita race: dois requests não enviam o nó inicial duas vezes)
     try:
-        ConversationFlowState.objects.get_or_create(
+        state, created = ConversationFlowState.objects.get_or_create(
             conversation_id=conversation.id,
             defaults={"flow_id": flow.id, "current_node_id": start_node.id},
         )
     except Exception as e:
         logger.exception("[FLOW] Erro ao criar ConversationFlowState: %s", e)
+        return False
+
+    if not created:
+        return False  # Já estava em fluxo (outro request criou o estado)
+
+    message = send_flow_node(conversation, start_node)
+    if not message:
+        try:
+            state.delete()
+        except Exception:
+            pass
+        logger.warning("[FLOW] Falha ao enfileirar nó inicial; estado removido conversation=%s", conversation.id)
         return False
 
     logger.info("[FLOW] Fluxo iniciado conversation=%s flow=%s", conversation.id, flow.name)
