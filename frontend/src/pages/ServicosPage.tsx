@@ -5,11 +5,15 @@ import {
   Area,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from 'recharts'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -144,8 +148,6 @@ interface RabbitMQOverview {
   warnings: string[]
   /** Filas não encontradas (404); opcionais como campaigns.dlq não entram aqui */
   warnings_queues_not_found?: string[]
-  /** Filas com canal fechado ou outro erro de conexão */
-  warnings_channel_errors?: string[]
 }
 
 interface PostgresOverview {
@@ -163,6 +165,10 @@ interface PostgresOverview {
   }[]
   peak_24h_connections?: number | null
   peak_24h_size_bytes?: number | null
+  /** Espaço total no disco (data_directory); null se banco remoto */
+  disk_total_bytes?: number | null
+  /** Espaço livre no disco; null se banco remoto */
+  disk_free_bytes?: number | null
 }
 
 type TabId = 'proxy' | 'redis' | 'rabbitmq' | 'postgres'
@@ -1256,18 +1262,8 @@ export default function ServicosPage() {
                     </p>
                   </div>
                 )}
-                {(rabbitmqOverview.warnings_channel_errors?.length ?? 0) > 0 && (
-                  <div className="rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-4">
-                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Erro de canal/conexão</p>
-                    <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-                      {rabbitmqOverview.warnings_channel_errors!.length} fila(s) com canal fechado ou erro:{' '}
-                      {rabbitmqOverview.warnings_channel_errors!.join(', ')}
-                    </p>
-                  </div>
-                )}
                 {(rabbitmqOverview.warnings?.length ?? 0) > 0 &&
-                  (rabbitmqOverview.warnings_queues_not_found?.length ?? 0) === 0 &&
-                  (rabbitmqOverview.warnings_channel_errors?.length ?? 0) === 0 && (
+                  (rabbitmqOverview.warnings_queues_not_found?.length ?? 0) === 0 && (
                     <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
                       <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
                       <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
@@ -1340,11 +1336,72 @@ export default function ServicosPage() {
                     </p>
                   </div>
                 </div>
+                {postgresOverview.config_ok && postgresOverview.database_size_bytes != null && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Uso total x espaço disponível (disco)</p>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={(() => {
+                              const used = postgresOverview.database_size_bytes ?? 0
+                              const free = postgresOverview.disk_free_bytes ?? 0
+                              if (free > 0) {
+                                return [
+                                  { name: 'Uso do banco', value: used, color: '#10b981' },
+                                  { name: 'Espaço disponível', value: free, color: '#0ea5e9' },
+                                ]
+                              }
+                              return [{ name: 'Uso do banco', value: used || 1, color: '#10b981' }]
+                            })()}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={48}
+                            outerRadius={80}
+                            paddingAngle={2}
+                            dataKey="value"
+                            label={({ name, value }) =>
+                              `${name}: ${value >= 1024 ** 3 ? `${(value / 1024 ** 3).toFixed(2)} GB` : value >= 1024 ** 2 ? `${(value / 1024 ** 2).toFixed(2)} MB` : `${(value / 1024).toFixed(1)} KB`}`
+                            }
+                          >
+                            {(() => {
+                              const used = postgresOverview.database_size_bytes ?? 0
+                              const free = postgresOverview.disk_free_bytes ?? 0
+                              const d = free > 0
+                                ? [
+                                    { name: 'Uso do banco', value: used, color: '#10b981' },
+                                    { name: 'Espaço disponível', value: free, color: '#0ea5e9' },
+                                  ]
+                                : [{ name: 'Uso do banco', value: used || 1, color: '#10b981' }]
+                              return d.map((entry, i) => <Cell key={i} fill={entry.color} />)
+                            })()}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value: number) =>
+                              value >= 1024 ** 3
+                                ? `${(value / 1024 ** 3).toFixed(2)} GB`
+                                : value >= 1024 ** 2
+                                  ? `${(value / 1024 ** 2).toFixed(2)} MB`
+                                  : `${(value / 1024).toFixed(1)} KB`
+                            }
+                            contentStyle={{ borderRadius: 8 }}
+                          />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    {(postgresOverview.disk_free_bytes == null || postgresOverview.disk_free_bytes === 0) && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        Espaço disponível no disco não disponível (ex.: banco em servidor remoto).
+                      </p>
+                    )}
+                  </div>
+                )}
                 {(postgresOverview.usage_history?.length ?? 0) > 0 && (
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-6">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Indicadores ao longo do tempo</p>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">Conexões ao longo do tempo</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 -mt-4">
-                      Amostras a cada 10 min; últimos 7 dias.
+                      Amostras a cada 10 min; qtde de conexões armazenada por 90 dias.
                     </p>
                     <div>
                       <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Conexões x data/hora (horários de pico)</p>
@@ -1383,53 +1440,6 @@ export default function ServicosPage() {
                               name="Conexões"
                               stroke="#0ea5e9"
                               fill="url(#pg-conn-grad)"
-                              strokeWidth={2}
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Uso de espaço (tamanho do banco) x data/hora</p>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart
-                            data={postgresOverview.usage_history!.map((s) => ({
-                              ...s,
-                              time: new Date(s.sampled_at).toLocaleString('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              }),
-                              size_mb: Math.round((s.database_size_bytes / 1024 / 1024) * 100) / 100,
-                            }))}
-                            margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                          >
-                            <defs>
-                              <linearGradient id="pg-size-grad" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
-                                <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                            <XAxis dataKey="time" tick={{ fontSize: 10 }} />
-                            <YAxis
-                              tick={{ fontSize: 10 }}
-                              tickFormatter={(v) => `${v} MB`}
-                              label={{ value: 'MB', angle: -90, position: 'insideLeft', style: { fontSize: 10 } }}
-                            />
-                            <Tooltip
-                              formatter={(value: number) => [`${value} MB`, 'Tamanho (MB)']}
-                              labelFormatter={(label) => label}
-                              contentStyle={{ borderRadius: 8 }}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="size_mb"
-                              name="Tamanho (MB)"
-                              stroke="#10b981"
-                              fill="url(#pg-size-grad)"
                               strokeWidth={2}
                             />
                           </AreaChart>

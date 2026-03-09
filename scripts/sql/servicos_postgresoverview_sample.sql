@@ -1,6 +1,6 @@
 -- Tabela de amostras de overview PostgreSQL para gráfico (conexões e tamanho do banco)
 -- Rodar manualmente no PostgreSQL (ex.: psql -U postgres -d seu_banco -f scripts/sql/servicos_postgresoverview_sample.sql).
--- Após rodar: o app servicos grava amostras ao carregar o overview PostgreSQL (a cada ~10 min). Retenção 7 dias.
+-- Após rodar: o app servicos grava amostras ao carregar o overview PostgreSQL (a cada ~10 min). Retenção 90 dias (qtde conexões).
 --
 -- Exemplo: psql -U postgres -d seu_banco -f scripts/sql/servicos_postgresoverview_sample.sql
 

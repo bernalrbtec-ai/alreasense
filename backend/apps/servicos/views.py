@@ -27,8 +27,10 @@ STALE_RUNNING_LOGS_MINUTES = 15
 REDIS_PERSIST_REWRITE_RATE_LIMIT_SECONDS = 60
 # Intervalo mínimo (segundos) entre duas amostras de uso Redis para o gráfico
 REDIS_USAGE_SAMPLE_INTERVAL_SECONDS = 600  # 10 min
-# Quantos dias de amostras manter no banco
+# Quantos dias de amostras manter no banco (Redis)
 REDIS_USAGE_SAMPLE_RETENTION_DAYS = 7
+# Retenção das amostras de conexões/tamanho PostgreSQL (90 dias)
+POSTGRES_USAGE_SAMPLE_RETENTION_DAYS = 90
 
 
 def mark_stale_redis_cleanup_logs(minutes: int = STALE_RUNNING_LOGS_MINUTES) -> int:
@@ -590,7 +592,6 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
             "queues": [],
             "warnings": [],
             "warnings_queues_not_found": [],
-            "warnings_channel_errors": [],
         }
     try:
         import pika
@@ -610,7 +611,6 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
             "queues": [],
             "warnings": [],
             "warnings_queues_not_found": [],
-            "warnings_channel_errors": [],
         }
     consumer_running = False
     active_threads = 0
@@ -624,13 +624,12 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
         pass
     queues = []
     queues_not_found: list[str] = []
-    channel_errors: list[str] = []
     for qname in RABBITMQ_KNOWN_QUEUES:
         try:
             result = channel.queue_declare(queue=qname, passive=True)
             frame = getattr(result, "method", result) if result else None
             if frame is None:
-                channel_errors.append(qname)
+                queues.append({"name": qname, "messages_ready": 0, "consumers": 0})
                 continue
             queues.append({
                 "name": qname,
@@ -640,12 +639,9 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
         except Exception as e:
             err_str = str(e)
             is_not_found = "NOT_FOUND" in err_str or "no queue" in err_str.lower()
-            if is_not_found and qname in RABBITMQ_OPTIONAL_QUEUES:
-                continue
-            if is_not_found:
+            if is_not_found and qname not in RABBITMQ_OPTIONAL_QUEUES:
                 queues_not_found.append(qname)
-            else:
-                channel_errors.append(qname)
+            queues.append({"name": qname, "messages_ready": 0, "consumers": 0})
     try:
         conn.close()
     except Exception:
@@ -655,10 +651,6 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
         n = len(queues_not_found)
         names = ", ".join(queues_not_found)
         warnings_summary.append(f"{n} fila(s) não encontrada(s): {names}")
-    if channel_errors:
-        n = len(channel_errors)
-        names = ", ".join(channel_errors)
-        warnings_summary.append(f"{n} fila(s) com canal fechado ou erro: {names}")
     return {
         "config_ok": True,
         "error": None,
@@ -668,7 +660,6 @@ def _overview_rabbitmq_info() -> dict[str, Any]:
         "queues": queues,
         "warnings": warnings_summary,
         "warnings_queues_not_found": queues_not_found,
-        "warnings_channel_errors": channel_errors,
     }
 
 
@@ -698,6 +689,8 @@ def _overview_postgres_info() -> dict[str, Any]:
             "connection_count": None,
             "database_size_bytes": None,
             "database_size_human": None,
+            "disk_total_bytes": None,
+            "disk_free_bytes": None,
             "top_tables": [],
             "warnings": [],
         }
@@ -744,12 +737,27 @@ def _overview_postgres_info() -> dict[str, Any]:
                 top_tables.append({"name": row[0], "size_bytes": row[1]})
     except Exception as e:
         pass
+    disk_total_bytes = None
+    disk_free_bytes = None
+    try:
+        import shutil
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW data_directory")
+            row = cursor.fetchone()
+            if row and row[0]:
+                usage = shutil.disk_usage(row[0])
+                disk_total_bytes = usage.total
+                disk_free_bytes = usage.free
+    except Exception:
+        pass
     return {
         "config_ok": True,
         "error": None,
         "connection_count": connection_count,
         "database_size_bytes": database_size_bytes,
         "database_size_human": database_size_human,
+        "disk_total_bytes": disk_total_bytes,
+        "disk_free_bytes": disk_free_bytes,
         "top_tables": top_tables,
         "warnings": [],
     }
@@ -779,7 +787,7 @@ def postgres_overview(request):
                     connection_count=data["connection_count"],
                     database_size_bytes=data["database_size_bytes"],
                 )
-            cutoff = now - timezone.timedelta(days=REDIS_USAGE_SAMPLE_RETENTION_DAYS)
+            cutoff = now - timezone.timedelta(days=POSTGRES_USAGE_SAMPLE_RETENTION_DAYS)
             try:
                 PostgresOverviewSample.objects.filter(sampled_at__lt=cutoff).delete()
             except Exception as cleanup_err:
