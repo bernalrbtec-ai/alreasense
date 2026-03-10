@@ -302,11 +302,21 @@ class TenantViewSet(viewsets.ModelViewSet):
             'ui_access': tenant.ui_access,
         }
         
-        # Limites por produto
-        for product_slug in ['flow', 'sense', 'api_public']:
+        # Limites por produto (flow = apenas campanhas; instâncias = apenas chat)
+        for product_slug in ['flow', 'chat', 'sense', 'api_public']:
             if tenant.has_product(product_slug):
-                if product_slug == 'flow':
+                if product_slug == 'chat':
                     limits_info['products'][product_slug] = tenant.get_instance_limit_info()
+                elif product_slug == 'flow':
+                    # Flow = apenas campanhas (sem limite de instâncias)
+                    limits_info['products'][product_slug] = {
+                        'has_access': True,
+                        'current': 0,
+                        'limit': None,
+                        'unlimited': True,
+                        'can_create': True,
+                        'message': 'Produto Flow: apenas campanhas'
+                    }
                 elif product_slug == 'sense':
                     # Limites do Sense (análises)
                     limit = tenant.get_product_limit(product_slug, 'analyses')

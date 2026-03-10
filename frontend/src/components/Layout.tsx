@@ -41,6 +41,12 @@ const productMenuItems = {
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
   ],
+  chat: [
+    { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'chat' },
+    { name: 'Respostas Rápidas', href: '/quick-replies', icon: Zap, requiredProduct: 'chat' },
+    { name: 'Agenda', href: '/agenda', icon: Calendar, requiredProduct: 'chat' },
+    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'chat' },
+  ],
   workflow: [
     { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'workflow' },
     { name: 'Respostas Rápidas', href: '/quick-replies', icon: Zap, requiredProduct: 'workflow' },
@@ -181,13 +187,19 @@ export default function Layout() {
             return access.canAccess
           }
           
-          // Para Chat, usar canAccessChat (verifica role OU workflow)
+          // Para Chat, usar canAccessChat (verifica role OU workflow OU chat)
           if (item.href === '/chat') {
             const access = canAccessChat()
             return access.canAccess
           }
           
-          // Para Contatos, usar canAccessContacts (verifica role OU flow)
+          // Para Respostas Rápidas, parte do produto Chat (e workflow)
+          if (item.href === '/quick-replies') {
+            const access = canAccessChat()
+            return access.canAccess
+          }
+          
+          // Para Contatos, usar canAccessContacts (verifica role OU flow OU chat)
           if (item.href === '/contacts') {
             const access = canAccessContacts()
             return access.canAccess

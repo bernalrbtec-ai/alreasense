@@ -1968,35 +1968,36 @@ export default function ConfigurationsPage() {
             ) : null
           })()}
 
-          {/* Limites do Plano */}
-          {limits && (
+          {/* Limites do Plano: exibir somente quando o plano tem produto Chat (único que define limite de instâncias) */}
+          {limits?.plan && limits?.products?.chat?.has_access && (
             <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Limites do Plano</h3>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
                   <Crown className="h-4 w-4 mr-1" />
-                  {limits.plan?.name || 'Sem plano'}
+                  {limits.plan.name}
                 </div>
               </div>
-              
-              {limits.products?.flow && (
-                <div className="bg-blue-50 dark:bg-blue-900/25 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium text-blue-900 dark:text-blue-100">ALREA Flow (WhatsApp)</h4>
-                      <p className="text-sm text-blue-700 dark:text-blue-200">
-                        {limits.products.flow.current_usage || 0} de {limits.products.flow.limit || 0} instâncias
-                      </p>
+              <div className="bg-blue-50 dark:bg-blue-900/25 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-blue-900 dark:text-blue-100">Instâncias WhatsApp (ALREA Chat)</h4>
+                    <p className="text-sm text-blue-700 dark:text-blue-200">
+                      {limits.products.chat.unlimited
+                        ? `${limits.products.chat.current_usage ?? 0} instâncias (ilimitado)`
+                        : `${limits.products.chat.current_usage ?? 0} de ${limits.products.chat.limit ?? 0} instâncias`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                      {limits.products.chat.unlimited
+                        ? `${limits.products.chat.current_usage ?? 0} / ∞`
+                        : `${limits.products.chat.current_usage ?? 0}/${limits.products.chat.limit ?? 0}`}
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                        {limits.products.flow.current_usage || 0}/{limits.products.flow.limit || 0}
-                      </div>
-                      <div className="text-sm text-blue-700 dark:text-blue-200">instâncias</div>
-                    </div>
+                    <div className="text-sm text-blue-700 dark:text-blue-200">instâncias</div>
                   </div>
                 </div>
-              )}
+              </div>
             </Card>
           )}
 
@@ -2016,8 +2017,7 @@ export default function ConfigurationsPage() {
                 </Button>
                 <Button
                   onClick={() => { setInstanceFormError(null); setIsInstanceModalOpen(true) }}
-                  disabled={limits?.products?.flow && 
-                    (limits.products.flow.current_usage || 0) >= (limits.products.flow.limit || 0)}
+                  disabled={limits?.products?.chat?.has_access && limits.products.chat.can_create === false}
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Nova Instância

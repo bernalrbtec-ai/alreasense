@@ -125,13 +125,25 @@ class PlanProduct(models.Model):
     limit_value = models.PositiveIntegerField(
         null=True, 
         blank=True, 
-        help_text="Limite do produto (ex: 5000 análises/mês)"
+        help_text="Limite principal (ex: instâncias WhatsApp)"
     )
     limit_unit = models.CharField(
         max_length=50, 
         null=True, 
         blank=True,
-        help_text="Unidade do limite (ex: 'análises/mês', 'campanhas/mês')"
+        help_text="Unidade do limite (ex: 'instâncias', 'análises/mês')"
+    )
+    # Limite secundário (ex: ALREA Chat = instâncias + usuários)
+    limit_value_secondary = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Limite secundário (ex: número de usuários)"
+    )
+    limit_unit_secondary = models.CharField(
+        max_length=50,
+        null=True,
+        blank=True,
+        help_text="Unidade do limite secundário (ex: 'usuários')"
     )
     
     # Configurações específicas
@@ -152,6 +164,8 @@ class PlanProduct(models.Model):
     def __str__(self):
         status = "Incluído" if self.is_included else "Não incluído"
         limit = f" (limite: {self.limit_value} {self.limit_unit})" if self.limit_value else " (ilimitado)"
+        if self.limit_value_secondary:
+            limit += f", {self.limit_value_secondary} {self.limit_unit_secondary or 'usuários'}"
         return f"{self.plan.name} → {self.product.name}: {status}{limit}"
 
 

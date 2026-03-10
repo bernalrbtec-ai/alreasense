@@ -14,6 +14,14 @@ export interface TenantLimits {
       current: number;
       limit: number | null;
       unlimited: boolean;
+      can_create?: boolean;
+      message: string | null;
+    };
+    chat?: {
+      has_access: boolean;
+      current: number;
+      limit: number | null;
+      unlimited: boolean;
       can_create: boolean;
       message: string | null;
     };
@@ -47,9 +55,8 @@ export const useTenantLimits = () => {
       setLoading(true);
       setError(null);
       const response = await api.get('/tenants/tenants/limits/');
-      console.log('📊 useTenantLimits - Limites recebidos:', response.data);
-      console.log('📊 useTenantLimits - Flow info:', response.data?.products?.flow);
-      setLimits(response.data);
+      const data = response?.data
+      setLimits(data && typeof data === 'object' ? data : null)
     } catch (err: any) {
       console.error('Erro ao buscar limites do tenant:', err);
       setError(err.response?.data?.error || 'Erro ao carregar limites');

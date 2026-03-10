@@ -20,13 +20,17 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class PlanProductSerializer(serializers.ModelSerializer):
-    """Serializer para produtos de um plano"""
+    """Serializer para produtos de um plano (inclui limite secundário ex: usuários para ALREA Chat)"""
     product = ProductSerializer(read_only=True)
     product_id = serializers.UUIDField(write_only=True, required=False)
     
     class Meta:
         model = PlanProduct
-        fields = ['id', 'product', 'product_id', 'is_included', 'limit_value', 'limit_unit']
+        fields = [
+            'id', 'product', 'product_id', 'is_included',
+            'limit_value', 'limit_unit',
+            'limit_value_secondary', 'limit_unit_secondary',
+        ]
 
 
 class PlanSerializer(serializers.ModelSerializer):
@@ -48,60 +52,79 @@ class PlanSerializer(serializers.ModelSerializer):
 
 
 class PlanCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer para criar/editar planos com produtos"""
+    """Serializer para criar/editar planos com produtos. Flow é add-on do Chat: só pode ser incluído se Chat estiver no plano."""
     plan_products = PlanProductSerializer(many=True, required=False)
-    
+
     class Meta:
         model = Plan
         fields = [
-            'id', 'slug', 'name', 'description', 'price', 
+            'id', 'slug', 'name', 'description', 'price',
             'is_active', 'sort_order', 'plan_products',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-    
+
+    def _validate_flow_requires_chat(self, plan_products_data):
+        """Flow só pode ser adquirido se o Chat já estiver no plano."""
+        if not plan_products_data:
+            return
+        product_ids = []
+        for p in plan_products_data:
+            pid = p.get('product_id')
+            if not pid and p.get('product'):
+                prod = p['product']
+                pid = getattr(prod, 'id', None) or (prod.get('id') if isinstance(prod, dict) else None)
+            if pid:
+                product_ids.append(pid)
+        if not product_ids:
+            return
+        slugs = set(
+            Product.objects.filter(id__in=product_ids).values_list('slug', flat=True)
+        )
+        if 'flow' in slugs and 'chat' not in slugs:
+            raise serializers.ValidationError({
+                'plan_products': 'O produto ALREA Flow é um add-on do ALREA Chat. Inclua o produto ALREA Chat no plano antes de adicionar o Flow.'
+            })
+
     def create(self, validated_data):
         plan_products_data = validated_data.pop('plan_products', [])
+        self._validate_flow_requires_chat(plan_products_data)
         plan = Plan.objects.create(**validated_data)
-        
+
         for product_data in plan_products_data:
-            product_id = product_data.pop('product_id')
-            PlanProduct.objects.create(
-                plan=plan,
-                product_id=product_id,
-                **product_data
-            )
-        
+            data = dict(product_data)
+            if 'product_id' not in data and data.get('product'):
+                data['product_id'] = getattr(data['product'], 'id', None) or data['product'].get('id')
+            data.pop('product', None)
+            data.pop('id', None)  # não definir PK na criação
+            product_id = data.pop('product_id', None)
+            if product_id:
+                PlanProduct.objects.create(plan=plan, product_id=product_id, **data)
         return plan
     
     def update(self, instance, validated_data):
         plan_products_data = validated_data.pop('plan_products', [])
-        
+        if plan_products_data:
+            self._validate_flow_requires_chat(plan_products_data)
+
         # Atualizar dados do plano
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
         
-        # Atualizar produtos do plano
+        # Atualizar produtos do plano (usa cópia dos dados para não mutar validated_data)
         if plan_products_data:
-            # Remover produtos existentes
             instance.plan_products.all().delete()
-            
-            # Criar novos produtos
             for product_data in plan_products_data:
-                # Se não tem product_id, usar o product.id se existir
-                if 'product_id' not in product_data and 'product' in product_data:
-                    product_data['product_id'] = product_data['product'].id
-                    product_data.pop('product', None)
-                
-                product_id = product_data.pop('product_id', None)
+                data = dict(product_data)
+                if 'product_id' not in data and data.get('product'):
+                    prod = data['product']
+                    data['product_id'] = getattr(prod, 'id', None) or (prod.get('id') if isinstance(prod, dict) else None)
+                data.pop('product', None)
+                data.pop('id', None)  # não reutilizar PK ao recriar
+                product_id = data.pop('product_id', None)
                 if product_id:
-                    PlanProduct.objects.create(
-                        plan=instance,
-                        product_id=product_id,
-                        **product_data
-                    )
-        
+                    PlanProduct.objects.create(plan=instance, product_id=product_id, **data)
         return instance
 
 

@@ -47,7 +47,13 @@ export const useUserAccess = () => {
   }
 
   const canAccessFlow = (): ProductAccess => {
+    // Produto Flow = apenas campanhas.
     return hasProductAccess('flow')
+  }
+
+  const canAccessInstances = (): ProductAccess => {
+    // Instâncias WhatsApp: apenas produto chat (flow = apenas campanhas)
+    return hasProductAccess('chat')
   }
 
   const canAccessSense = (): ProductAccess => {
@@ -55,23 +61,15 @@ export const useUserAccess = () => {
   }
 
   const canAccessContacts = (): ProductAccess => {
-    // Contatos podem ser acessados se:
-    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
-    // 2. Tenant tem produto flow ativo
-    
-    // Verificar acesso ao chat primeiro - verificar role diretamente também
+    // Contatos: role OU produto chat (flow = apenas campanhas)
     const userRole = user?.role
     const userIsAdmin = user?.is_admin === true || userRole === 'admin' || user?.is_superuser === true
     const userIsGerente = user?.is_gerente === true || userRole === 'gerente'
     const userIsAgente = user?.is_agente === true || userRole === 'agente'
-    
-    // Admin/Gerente/Agente sempre têm acesso (contatos fazem parte do chat/agenda)
     if (userIsAdmin || userIsGerente || userIsAgente) {
       return { canAccess: true, isActive: true }
     }
-    
-    // Se não tem acesso ao chat, verificar produto flow
-    return canAccessFlow()
+    return hasProductAccess('chat')
   }
 
   const canAccessApiPublic = (): ProductAccess => {
@@ -79,8 +77,8 @@ export const useUserAccess = () => {
   }
 
   const canAccessCampaigns = (): ProductAccess => {
-    // Campanhas fazem parte do produto Flow
-    return canAccessFlow()
+    // Campanhas: apenas produto Flow
+    return hasProductAccess('flow')
   }
 
   const canAccessWorkflow = (): ProductAccess => {
@@ -89,73 +87,36 @@ export const useUserAccess = () => {
   }
 
   const canAccessChat = (): ProductAccess => {
-    // Chat pode ser acessado se:
-    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
-    // 2. Tenant tem produto workflow ativo
-    
-    // ✅ FIX CRÍTICO: Admin sempre tem acesso, verificar PRIMEIRO
+    // Chat: role (admin/gerente/agente) OU produto workflow OU produto chat (ALREA Chat unifica chat, agenda, contatos)
     const userRole = user?.role
     const userIsAdmin = user?.is_admin === true || userRole === 'admin' || user?.is_superuser === true
     const userIsGerente = user?.is_gerente === true || userRole === 'gerente'
     const userIsAgente = user?.is_agente === true || userRole === 'agente'
-    
-    // ✅ DEBUG: Log para entender o problema
-    console.log('🔍 [canAccessChat] Verificando acesso:', {
-      userRole,
-      userIsAdmin,
-      userIsGerente,
-      userIsAgente,
-      user_is_admin: user?.is_admin,
-      user_is_superuser: user?.is_superuser,
-      can_access_chat,
-      isAdmin,
-      isGerente,
-      isAgente,
-      user: user ? { id: user.id, email: user.email, role: user.role, is_admin: user.is_admin, is_superuser: user.is_superuser } : null
-    })
-    
-    // ✅ CRÍTICO: Admin sempre tem acesso - verificar ANTES de tudo
-    if (userIsAdmin) {
-      console.log('✅ [canAccessChat] Admin detectado - acesso garantido')
+    if (userIsAdmin || userIsGerente || userIsAgente) {
       return { canAccess: true, isActive: true }
     }
-    
-    // Verificar outros roles
-    const hasChatAccess = userIsGerente || userIsAgente || 
-                          can_access_chat || isGerente || isAgente
-    
-    if (hasChatAccess) {
-      console.log('✅ [canAccessChat] Acesso permitido via role/permissão')
-      return { canAccess: true, isActive: true }
-    }
-    
-    // Se não tem acesso ao chat, verificar produto workflow
-    const workflowAccess = canAccessWorkflow()
-    console.log('🔍 [canAccessChat] Verificando produto workflow:', workflowAccess)
-    return workflowAccess
+    const chatAccess = hasProductAccess('chat')
+    if (chatAccess.canAccess) return chatAccess
+    return canAccessWorkflow()
   }
 
   const canAccessAgenda = (): ProductAccess => {
-    // Agenda pode ser acessada se:
-    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
-    // 2. Tenant tem produto workflow ativo
-    
-    // Verificar acesso ao chat primeiro - verificar role diretamente também
+    // Agenda: role (admin/gerente/agente) OU produto workflow OU produto chat (ALREA Chat unifica chat, agenda, contatos)
     const userRole = user?.role
-    const hasChatAccess = can_access_chat || isAdmin || isGerente || isAgente || 
+    const hasChatAccess = can_access_chat || isAdmin || isGerente || isAgente ||
                           userRole === 'admin' || userRole === 'gerente' || userRole === 'agente'
-    
     if (hasChatAccess) {
       return { canAccess: true, isActive: true }
     }
-    
-    // Se não tem acesso ao chat, verificar produto workflow
+    const chatAccess = hasProductAccess('chat')
+    if (chatAccess.canAccess) return chatAccess
     return canAccessWorkflow()
   }
 
   return {
     hasProductAccess,
     canAccessFlow,
+    canAccessInstances,
     canAccessSense,
     canAccessContacts,
     canAccessApiPublic,

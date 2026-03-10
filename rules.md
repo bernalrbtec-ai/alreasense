@@ -12,10 +12,11 @@
 
 ### Produtos Ativos
 
-1. **Flow** - Sistema de Campanhas WhatsApp + Chat + Contatos
-2. **Sense** - Análise de Sentimento com IA (legado)
-3. **Notifications** - Notificações do Sistema
-4. **API Pública** - Integração externa
+1. **Flow** - Sistema de Campanhas WhatsApp
+2. **Chat** - Atendimento completo: Chat, Respostas rápidas, Agenda, Contatos e Instâncias WhatsApp (limites de instâncias e usuários)
+3. **Sense** - Análise de Sentimento com IA (legado)
+4. **Notifications** - Notificações do Sistema
+5. **API Pública** - Integração externa
 
 ### Stack Tecnológico ATUAL
 

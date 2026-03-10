@@ -24,8 +24,8 @@ print(f"\n👤 Usuário: {user.email}")
 print(f"🏢 Tenant: {tenant.name}")
 print(f"🆔 Tenant ID: {tenant.id}")
 
-print(f"\n📊 Métodos do Tenant:")
-print(f"   get_current_usage('flow', 'instances'): {tenant.get_current_usage('flow', 'instances')}")
+print(f"\n📊 Métodos do Tenant (instâncias = produto chat):")
+print(f"   get_current_usage('chat', 'instances'): {tenant.get_current_usage('chat', 'instances')}")
 print(f"   get_instance_limit_info(): {tenant.get_instance_limit_info()}")
 
 print(f"\n📱 Instâncias WhatsApp diretas:")

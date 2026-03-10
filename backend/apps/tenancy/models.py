@@ -138,52 +138,46 @@ class Tenant(models.Model):
         return product_slug in self.active_product_slugs
     
     def can_access_product(self, product_slug):
-        """Verifica se pode acessar o produto (incluindo verificação de UI)"""
-        if not self.has_product(product_slug):
+        """Verifica se pode acessar o produto (incluindo verificação de UI).
+        ALREA Chat unifica: chat, respostas rápidas, agenda e contatos — ter produto 'chat' concede acesso a 'contacts' e 'agenda'."""
+        has_access = self.has_product(product_slug) or (
+            product_slug in ('contacts', 'agenda') and self.has_product('chat')
+        )
+        if not has_access:
             return False
-        
-        # Verificar se o produto requer UI e o tenant tem acesso
+        effective_slug = 'chat' if product_slug in ('contacts', 'agenda') and self.has_product('chat') and not self.has_product(product_slug) else product_slug
         try:
             from apps.billing.models import Product
-            product = Product.objects.get(slug=product_slug)
+            product = Product.objects.get(slug=effective_slug)
             if product.requires_ui_access and not self.ui_access:
                 return False
         except Product.DoesNotExist:
             return False
-        
         return True
     
     def get_product_limit(self, product_slug, limit_type='instances'):
-        """Obtém o limite de um produto específico para o tenant"""
+        """Obtém o limite de um produto específico para o tenant.
+        limit_type: 'instances', 'campaigns', 'analyses', 'users' (users usa limit_value_secondary do PlanProduct)."""
         if not self.current_plan:
             return None
-        
+        from apps.billing.models import PlanProduct
         try:
-            from apps.billing.models import PlanProduct
             plan_product = PlanProduct.objects.get(
                 plan=self.current_plan,
                 product__slug=product_slug,
                 is_included=True
             )
-            
-            # Se não tem limite definido, é ilimitado
-            if not plan_product.limit_value:
-                return None
-            
-            # Retornar o limite baseado no tipo
-            if limit_type == 'instances':
+            if limit_type == 'users':
+                return getattr(plan_product, 'limit_value_secondary', None)
+            if limit_type in ('instances', 'campaigns', 'analyses'):
                 return plan_product.limit_value
-            elif limit_type == 'campaigns':
-                return plan_product.limit_value
-            elif limit_type == 'analyses':
-                return plan_product.limit_value
-            
             return plan_product.limit_value
-        except:
+        except PlanProduct.DoesNotExist:
             return None
     
     def get_current_usage(self, product_slug, usage_type='instances'):
-        """Obtém o uso atual de um produto específico"""
+        """Obtém o uso atual de um produto específico.
+        usage_type: 'instances', 'campaigns', 'analyses', 'users'."""
         if usage_type == 'instances':
             from apps.notifications.models import WhatsAppInstance
             return WhatsAppInstance.objects.filter(tenant=self).count()
@@ -193,38 +187,40 @@ class Tenant(models.Model):
         elif usage_type == 'analyses':
             from apps.chat_messages.models import ChatMessage
             return ChatMessage.objects.filter(tenant=self).count()
-        
+        elif usage_type == 'users':
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            return User.objects.filter(tenant=self).count()
         return 0
     
     def can_create_instance(self):
-        """Verifica se pode criar nova instância WhatsApp"""
-        if not self.has_product('flow'):
-            return False, 'Produto ALREA Flow não disponível no seu plano'
-        
-        limit = self.get_product_limit('flow', 'instances')
+        """Verifica se pode criar nova instância WhatsApp.
+        Chat é o produto 'pai': os limites (instâncias e usuários) vêm sempre do Chat. Flow é add-on (apenas campanhas)."""
+        if not self.has_product('chat'):
+            return False, 'Produto ALREA Chat não disponível no seu plano (instâncias WhatsApp)'
+        product_slug = 'chat'
+        limit = self.get_product_limit(product_slug, 'instances')
         if limit is None:  # Ilimitado
             return True, None
-        
-        current = self.get_current_usage('flow', 'instances')
+        current = self.get_current_usage(product_slug, 'instances')
         if current >= limit:
             return False, f'Limite de {limit} instâncias atingido. Upgrade seu plano para mais instâncias.'
-        
         return True, None
-    
+
     def get_instance_limit_info(self):
-        """Retorna informações sobre limite de instâncias"""
-        if not self.has_product('flow'):
+        """Retorna informações sobre limite de instâncias.
+        Os limites vêm do produto Chat (pai); Flow não define limite de instâncias."""
+        if not self.has_product('chat'):
             return {
                 'has_access': False,
                 'current': 0,
                 'limit': 0,
                 'unlimited': False,
-                'message': 'Produto ALREA Flow não disponível no seu plano'
+                'message': 'Produto ALREA Chat não disponível no seu plano (instâncias WhatsApp)'
             }
-        
-        limit = self.get_product_limit('flow', 'instances')
-        current = self.get_current_usage('flow', 'instances')
-        
+        product_slug = 'chat'
+        limit = self.get_product_limit(product_slug, 'instances')
+        current = self.get_current_usage(product_slug, 'instances')
         return {
             'has_access': True,
             'current': current,
@@ -242,7 +238,7 @@ class Tenant(models.Model):
                 is_active=True
             )
             return tenant_product.api_key
-        except:
+        except Exception:
             return None
     
     # Métodos de compatibilidade (para não quebrar código existente)

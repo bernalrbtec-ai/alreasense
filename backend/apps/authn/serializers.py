@@ -289,7 +289,22 @@ class UserCreateSerializer(serializers.ModelSerializer):
         department_ids = validated_data.pop('department_ids', [])
         
         # Get tenant from context
-        tenant = self.context['request'].user.tenant
+        tenant = self.context.get('request') and self.context['request'].user.tenant
+        if not tenant:
+            raise serializers.ValidationError({'detail': 'Tenant não encontrado. Não é possível criar usuário.'})
+
+        # Limite de usuários (ALREA Chat): verificar se pode adicionar mais um
+        if tenant.has_product('chat'):
+            limit = tenant.get_product_limit('chat', 'users')
+            if limit is not None:
+                current = tenant.get_current_usage('chat', 'users')
+                if current >= limit:
+                    raise serializers.ValidationError({
+                        'detail': (
+                            f'Limite de usuários do plano atingido ({limit} usuários). '
+                            'Entre em contato para alterar seu plano.'
+                        )
+                    })
         
         # Ensure username is set to email
         if not validated_data.get('username'):

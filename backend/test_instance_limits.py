@@ -25,14 +25,14 @@ print(f"\n👤 Usuário: {user.email}")
 print(f"🏢 Tenant: {tenant.name}")
 print(f"📋 Plano: {tenant.current_plan.name if tenant.current_plan else 'Nenhum'}")
 
-print(f"\n🔍 Verificando acesso ao Flow:")
-has_flow = tenant.has_product('flow')
-print(f"   Tem acesso ao Flow: {has_flow}")
+print(f"\n🔍 Verificando acesso a instâncias (produto Chat):")
+has_chat = tenant.has_product('chat')
+print(f"   Tem acesso ao Chat (instâncias): {has_chat}")
 
-if has_flow:
-    print(f"\n📊 Limites do Flow:")
-    limit = tenant.get_product_limit('flow', 'instances')
-    current = tenant.get_current_usage('flow', 'instances')
+if has_chat:
+    print(f"\n📊 Limites de instâncias (ALREA Chat):")
+    limit = tenant.get_product_limit('chat', 'instances')
+    current = tenant.get_current_usage('chat', 'instances')
     print(f"   Limite: {limit}")
     print(f"   Uso atual: {current}")
     print(f"   Pode criar: {current < limit if limit else True}")

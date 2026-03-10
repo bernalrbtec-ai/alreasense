@@ -597,7 +597,8 @@ api.defaults.headers.common['Authorization'] = `Bearer ${token}`
 
 ## 📦 PRODUTOS ATIVOS
 
-- Flow (Campanhas + Chat + Contatos)
+- Flow (Campanhas)
+- Chat (Chat, Respostas rápidas, Agenda, Contatos e Instâncias WhatsApp; limites de instâncias e usuários)
 - Sense (IA - legado)
 - Notifications
 - API Pública

@@ -18,6 +18,7 @@ Ordem de aplicação deve respeitar as dependências entre apps (ver [MIGRATIONS
 | chat    | 0017_flow_schema       | [chat/0017_flow_schema.up.sql](chat/0017_flow_schema.up.sql) | [chat/0017_flow_schema.down.sql](chat/0017_flow_schema.down.sql) |
 | chat    | 0018_flow_node_media_url (canvas) | [chat/0018_flow_node_media_url.up.sql](chat/0018_flow_node_media_url.up.sql) | — (opcional: remover coluna manualmente) |
 | billing | 0003_billing_api_initial | [billing/0003_billing_api_initial.up.sql](billing/0003_billing_api_initial.up.sql) | — (noop) |
+| billing | 0004_plan_product_limit_secondary | [billing/0004_plan_product_limit_secondary.up.sql](billing/0004_plan_product_limit_secondary.up.sql) | [billing/0004_plan_product_limit_secondary.down.sql](billing/0004_plan_product_limit_secondary.down.sql) |
 
 ## Como gerar o SQL das demais migrations
 

@@ -23,6 +23,8 @@ interface PlanProduct {
   is_included: boolean
   limit_value: number | null
   limit_unit: string | null
+  limit_value_secondary?: number | null
+  limit_unit_secondary?: string | null
 }
 
 interface Plan {
@@ -194,7 +196,9 @@ export default function PlansPage() {
       product: product,
       is_included: true,
       limit_value: null,
-      limit_unit: null,
+      limit_unit: 'instâncias',
+      limit_value_secondary: null,
+      limit_unit_secondary: null,
     }
 
     setFormData({
@@ -211,6 +215,9 @@ export default function PlansPage() {
   const updateProduct = (index: number, field: keyof PlanProduct, value: any) => {
     const newProducts = [...formData.plan_products]
     newProducts[index] = { ...newProducts[index], [field]: value }
+    if (field === 'limit_value_secondary' && newProducts[index].product?.slug === 'chat') {
+      newProducts[index].limit_unit_secondary = 'usuários'
+    }
     setFormData({ ...formData, plan_products: newProducts })
   }
 
@@ -503,6 +510,34 @@ export default function PlansPage() {
                                   </p>
                                 </div>
                                 
+                                {/* ALREA Chat: limite de usuários */}
+                                {planProduct.product.slug === 'chat' && (
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                      Limite de Usuários
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={planProduct.limit_value_secondary ?? ''}
+                                        onChange={(e) => updateProduct(index, 'limit_value_secondary', e.target.value ? parseInt(e.target.value) : null)}
+                                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                        placeholder="Ex: 10"
+                                      />
+                                      <input
+                                        type="text"
+                                        value="usuários"
+                                        readOnly
+                                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-500 dark:text-gray-400"
+                                      />
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                      Número máximo de usuários do tenant para este plano
+                                    </p>
+                                  </div>
+                                )}
+                                
                                 {/* Limites específicos por produto */}
                                 {planProduct.product.slug === 'sense' && (
                                   <div>
@@ -562,8 +597,8 @@ export default function PlansPage() {
                           </div>
                         ))}
                         
-                        {/* Adicionar Produto */}
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                        {/* Adicionar Produto - Flow só aparece se Chat já estiver no plano (Flow é add-on do Chat) */}
+                        <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-4">
                           <select
                             onChange={(e) => {
                               if (e.target.value) {
@@ -571,17 +606,30 @@ export default function PlansPage() {
                                 e.target.value = ''
                               }
                             }}
-                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                            className="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                           >
                             <option value="">Selecionar produto para adicionar...</option>
-                            {products
-                              .filter(product => !formData.plan_products.some(pp => pp.product_id === product.id))
-                              .map(product => (
+                            {(Array.isArray(products) ? products : [])
+                              .filter((product: Product) => {
+                                const alreadyInPlan = formData.plan_products.some(pp => pp.product_id === product.id)
+                                if (alreadyInPlan) return false
+                                if (product.slug === 'flow') {
+                                  const hasChat = formData.plan_products.some(pp => pp.product?.slug === 'chat')
+                                  return hasChat
+                                }
+                                return true
+                              })
+                              .map((product: Product) => (
                                 <option key={product.id} value={product.id}>
                                   {product.name}
                                 </option>
                               ))}
                           </select>
+                          {Array.isArray(products) && products.some(p => p.slug === 'flow') && !formData.plan_products.some(pp => pp.product?.slug === 'chat') && (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                              O ALREA Flow é um add-on do ALREA Chat. Adicione o Chat ao plano para poder incluir o Flow (campanhas).
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>

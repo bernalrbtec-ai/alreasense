@@ -13,10 +13,12 @@ from .serializers import (
     CampaignNotificationSerializer, NotificationMarkReadSerializer, NotificationReplySerializer
 )
 from apps.common.rate_limiting import rate_limit_by_user
+from apps.billing.decorators import require_product
 
 
+@require_product('flow')
 class CampaignViewSet(viewsets.ModelViewSet):
-    """API para gerenciamento de campanhas"""
+    """API para gerenciamento de campanhas (produto ALREA Flow)."""
     
     serializer_class = CampaignSerializer
     permission_classes = [IsAuthenticated]
@@ -584,8 +586,9 @@ class CampaignViewSet(viewsets.ModelViewSet):
     
 
 
+@require_product('flow')
 class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
-    """API para notificações de campanhas"""
+    """API para notificações de campanhas (produto ALREA Flow)."""
     
     serializer_class = CampaignNotificationSerializer
     permission_classes = [IsAuthenticated]
