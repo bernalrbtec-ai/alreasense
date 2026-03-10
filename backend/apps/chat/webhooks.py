@@ -9,6 +9,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction, IntegrityError
+from django.db.models import Q
+
+from apps.notifications.webhook_resolution import resolve_wa_instance_by_webhook_id
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
@@ -525,82 +528,28 @@ def evolution_webhook(request):
     try:
         data = request.data
         event_type = data.get('event')
-        instance_name = data.get('instance')
+        try:
+            instance_name = str(data.get('instance') or '').strip()
+        except (TypeError, ValueError):
+            instance_name = ''
         
-        # ✅ DEBUG: Log completo do request
         logger.info(f"📥 [WEBHOOK] ====== NOVO EVENTO RECEBIDO ======")
         logger.info(f"📥 [WEBHOOK] Evento: {event_type}")
-        logger.info(f"📥 [WEBHOOK] Instance: {instance_name}")
-        logger.info(f"📥 [WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
-        logger.info(f"📥 [WEBHOOK] Data completo: {data}")
+        logger.info(f"📥 [WEBHOOK] Instance: {instance_name or '(vazio)'}")
         
         if not instance_name:
-            logger.error(f"❌ [WEBHOOK] Instance não fornecido no webhook!")
+            logger.error("❌ [WEBHOOK] Instance não fornecido ou vazio no webhook!")
             return Response(
                 {'error': 'instance é obrigatório'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ✅ CORREÇÃO: Buscar WhatsAppInstance pelo instance_name (UUID) primeiro
-        # O webhook envia UUID (ex: "9afdad84-5411-4754-8f63-2599a6b9142c")
-        # EvolutionConnection.name é nome amigável, não UUID
         wa_instance = None
         connection = None
+        tenant = None
         
         try:
-            # Buscar WhatsAppInstance pelo instance_name (UUID do webhook)
-            # ✅ FIX: Incluir select_related('default_department') para evitar query extra
-            # Aceitar is_active=True sem exigir status='active' (alinhado ao fluxo connections),
-            # para que default_department seja aplicado mesmo com instância connecting/inactive.
-            # Excluir status='error' para não rotear para instância em falha.
-            wa_instance = WhatsAppInstance.objects.select_related(
-                'tenant', 
-                'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
-            ).filter(
-                instance_name=instance_name,
-                is_active=True,
-            ).exclude(status='error').first()
-            
-            # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name
-            if not wa_instance:
-                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada por instance_name={instance_name}, tentando evolution_instance_name")
-                wa_instance = WhatsAppInstance.objects.select_related(
-                    'tenant', 
-                    'default_department'
-                ).filter(
-                    evolution_instance_name=instance_name,
-                    is_active=True,
-                ).exclude(status='error').first()
-            
-            # ✅ FALLBACK 2: Se ainda não encontrou, tentar buscar instância padrão do tenant
-            # Primeiro tentar buscar pelo tenant do connection (se existir)
-            if not wa_instance and connection and connection.tenant:
-                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada por instance_name nem evolution_instance_name")
-                logger.warning(f"   Tentando buscar instância padrão do tenant {connection.tenant.name}...")
-                wa_instance = WhatsAppInstance.objects.select_related(
-                    'tenant', 
-                    'default_department'
-                ).filter(
-                    tenant=connection.tenant,
-                    is_active=True,
-                ).exclude(status='error').first()
-                
-                if wa_instance:
-                    logger.warning(f"⚠️ [WEBHOOK] Usando instância padrão do tenant: {wa_instance.friendly_name}")
-            
-            # ✅ FALLBACK 3: Se ainda não encontrou, buscar qualquer instância ativa (último recurso)
-            if not wa_instance:
-                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada, tentando buscar qualquer instância ativa...")
-                wa_instance = WhatsAppInstance.objects.select_related(
-                    'tenant', 
-                    'default_department'
-                ).filter(
-                    is_active=True,
-                ).exclude(status='error').first()
-                
-                if wa_instance:
-                    logger.warning(f"⚠️ [WEBHOOK] Usando primeira instância ativa encontrada: {wa_instance.friendly_name} (tenant: {wa_instance.tenant.name if wa_instance.tenant else 'None'})")
-            
+            wa_instance = resolve_wa_instance_by_webhook_id(instance_name)
             if wa_instance:
                 logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada: {wa_instance.friendly_name} ({wa_instance.instance_name})")
                 logger.info(f"   📌 Tenant: {wa_instance.tenant.name if wa_instance.tenant else 'Global'}")
@@ -645,22 +594,13 @@ def evolution_webhook(request):
                 )
                 logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada pelo name: {connection.name} - Tenant: {connection.tenant.name}")
             except EvolutionConnection.DoesNotExist:
-                logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão encontrada para instance: {instance_name}")
-                logger.warning(f"   Tentando buscar qualquer conexão ativa...")
-                
-                # Fallback final: buscar qualquer conexão ativa
-                connection = EvolutionConnection.objects.filter(
-                    is_active=True
-                ).select_related('tenant').first()
-                
-                if not connection:
-                    logger.error(f"❌ [WEBHOOK] Nenhuma conexão ativa encontrada!")
-                    return Response(
-                        {'error': 'Conexão não encontrada'},
-                        status=status.HTTP_404_NOT_FOUND
-                    )
-                
-                logger.info(f"✅ [WEBHOOK] Usando conexão ativa encontrada: {connection.name} - Tenant: {connection.tenant.name}")
+                # Não usar "qualquer conexão" em multi-tenant. Retornar 200 para não quebrar a Evolution (evitar retries infinitos).
+                logger.error(
+                    f"❌ [WEBHOOK] Instância não mapeada: instance_name={instance_name}. "
+                    "Cadastre em Configurações > Instâncias WhatsApp o instance_name/evolution_instance_name "
+                    "exatamente como a Evolution envia no webhook (ex.: UUID da instância). Evento não processado."
+                )
+                return Response({'status': 'ok', 'skipped': 'instance_not_found'}, status=status.HTTP_200_OK)
         
         # ✅ Determinar tenant: usar do wa_instance se tiver, senão usar do connection
         if wa_instance and wa_instance.tenant:
@@ -682,11 +622,13 @@ def evolution_webhook(request):
                     logger.info(f"✅ [WEBHOOK] Instância encontrada pelo tenant: {wa_instance.friendly_name}")
                     logger.info(f"   📋 Default Department: {wa_instance.default_department.name if wa_instance.default_department else 'Nenhum (Inbox)'}")
         else:
-            logger.error(f"❌ [WEBHOOK] Nenhum tenant encontrado!")
-            return Response(
-                {'error': 'Tenant não encontrado'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            logger.error("❌ [WEBHOOK] Nenhum tenant encontrado (connection sem tenant); evento não processado.")
+            return Response({'status': 'ok', 'skipped': 'no_tenant'}, status=status.HTTP_200_OK)
+        
+        # ✅ Proteção: não processar sem tenant (evita AttributeError e roteamento errado)
+        if not tenant:
+            logger.error("❌ [WEBHOOK] Tenant não definido; evento não processado.")
+            return Response({'status': 'ok', 'skipped': 'no_tenant'}, status=status.HTTP_200_OK)
         
         # ✅ LOG FINAL: Verificar estado antes de processar
         logger.info(f"📋 [WEBHOOK] Estado final antes de processar:")
