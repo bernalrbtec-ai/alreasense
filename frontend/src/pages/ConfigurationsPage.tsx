@@ -1984,15 +1984,15 @@ export default function ConfigurationsPage() {
                     <h4 className="font-medium text-blue-900 dark:text-blue-100">Instâncias WhatsApp (ALREA Chat)</h4>
                     <p className="text-sm text-blue-700 dark:text-blue-200">
                       {limits.products.chat.unlimited
-                        ? `${limits.products.chat.current_usage ?? 0} instâncias (ilimitado)`
-                        : `${limits.products.chat.current_usage ?? 0} de ${limits.products.chat.limit ?? 0} instâncias`}
+                        ? `${limits.products.chat.current ?? 0} instâncias (ilimitado)`
+                        : `${limits.products.chat.current ?? 0} de ${limits.products.chat.limit ?? 0} instâncias`}
                     </p>
                   </div>
                   <div className="text-right">
                     <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                       {limits.products.chat.unlimited
-                        ? `${limits.products.chat.current_usage ?? 0} / ∞`
-                        : `${limits.products.chat.current_usage ?? 0}/${limits.products.chat.limit ?? 0}`}
+                        ? `${limits.products.chat.current ?? 0} / ∞`
+                        : `${limits.products.chat.current ?? 0}/${limits.products.chat.limit ?? 0}`}
                     </div>
                     <div className="text-sm text-blue-700 dark:text-blue-200">instâncias</div>
                   </div>
