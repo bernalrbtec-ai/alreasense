@@ -3090,12 +3090,12 @@ export default function ConfigurationsPage() {
       {isInstanceModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={handleCloseInstanceModal} />
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60 backdrop-blur-sm transition-opacity" onClick={handleCloseInstanceModal} />
             
             <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <form onSubmit={(e) => { e.preventDefault(); editingInstance ? handleUpdateInstance() : handleCreateInstance(); }}>
                 <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                  <h3 className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100 mb-4">
                     {editingInstance ? 'Editar Instância WhatsApp' : 'Nova Instância WhatsApp'}
                   </h3>
                   
@@ -3108,7 +3108,7 @@ export default function ConfigurationsPage() {
                         id="integration_type"
                         value={instanceFormData.integration_type}
                         onChange={(e) => setInstanceFormData({ ...instanceFormData, integration_type: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       >
                         <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
                         <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
@@ -3130,7 +3130,7 @@ export default function ConfigurationsPage() {
                         required
                         value={instanceFormData.friendly_name}
                         onChange={(e) => setInstanceFormData({ ...instanceFormData, friendly_name: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="Ex: WhatsApp Principal"
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -3150,7 +3150,7 @@ export default function ConfigurationsPage() {
                             value={instanceFormData.phone_number_id}
                             onChange={(e) => setInstanceFormData({ ...instanceFormData, phone_number_id: e.target.value })}
                             disabled={!!editingInstance}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm disabled:opacity-60"
                             placeholder="ID do número no Meta Business"
                           />
                           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">ID do número no Meta (não alterável após criar)</p>
@@ -3164,7 +3164,7 @@ export default function ConfigurationsPage() {
                             id="access_token"
                             value={instanceFormData.access_token}
                             onChange={(e) => setInstanceFormData({ ...instanceFormData, access_token: e.target.value })}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                             placeholder={editingInstance && (editingInstance as any).access_token_set ? '•••• (deixe em branco para manter)' : 'Token permanente do Meta'}
                           />
                         </div>
@@ -3177,18 +3177,19 @@ export default function ConfigurationsPage() {
                             id="business_account_id"
                             value={instanceFormData.business_account_id}
                             onChange={(e) => setInstanceFormData({ ...instanceFormData, business_account_id: e.target.value })}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                             placeholder="ID da conta Business"
                           />
                         </div>
-                        <div className="bg-indigo-50 p-4 rounded-lg">
-                          <p className="text-sm text-indigo-700">Configure o webhook no Meta Business Suite apontando para a URL do seu servidor.</p>
+                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
+                          <p className="text-sm text-indigo-700 dark:text-indigo-200">Configure o webhook no Meta Business Suite apontando para a URL do seu servidor.</p>
                         </div>
                       </>
                     ) : (
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <p className="text-sm text-blue-700">
-                          ℹ️ O identificador único e o telefone serão preenchidos automaticamente após conectar o WhatsApp via QR Code.
+                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                        <p className="text-sm text-blue-700 dark:text-blue-200 flex items-start gap-2">
+                          <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                          O identificador único e o telefone serão preenchidos automaticamente após conectar o WhatsApp via QR Code.
                         </p>
                       </div>
                     )}
@@ -3201,7 +3202,7 @@ export default function ConfigurationsPage() {
                         id="default_department"
                         value={instanceFormData.default_department || ''}
                         onChange={(e) => setInstanceFormData({ ...instanceFormData, default_department: e.target.value || null })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       >
                         <option value="">Inbox (sem departamento)</option>
                         {departments.map((dept) => (
@@ -3217,8 +3218,8 @@ export default function ConfigurationsPage() {
                   </div>
                 </div>
                 
-                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-                  <Button type="submit" className="w-full sm:w-auto sm:ml-3">
+                <div className="bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-600 px-4 py-3 sm:flex sm:flex-row-reverse sm:gap-2 sm:px-6">
+                  <Button type="submit" className="w-full sm:w-auto">
                     <Save className="h-4 w-4 mr-2" />
                     {editingInstance ? 'Atualizar Instância' : 'Criar Instância'}
                   </Button>

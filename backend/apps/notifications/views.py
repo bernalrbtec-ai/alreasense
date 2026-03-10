@@ -190,17 +190,19 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Ao criar, verificar limites, logar e invalidar cache."""
         from apps.common.cache_manager import CacheManager
+        from rest_framework.exceptions import ValidationError
         import logging
         
         logger = logging.getLogger(__name__)
         
-        # Verificar limite de instâncias antes de criar
-        tenant = self.request.tenant
-        if tenant:
-            can_create, message = tenant.can_create_instance()
-            if not can_create:
-                from rest_framework.exceptions import ValidationError
-                raise ValidationError({'error': message})
+        # Resolver tenant: request.tenant (middleware) ou request.user.tenant (fallback para novo tenant)
+        tenant = getattr(self.request, 'tenant', None) or getattr(self.request.user, 'tenant', None)
+        if not tenant:
+            raise ValidationError({'error': 'Usuário sem tenant. Não é possível criar instância WhatsApp.'})
+        
+        can_create, message = tenant.can_create_instance()
+        if not can_create:
+            raise ValidationError({'error': message})
         
         # Criar a instância
         instance = serializer.save(created_by=self.request.user)
