@@ -162,76 +162,64 @@ class MessageSerializer(serializers.ModelSerializer):
         if 'metadata' in data:
             from apps.chat.utils.serialization import normalize_metadata
             data['metadata'] = normalize_metadata(data.get('metadata'))
-            if data['metadata'].get('reply_to'):
+            skip_mentions = self.context.get('skip_mentions_reprocess') is True
+            if data['metadata'].get('reply_to') and not skip_mentions:
+                import logging
+                _log = logging.getLogger(__name__)
+                _log.debug(f"💬 [SERIALIZER] Mensagem {instance.id} tem reply_to: {data['metadata'].get('reply_to')}")
+
+            # ✅ PERFORMANCE: Na listagem (skip_mentions_reprocess=True) não reprocessar menções (evita N+1 e Contact/refresh).
+            if skip_mentions:
+                pass  # Manter metadata.mentions como já persistido
+            elif 'mentions' in data['metadata'] and instance.conversation:
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.info(f"💬 [SERIALIZER] Mensagem {instance.id} tem reply_to: {data['metadata'].get('reply_to')}")
-            
-            # ✅ CORREÇÃO: Reprocessar menções para buscar nomes atualizados
-            if 'mentions' in data['metadata'] and instance.conversation:
-                # ✅ CORREÇÃO CRÍTICA: Garantir que logger está definido
-                import logging
-                logger = logging.getLogger(__name__)
-                
                 mentions_saved = data['metadata'].get('mentions', [])
                 if mentions_saved:
-                    # ✅ IMPORTANTE: Recarregar conversa do banco para ter dados atualizados
-                    # Isso garante que temos o group_metadata mais recente
-                    try:
-                        conversation = Conversation.objects.select_related('tenant').get(
-                            id=instance.conversation.id
-                        )
-                    except Conversation.DoesNotExist:
-                        conversation = instance.conversation
-                    
-                    # Extrair JIDs/phones das menções salvas
+                    ctx_conv = self.context.get('conversation')
+                    use_skip_refresh = bool(
+                        ctx_conv
+                        and getattr(instance, 'conversation_id', None)
+                        and str(ctx_conv.id) == str(instance.conversation_id)
+                    )
+                    if use_skip_refresh:
+                        conversation = ctx_conv
+                    else:
+                        try:
+                            conversation = Conversation.objects.select_related('tenant').get(
+                                id=instance.conversation.id
+                            )
+                        except Conversation.DoesNotExist:
+                            conversation = instance.conversation
+
                     mentioned_jids = []
                     for mention in mentions_saved:
-                        # ✅ CORREÇÃO CRÍTICA: Priorizar JID completo (mais confiável para @lid)
-                        # Se temos JID salvo, usar ele (especialmente importante para @lid)
-                        jid = mention.get('jid')
-                        if not jid:
-                            # Fallback para phone apenas se não temos JID
-                            jid = mention.get('phone')
-                        
+                        jid = mention.get('jid') or mention.get('phone')
                         if jid:
-                            # Se é apenas phone (sem @), adicionar como está
-                            # Se é JID completo (com @), usar diretamente
                             mentioned_jids.append(jid)
                             logger.debug(f"   📝 [SERIALIZER] Extraído JID da menção: {jid}")
-                    
+
                     if mentioned_jids:
-                        # Reprocessar com conversa atualizada
-                        # ✅ IMPORTANTE: Importação lazy para evitar circular
                         try:
                             from apps.chat.webhooks import process_mentions_optimized
-                            
                             logger.info(f"🔄 [SERIALIZER] Reprocessando {len(mentioned_jids)} menções para mensagem {instance.id}")
-                            logger.info(f"   Conversa: {conversation.id} | Tipo: {conversation.conversation_type}")
-                            logger.info(f"   Group metadata tem participantes: {len(conversation.group_metadata.get('participants', [])) if conversation.group_metadata else 0}")
-                            
                             updated_mentions = process_mentions_optimized(
-                                mentioned_jids, 
+                                mentioned_jids,
                                 conversation.tenant,
-                                conversation
+                                conversation,
+                                skip_refresh=use_skip_refresh,
                             )
-                            
-                            # Log das menções atualizadas
                             for i, mention in enumerate(updated_mentions):
                                 old_name = mentions_saved[i].get('name', 'N/A') if i < len(mentions_saved) else 'N/A'
                                 new_name = mention.get('name', 'N/A')
                                 if old_name != new_name:
                                     logger.info(f"   ✅ Menção {i+1} atualizada: '{old_name}' → '{new_name}'")
-                            
-                            # Atualizar menções no metadata com nomes atualizados
                             data['metadata']['mentions'] = updated_mentions
                             logger.info(f"✅ [SERIALIZER] {len(updated_mentions)} menções reprocessadas para mensagem {instance.id}")
                         except ImportError as e:
                             logger.warning(f"⚠️ [SERIALIZER] Não foi possível importar process_mentions_optimized: {e}")
-                            # Em caso de erro de importação, manter menções originais
                         except Exception as e:
                             logger.warning(f"⚠️ [SERIALIZER] Erro ao reprocessar menções: {e}", exc_info=True)
-                            # Em caso de erro, manter menções originais
 
         # ✅ Mensagens apagadas: não expor conteúdo/attachments, apenas is_deleted=True
         if instance.is_deleted:

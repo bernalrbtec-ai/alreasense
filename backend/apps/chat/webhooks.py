@@ -84,20 +84,21 @@ def mask_sensitive_data(data, parent_key: str = ""):
     return data
 
 
-def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) -> list:
+def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None, skip_refresh=False) -> list:
     """
     Processa menções de forma otimizada (1 query ao invés de N).
-    
+
     Prioridade de busca de nomes:
     1. Participantes do grupo (se conversation for grupo)
     2. Contatos do banco de dados
     3. Telefone formatado (fallback)
-    
+
     Args:
         mentioned_jids: Lista de JIDs mencionados (ex: ["5511999999999@s.whatsapp.net"])
         tenant: Tenant para buscar contatos
         conversation: Conversation opcional (para buscar participantes do grupo)
-    
+        skip_refresh: Se True, não chama conversation.refresh_from_db() (conversa já em memória)
+
     Returns:
         Lista de menções processadas: [{'phone': '...', 'name': '...'}, ...]
     """
@@ -163,8 +164,8 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     
     # Primeiro, buscar telefones reais dos participantes do grupo (especialmente para @lid)
     if conversation and conversation.conversation_type == 'group':
-        # ✅ IMPORTANTE: Recarregar conversa do banco para ter dados atualizados
-        conversation.refresh_from_db()
+        if not skip_refresh:
+            conversation.refresh_from_db()
         group_metadata = conversation.group_metadata or {}
         participants = group_metadata.get('participants', [])
         

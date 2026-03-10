@@ -3511,62 +3511,56 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         """
         Lista mensagens de uma conversa específica (paginado).
         GET /conversations/{id}/messages/?limit=50&offset=0
-        
-        ✅ PERFORMANCE: Paginação implementada para melhor performance
-        ✅ CORREÇÃO: Tratamento explícito quando conversa não existe
+
+        ✅ PERFORMANCE: Busca leve da conversa (sem get_queryset pesado) e serializer
+        com skip_mentions_reprocess para evitar N+1 e reprocessamento de menções.
         """
-        try:
-            conversation = self.get_object()
-            
-            # ✅ SEGURANÇA CRÍTICA: Verificar se conversa pertence ao tenant do usuário
-            if conversation.tenant_id != request.user.tenant_id:
-                logger.error(
-                    f"🚨 [SEGURANÇA] Tentativa de acesso a conversa de outro tenant! "
-                    f"Usuário: {request.user.email} (tenant: {request.user.tenant_id}), "
-                    f"Conversa: {pk} (tenant: {conversation.tenant_id})"
-                )
-                return Response({
-                    'error': 'Conversa não encontrada'
-                }, status=status.HTTP_404_NOT_FOUND)
-                
-        except Conversation.DoesNotExist:
-            # ✅ CORREÇÃO: Verificar se conversa existe mas não está acessível (problema de filtro/permissão)
-            try:
-                # Tentar buscar diretamente COM filtro de tenant para ver se existe
-                direct_conversation = Conversation.objects.get(id=pk, tenant=request.user.tenant)
-                logger.warning(
-                    f"⚠️ [MESSAGES] Conversa {pk} existe mas não está acessível para usuário {request.user.id} "
-                    f"(role: {request.user.role}, department: {direct_conversation.department_id}, "
-                    f"status: {direct_conversation.status})"
-                )
-                return Response({
-                    'results': [],
-                    'count': 0,
-                    'limit': int(request.query_params.get('limit', 15)),
-                    'offset': int(request.query_params.get('offset', 0)),
-                    'has_more': False,
-                    'next': None,
-                    'previous': None,
-                    'error': 'Conversa não acessível (verifique permissões de departamento)'
-                }, status=status.HTTP_403_FORBIDDEN)
-            except Conversation.DoesNotExist:
-                # Conversa realmente não existe
-                logger.warning(f"⚠️ [MESSAGES] Conversa {pk} não existe para tenant {request.user.tenant.id}")
-                return Response({
-                    'results': [],
-                    'count': 0,
-                    'limit': int(request.query_params.get('limit', 15)),
-                    'offset': int(request.query_params.get('offset', 0)),
-                    'has_more': False,
-                    'next': None,
-                    'previous': None,
-                    'error': 'Conversa não encontrada'
-                }, status=status.HTTP_404_NOT_FOUND)
-        
-        # Paginação
-        limit = int(request.query_params.get('limit', 15))  # Default 15 mensagens
+        limit = int(request.query_params.get('limit', 15))
         offset = int(request.query_params.get('offset', 0))
-        
+        empty_response = {
+            'results': [],
+            'count': 0,
+            'limit': limit,
+            'offset': offset,
+            'has_more': False,
+            'next': None,
+            'previous': None,
+        }
+
+        try:
+            conversation = Conversation.objects.select_related(
+                'tenant', 'department', 'assigned_to'
+            ).get(pk=pk, tenant=request.user.tenant)
+        except Conversation.DoesNotExist:
+            logger.warning(f"⚠️ [MESSAGES] Conversa {pk} não existe para tenant {request.user.tenant.id}")
+            return Response({**empty_response, 'error': 'Conversa não encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        if conversation.tenant_id != request.user.tenant_id:
+            logger.error(
+                f"🚨 [SEGURANÇA] Tentativa de acesso a conversa de outro tenant! "
+                f"Usuário: {request.user.email} (tenant: {request.user.tenant_id}), "
+                f"Conversa: {pk} (tenant: {conversation.tenant_id})"
+            )
+            return Response({**empty_response, 'error': 'Conversa não encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        if not user.is_admin:
+            department_ids = list(user.departments.values_list('id', flat=True))
+            allowed = (
+                conversation.assigned_to_id == user.id
+                or (conversation.department_id is None and conversation.status == 'pending')
+                or (conversation.department_id in department_ids)
+            )
+            if not allowed:
+                logger.warning(
+                    f"⚠️ [MESSAGES] Conversa {pk} não acessível para usuário {user.id} "
+                    f"(role: {user.role}, department: {conversation.department_id}, status: {conversation.status})"
+                )
+                return Response(
+                    {**empty_response, 'error': 'Conversa não acessível (verifique permissões de departamento)'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
         # ✅ PERFORMANCE: Usar annotate para contar total junto com a query principal
         # ou fazer count() apenas uma vez antes de buscar mensagens
         # Buscar mensagens com paginação (ordenado por created_at DESC para pegar mais recentes)
@@ -3592,8 +3586,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         else:
             total_count = offset + len(messages_list)
         
-        serializer = MessageSerializer(messages_list, many=True)
-        
+        serializer = MessageSerializer(
+            messages_list,
+            many=True,
+            context={
+                'request': request,
+                'conversation': conversation,
+                'skip_mentions_reprocess': True,
+            }
+        )
+
         return Response({
             'results': serializer.data,
             'count': total_count,
