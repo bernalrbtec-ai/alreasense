@@ -289,9 +289,9 @@ export default function CompanyProfilePage() {
         Voltar para Planos
       </Link>
 
-      <Card className="p-6">
+      <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-6 flex items-center gap-2">
-          <Building2 className="h-6 w-6 text-blue-600" />
+          <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
           Dados da Empresa
         </h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
@@ -307,6 +307,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.razao_social)}
                 onChange={(e) => handleChange('razao_social', e.target.value)}
                 placeholder="Empresa Ltda"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
             <div>
@@ -316,6 +317,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.nome_fantasia)}
                 onChange={(e) => handleChange('nome_fantasia', e.target.value)}
                 placeholder="Nome fantasia (opcional)"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -328,6 +330,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.documento ?? profile.cnpj)}
                 onChange={(e) => handleChange('documento', e.target.value)}
                 placeholder="00.000.000/0001-00 ou 000.000.000-00"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
             {canLookupCnpj && (
@@ -336,7 +339,7 @@ export default function CompanyProfilePage() {
                 variant="outline"
                 onClick={handleLookupCnpj}
                 disabled={lookupLoading}
-                className="shrink-0"
+                className="shrink-0 border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 <Search className="h-4 w-4 mr-2" />
                 {lookupLoading ? 'Buscando...' : 'Buscar por CNPJ'}
@@ -351,6 +354,7 @@ export default function CompanyProfilePage() {
               value={toFormValue(profile.endereco)}
               onChange={(e) => handleChange('endereco', e.target.value)}
               placeholder="Rua, número, bairro, cidade - UF"
+              className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
             />
           </div>
 
@@ -366,6 +370,7 @@ export default function CompanyProfilePage() {
                   handleChange('endereco_latitude', e.target.value ? Number(e.target.value) : null)
                 }
                 placeholder="-23.5505"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
             <div>
@@ -379,6 +384,7 @@ export default function CompanyProfilePage() {
                   handleChange('endereco_longitude', e.target.value ? Number(e.target.value) : null)
                 }
                 placeholder="-46.6333"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -391,6 +397,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.telefone)}
                 onChange={(e) => handleChange('telefone', e.target.value)}
                 placeholder="(11) 99999-9999"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
             <div>
@@ -401,6 +408,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.email_principal)}
                 onChange={(e) => handleChange('email_principal', e.target.value)}
                 placeholder="contato@empresa.com"
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -413,6 +421,7 @@ export default function CompanyProfilePage() {
                 value={toFormValue(profile.ramo_atuacao)}
                 onChange={(e) => handleChange('ramo_atuacao', e.target.value)}
                 placeholder="Tecnologia, Varejo..."
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
             <div>
@@ -422,6 +431,7 @@ export default function CompanyProfilePage() {
                 type="date"
                 value={toFormValue(profile.data_fundacao)}
                 onChange={(e) => handleChange('data_fundacao', e.target.value || null)}
+                className="bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
               />
             </div>
           </div>
@@ -431,7 +441,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="missao"
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.missao)}
               onChange={(e) => handleChange('missao', e.target.value)}
               placeholder="Nossa missão é..."
@@ -443,7 +453,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="sobre_empresa"
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.sobre_empresa)}
               onChange={(e) => handleChange('sobre_empresa', e.target.value)}
               placeholder="Histórico e descrição..."
@@ -455,7 +465,7 @@ export default function CompanyProfilePage() {
             <textarea
               id="produtos_servicos"
               rows={4}
-              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
               value={toFormValue(profile.produtos_servicos)}
               onChange={(e) => handleChange('produtos_servicos', e.target.value)}
               placeholder="Liste os principais produtos ou serviços oferecidos..."
@@ -472,7 +482,7 @@ export default function CompanyProfilePage() {
                 <img
                   src={profile.logo_url}
                   alt="Logo"
-                  className="h-20 w-20 object-contain border rounded"
+                  className="h-20 w-20 object-contain border border-gray-200 dark:border-gray-600 rounded"
                 />
                 <div className="flex gap-2">
                   <input
@@ -488,6 +498,7 @@ export default function CompanyProfilePage() {
                     size="sm"
                     onClick={() => logoInputRef.current?.click()}
                     disabled={uploadingLogo}
+                    className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     <Upload className="h-4 w-4 mr-1" />
                     {uploadingLogo ? 'Enviando...' : 'Trocar'}
@@ -497,6 +508,7 @@ export default function CompanyProfilePage() {
                     variant="outline"
                     size="sm"
                     onClick={removeLogo}
+                    className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                   >
                     <X className="h-4 w-4 mr-1" />
                     Remover
@@ -517,6 +529,7 @@ export default function CompanyProfilePage() {
                   variant="outline"
                   onClick={() => logoInputRef.current?.click()}
                   disabled={uploadingLogo}
+                  className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <Upload className="h-4 w-4 mr-2" />
                   {uploadingLogo ? 'Enviando...' : 'Enviar logo'}
