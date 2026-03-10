@@ -180,19 +180,11 @@ class PlanViewSet(viewsets.ModelViewSet):
         return Plan.objects.filter(id__in=plan_ids).order_by('sort_order')
 
     def list(self, request, *args, **kwargs):
-        """Listar planos com cache de resposta"""
+        """Listar planos com cache de resposta. Staff/superuser sempre vê dados frescos (evita lista desatualizada após editar)."""
         user = request.user
         scope = 'all' if (user.is_superuser or user.is_staff) else 'active'
         page = request.query_params.get('page', '1')
         page_size = request.query_params.get('page_size', 'default')
-
-        cache_key = CacheManager.make_key(
-            CacheManager.PREFIX_PLAN,
-            'list',
-            scope=scope,
-            page=page,
-            page_size=page_size
-        )
 
         def fetch_list():
             queryset = self.filter_queryset(self.get_queryset())
@@ -203,12 +195,23 @@ class PlanViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(queryset, many=True)
             return serializer.data
 
+        # Staff/superuser: não usar cache para listar, para ver produtos atualizados logo após editar
+        if user.is_superuser or user.is_staff:
+            data = fetch_list()
+            return Response(data)
+
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PLAN,
+            'list',
+            scope=scope,
+            page=page,
+            page_size=page_size
+        )
         data = CacheManager.get_or_set(
             cache_key,
             fetch_list,
             ttl=CacheManager.TTL_HOUR
         )
-
         return Response(data)
 
     def perform_create(self, serializer):
