@@ -174,12 +174,12 @@ export default function ProductsPage() {
         {Array.isArray(products) && products.map((product) => {
           const IconComponent = getIconComponent(product.icon)
           return (
-            <Card key={product.id} className={`p-6 relative ${!product.is_active ? 'opacity-60 border-gray-300 dark:border-gray-600' : 'border-blue-200'}`}>
+            <Card key={product.id} className={`p-6 relative border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm ${!product.is_active ? 'opacity-60' : 'dark:border-blue-800/50'}`}>
               {/* Status Badge */}
               <div className="absolute top-4 right-4 flex gap-2">
                 {product.is_active ? (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-200">
+                    <span className="w-2 h-2 rounded-full bg-green-500 dark:bg-green-400 mr-1.5 animate-pulse"></span>
                     Ativo
                   </span>
                 ) : (
@@ -189,7 +189,7 @@ export default function ProductsPage() {
                   </span>
                 )}
                 {product.addon_price && (
-                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200">
                     Add-on
                   </span>
                 )}
@@ -197,8 +197,8 @@ export default function ProductsPage() {
 
               <div className="mb-4 pr-24">
                 <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-blue-100 rounded-lg">
-                    <IconComponent className="h-6 w-6 text-blue-600" />
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                    <IconComponent className="h-6 w-6 text-blue-600 dark:text-blue-300" />
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{product.name}</h3>
@@ -209,8 +209,8 @@ export default function ProductsPage() {
                 
                 {product.addon_price && (
                   <div className="flex items-center gap-2 text-sm">
-                    <DollarSign className="h-4 w-4 text-green-600" />
-                    <span className="font-medium text-green-600">
+                    <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="font-medium text-green-600 dark:text-green-400">
                       R$ {Number(product.addon_price).toFixed(2)}/mês
                     </span>
                   </div>
@@ -222,7 +222,7 @@ export default function ProductsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleEdit(product)}
-                  className="flex-1"
+                  className="flex-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border-blue-200 dark:border-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                 >
                   <Edit className="h-3 w-3 mr-1" />
                   Editar
@@ -231,7 +231,7 @@ export default function ProductsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleDelete(product.id)}
-                  className="text-red-600 hover:text-red-700 hover:border-red-300"
+                  className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
@@ -242,7 +242,7 @@ export default function ProductsPage() {
       </div>
 
       {(!Array.isArray(products) || products.length === 0) && !isLoading && (
-        <Card className="p-12">
+        <Card className="p-12 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-center">
             <Package className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" />
             <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-gray-100">Nenhum produto cadastrado</h3>

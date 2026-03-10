@@ -202,13 +202,16 @@ class TenantViewSet(viewsets.ModelViewSet):
                 if 'last_name' in admin_user_data:
                     admin_user.last_name = admin_user_data['last_name']
                 if 'email' in admin_user_data:
-                    # Verificar se o email já existe
-                    existing_user = User.objects.filter(email=admin_user_data['email']).exclude(id=admin_user.id).first()
-                    if existing_user:
-                        return Response(
-                            {'error': f'Email "{admin_user_data["email"]}" já está em uso'},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
+                    new_email = (admin_user_data.get('email') or '').strip()
+                    current_email = (admin_user.email or '').strip()
+                    # Só validar unicidade quando o email está de fato sendo alterado (evita erro ao só mudar plano)
+                    if new_email and new_email.lower() != current_email.lower():
+                        existing_user = User.objects.filter(email__iexact=new_email).exclude(id=admin_user.id).first()
+                        if existing_user:
+                            return Response(
+                                {'error': f'Email "{new_email}" já está em uso'},
+                                status=status.HTTP_400_BAD_REQUEST
+                            )
                     admin_user.email = admin_user_data['email']
                     admin_user.username = admin_user_data['email']  # Manter username = email
                 if 'phone' in admin_user_data:

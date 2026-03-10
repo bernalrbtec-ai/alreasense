@@ -133,6 +133,7 @@ export default function EvolutionConfigPage() {
           onClick={handleRefresh}
           disabled={isRefreshing}
           variant="outline"
+          className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
         >
           <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
           {isRefreshing ? 'Atualizando...' : 'Atualizar'}
@@ -140,10 +141,10 @@ export default function EvolutionConfigPage() {
       </div>
 
       {/* Status Card */}
-      <Card className={`p-6 border-l-4 ${
-        stats.status === 'active' ? 'border-l-green-500 bg-green-50' :
-        stats.status === 'inactive' ? 'border-l-gray-400 bg-gray-50' :
-        'border-l-red-500 bg-red-50'
+      <Card className={`p-6 border-l-4 border border-gray-200 dark:border-gray-600 ${
+        stats.status === 'active' ? 'border-l-green-500 bg-green-50 dark:bg-green-900/25' :
+        stats.status === 'inactive' ? 'border-l-gray-400 bg-gray-50 dark:bg-gray-800/80' :
+        'border-l-red-500 bg-red-50 dark:bg-red-900/25'
       }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -158,7 +159,7 @@ export default function EvolutionConfigPage() {
                  stats.status === 'inactive' ? '⚪ Desconectado' :
                  '🔴 Erro de Conexão'}
               </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
                 Verificado em: {new Date(stats.last_check).toLocaleString('pt-BR')}
               </p>
             </div>
@@ -168,12 +169,12 @@ export default function EvolutionConfigPage() {
 
         {/* Error Message */}
         {stats.status === 'error' && stats.last_error && (
-          <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-md">
+          <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-md">
             <div className="flex items-start gap-2">
-              <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-medium text-red-800">Erro</p>
-                <p className="text-sm text-red-700 mt-1">{stats.last_error}</p>
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">Erro</p>
+                <p className="text-sm text-red-700 dark:text-red-300 mt-1">{stats.last_error}</p>
               </div>
             </div>
           </div>
@@ -183,7 +184,7 @@ export default function EvolutionConfigPage() {
       {/* Statistics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Total Instances */}
-        <Card className="p-6">
+        <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total de Instâncias</p>
@@ -191,27 +192,27 @@ export default function EvolutionConfigPage() {
                 {stats.statistics.total}
               </p>
             </div>
-            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Server className="h-6 w-6 text-blue-600" />
+            <div className="h-12 w-12 bg-blue-100 dark:bg-blue-900/40 rounded-lg flex items-center justify-center">
+              <Server className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </Card>
 
         {/* Connected */}
-        <Card className="p-6">
+        <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Conectadas</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">
+              <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-2">
                 {stats.statistics.connected}
               </p>
             </div>
-            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+            <div className="h-12 w-12 bg-green-100 dark:bg-green-900/40 rounded-lg flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500 transition-all duration-300"
                 style={{
@@ -225,20 +226,20 @@ export default function EvolutionConfigPage() {
         </Card>
 
         {/* Disconnected */}
-        <Card className="p-6">
+        <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Desconectadas</p>
-              <p className="text-3xl font-bold text-red-600 mt-2">
+              <p className="text-3xl font-bold text-red-600 dark:text-red-400 mt-2">
                 {stats.statistics.disconnected}
               </p>
             </div>
-            <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
-              <XCircle className="h-6 w-6 text-red-600" />
+            <div className="h-12 w-12 bg-red-100 dark:bg-red-900/40 rounded-lg flex items-center justify-center">
+              <XCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
           </div>
           <div className="mt-2">
-            <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-red-500 transition-all duration-300"
                 style={{
@@ -253,7 +254,7 @@ export default function EvolutionConfigPage() {
       </div>
 
       {/* Webhook URL Card */}
-      <Card className="p-6">
+      <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -264,12 +265,13 @@ export default function EvolutionConfigPage() {
                 type="text"
                 readOnly
                 value={stats.webhook_url}
-                className="flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-300 rounded-md font-mono"
+                className="flex-1 px-4 py-2 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 rounded-md font-mono"
               />
               <Button
                 onClick={handleCopyWebhook}
                 variant="outline"
                 size="sm"
+                className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 {copied ? (
                   <Check className="h-4 w-4" />
@@ -292,9 +294,9 @@ export default function EvolutionConfigPage() {
         </h2>
 
         {(!Array.isArray(stats.instances) || stats.instances.length === 0) ? (
-          <Card className="p-8">
+          <Card className="p-8 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
             <div className="text-center">
-              <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <Server className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
               <p className="text-gray-600 dark:text-gray-400">Nenhuma instância encontrada</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 As instâncias aparecerão aqui quando forem configuradas no Evolution API
@@ -439,13 +441,13 @@ export default function EvolutionConfigPage() {
       )}
 
       {/* Configuration Note */}
-      <Card className="p-4 bg-blue-50 border border-blue-200">
+      <Card className="p-4 bg-blue-50 dark:bg-blue-900/25 border border-blue-200 dark:border-blue-800">
         <div className="flex items-start gap-3">
-          <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
+          <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800 dark:text-blue-200">
             <p className="font-medium mb-1">ℹ️ Configuração via Variáveis de Ambiente</p>
             <p>
-              A URL e API Key da Evolution API são configuradas via variáveis de ambiente (<code className="bg-blue-100 px-1 rounded">EVO_BASE_URL</code> e <code className="bg-blue-100 px-1 rounded">EVO_API_KEY</code>).
+              A URL e API Key da Evolution API são configuradas via variáveis de ambiente (<code className="bg-blue-100 dark:bg-blue-800/50 px-1 rounded">EVO_BASE_URL</code> e <code className="bg-blue-100 dark:bg-blue-800/50 px-1 rounded">EVO_API_KEY</code>).
               Entre em contato com o administrador do sistema para alterações.
             </p>
           </div>

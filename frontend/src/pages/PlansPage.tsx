@@ -123,17 +123,32 @@ export default function PlansPage() {
     }
   }
 
-  const handleEdit = (plan: Plan) => {
+  const handleEdit = async (plan: Plan) => {
     setEditingPlan(plan)
-    setFormData({
-      name: plan.name,
-      slug: plan.slug,
-      description: plan.description,
-      price: plan.price,
-      sort_order: plan.sort_order,
-      is_active: plan.is_active,
-      plan_products: plan.products || [],
-    })
+    try {
+      // Buscar plano por ID para ter produtos atualizados (evita perder produtos ao editar)
+      const { data } = await api.get(`/billing/plans/${plan.id}/`)
+      const fresh = data as Plan
+      setFormData({
+        name: fresh.name,
+        slug: fresh.slug,
+        description: fresh.description,
+        price: fresh.price,
+        sort_order: fresh.sort_order,
+        is_active: fresh.is_active,
+        plan_products: fresh.products || [],
+      })
+    } catch {
+      setFormData({
+        name: plan.name,
+        slug: plan.slug,
+        description: plan.description,
+        price: plan.price,
+        sort_order: plan.sort_order,
+        is_active: plan.is_active,
+        plan_products: plan.products || [],
+      })
+    }
     setIsModalOpen(true)
   }
 
