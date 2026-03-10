@@ -566,17 +566,17 @@ export default function ContactsPage() {
         </div>
         
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleExport}>
+          <Button variant="outline" onClick={handleExport} className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
             <Download className="h-4 w-4 mr-2" />
             Exportar
           </Button>
           
-          <Button variant="outline" onClick={() => setShowImportModal(true)}>
+          <Button variant="outline" onClick={() => setShowImportModal(true)} className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
             <Upload className="h-4 w-4 mr-2" />
             Importar
           </Button>
           
-          <Button variant="outline" onClick={() => setShowTagsManagerModal(true)}>
+          <Button variant="outline" onClick={() => setShowTagsManagerModal(true)} className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">
             <Tag className="h-4 w-4 mr-2" />
             Gerenciar Tags
           </Button>
@@ -646,7 +646,7 @@ export default function ContactsPage() {
               setSelectedTag(e.target.value)
               setCurrentPage(1)
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Todas as tags</option>
             {tags.map((tag) => (
@@ -665,7 +665,7 @@ export default function ContactsPage() {
               setSelectedState(e.target.value)
               setCurrentPage(1)
             }}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Todos os estados</option>
             {brazilianStates.map((state) => (
@@ -691,7 +691,7 @@ export default function ContactsPage() {
                 setCustomFieldValue('')
                 setCurrentPage(1)
               }}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
             >
               <option value="">Selecione um campo</option>
               {availableCustomFields.map((field) => (
@@ -714,7 +714,7 @@ export default function ContactsPage() {
                   setCustomFieldValue(e.target.value)
                   setCurrentPage(1)
                 }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
             </div>
           )}
@@ -723,33 +723,33 @@ export default function ContactsPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Total de Contatos</div>
-          <div className="text-2xl font-bold">{stats.total}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             {selectedTag || selectedState || searchTerm ? 'Filtrados' : 'Base completa'}
           </div>
         </Card>
         
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Ativos</div>
-          <div className="text-2xl font-bold text-green-600">{stats.active}</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.active}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos ativos
           </div>
         </Card>
         
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Opt-out</div>
-          <div className="text-2xl font-bold text-red-600">{stats.opted_out}</div>
+          <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.opted_out}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos que saíram
           </div>
         </Card>
         
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Problemas de Entrega</div>
-          <div className="text-2xl font-bold text-orange-600">{stats.delivery_problems}</div>
+          <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{stats.delivery_problems}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Mensagens não entregues
           </div>
@@ -758,17 +758,17 @@ export default function ContactsPage() {
       
       {/* Stats Detalhadas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Leads</div>
-          <div className="text-xl font-bold text-blue-600">{stats.leads}</div>
+          <div className="text-xl font-bold text-blue-600 dark:text-blue-400">{stats.leads}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos sem compras
           </div>
         </Card>
         
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Clientes</div>
-          <div className="text-xl font-bold text-green-600">{stats.customers}</div>
+          <div className="text-xl font-bold text-green-600 dark:text-green-400">{stats.customers}</div>
           <div className="text-xs text-gray-400 dark:text-gray-500 mt-1">
             Contatos com compras
           </div>
@@ -824,7 +824,7 @@ export default function ContactsPage() {
       
       {/* Paginação */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg">
+        <div className="flex items-center justify-between border-t border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-3 sm:px-6 rounded-lg">
           <div className="flex flex-1 justify-between sm:hidden">
             <Button
               variant="outline"

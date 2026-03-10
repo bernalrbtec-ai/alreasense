@@ -384,42 +384,42 @@ export default function AgendaPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Total</div>
-          <div className="text-2xl font-bold">{stats.total}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.total}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Pendentes</div>
-          <div className="text-2xl font-bold text-yellow-600">{stats.pending}</div>
+          <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pending}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Em Andamento</div>
-          <div className="text-2xl font-bold text-blue-600">{stats.in_progress}</div>
+          <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.in_progress}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Concluídas</div>
-          <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
+          <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.completed}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Canceladas</div>
           <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">{stats.cancelled}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Minhas</div>
-          <div className="text-2xl font-bold">{stats.my_assigned}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.my_assigned}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Atrasadas</div>
-          <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
+          <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.overdue}</div>
         </Card>
-        <Card className="p-4">
+        <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
           <div className="text-sm text-gray-500 dark:text-gray-400">Com Data</div>
-          <div className="text-2xl font-bold">{stats.with_due_date}</div>
+          <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{stats.with_due_date}</div>
         </Card>
       </div>
 
       {/* Filtros */}
-      <Card className="p-4">
+      <Card className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
         <div className="flex flex-wrap gap-4 items-center">
           {/* Ícone de lupa - quando não expandido */}
           {!searchExpanded && (
@@ -442,7 +442,7 @@ export default function AgendaPage() {
                   placeholder="Buscar tarefas..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
                   autoFocus
                 />
               </div>
@@ -462,7 +462,7 @@ export default function AgendaPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="active">Ativas (sem concluídas)</option>
             <option value="all">Todos os Status</option>
@@ -475,7 +475,7 @@ export default function AgendaPage() {
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="all">Todas</option>
             <option value="task">Tarefas</option>
@@ -485,7 +485,7 @@ export default function AgendaPage() {
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-brand-500"
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
             <option value="all">Todas as Prioridades</option>
             <option value="low">Baixa</option>
@@ -501,7 +501,7 @@ export default function AgendaPage() {
               onChange={(e) => setMyTasks(e.target.checked)}
               className="rounded border-gray-300 dark:border-gray-600"
             />
-            <span className="text-sm">Minhas Tarefas</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Minhas Tarefas</span>
           </label>
 
           <label className="flex items-center gap-2 cursor-pointer">
@@ -511,7 +511,7 @@ export default function AgendaPage() {
               onChange={(e) => setOverdue(e.target.checked)}
               className="rounded border-gray-300 dark:border-gray-600"
             />
-            <span className="text-sm">Atrasadas</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">Atrasadas</span>
           </label>
         </div>
       </Card>
@@ -523,14 +523,14 @@ export default function AgendaPage() {
         </div>
       ) : viewMode === 'list' ? (
         filteredTasks.length === 0 ? (
-          <Card className="p-12 text-center">
+          <Card className="p-12 text-center border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
             <Calendar className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
             <p className="text-gray-500 dark:text-gray-400">Nenhuma tarefa encontrada</p>
           </Card>
         ) : (
           <div className="space-y-4">
             {filteredTasks.map((task) => (
-            <Card key={task.id} className="p-4 hover:shadow-md transition-shadow">
+            <Card key={task.id} className="p-4 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
@@ -542,12 +542,12 @@ export default function AgendaPage() {
                       {getPriorityLabel(task.priority)}
                     </span>
                     {task.task_type === 'agenda' && (
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200">
                         Agenda
                       </span>
                     )}
                     {isOverdue(task.due_date) && (
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 flex items-center gap-1">
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         Atrasada
                       </span>
