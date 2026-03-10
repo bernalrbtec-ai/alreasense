@@ -263,7 +263,7 @@ export default function ProductsPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 dark:bg-black/60 transition-opacity" onClick={handleCloseModal} />
             
             <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
               <form onSubmit={handleSubmit}>
@@ -284,7 +284,7 @@ export default function ProductsPage() {
                           required
                           value={formData.name}
                           onChange={(e) => handleNameChange(e.target.value)}
-                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                       </div>
 
@@ -298,7 +298,7 @@ export default function ProductsPage() {
                           required
                           value={formData.slug}
                           onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                           Usado para identificar o produto no sistema
@@ -316,7 +316,7 @@ export default function ProductsPage() {
                         required
                         value={formData.description}
                         onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       />
                     </div>
 
@@ -329,7 +329,7 @@ export default function ProductsPage() {
                           id="icon"
                           value={formData.icon}
                           onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         >
                           <option value="Package">Package</option>
                           <option value="Zap">Zap</option>
@@ -351,7 +351,7 @@ export default function ProductsPage() {
                             ...formData, 
                             addon_price: e.target.value ? parseFloat(e.target.value) : null 
                           })}
-                          className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm dark:placeholder-gray-400"
                           placeholder="Deixe vazio se não for add-on"
                         />
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -375,7 +375,7 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <div className="bg-gray-50 dark:bg-gray-800 dark:border-t dark:border-gray-700 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                   <Button type="submit" disabled={isSaving}>
                     <Check className="h-4 w-4 mr-2" />
                     {isSaving ? 'Salvando...' : 'Salvar'}

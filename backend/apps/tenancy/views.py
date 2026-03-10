@@ -206,14 +206,23 @@ class TenantViewSet(viewsets.ModelViewSet):
                     current_email = (admin_user.email or '').strip()
                     # Só validar unicidade quando o email está de fato sendo alterado (evita erro ao só mudar plano)
                     if new_email and new_email.lower() != current_email.lower():
-                        existing_user = User.objects.filter(email__iexact=new_email).exclude(id=admin_user.id).first()
+                        # Só erro se o email estiver em uso em OUTRO tenant (ignora mesmo tenant, ex.: mesmo usuário com outro role)
+                        existing_user = (
+                            User.objects.filter(email__iexact=new_email)
+                            .exclude(id=admin_user.id)
+                            .exclude(tenant=instance)
+                            .first()
+                        )
                         if existing_user:
                             return Response(
                                 {'error': f'Email "{new_email}" já está em uso'},
                                 status=status.HTTP_400_BAD_REQUEST
                             )
-                    admin_user.email = admin_user_data['email']
-                    admin_user.username = admin_user_data['email']  # Manter username = email
+                    # Usar valor normalizado ao salvar (evita espaços/casing que possam disparar unique no save)
+                    if new_email:
+                        admin_user.email = new_email
+                        admin_user.username = new_email
+                    # Se new_email vazio, manter o email atual (não sobrescrever com vazio)
                 if 'phone' in admin_user_data:
                     admin_user.phone = admin_user_data['phone']
                 if 'password' in admin_user_data:
@@ -233,34 +242,51 @@ class TenantViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Verificar se o email já existe
-                existing_user = User.objects.filter(email=email).first()
-                if existing_user:
+                # Verificar se o email já existe em OUTRO tenant (se for do mesmo tenant, é o admin que não encontramos por role – atualizar)
+                email_clean = (email or '').strip()
+                if not email_clean:
                     return Response(
-                        {'error': f'Email "{email}" já está em uso'},
+                        {'error': 'Email é obrigatório para criar usuário admin'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
-                
-                # Criar usuário
-                admin_user = User.objects.create(
-                    email=email,
-                    username=email,
-                    first_name=admin_user_data.get('first_name', ''),
-                    last_name=admin_user_data.get('last_name', ''),
-                    phone=admin_user_data.get('phone', ''),
-                    tenant=instance,
-                    role='admin',
-                    is_staff=False,
-                    is_superuser=False,
-                    is_active=True,
-                )
-                
-                # Definir senha
-                password = admin_user_data.get('password', 'changeme')
-                admin_user.set_password(password)
-                admin_user.save()
-                
-                print(f"✅ Novo usuário admin criado: {admin_user.email}")
+                existing_user = User.objects.filter(email__iexact=email_clean).first()
+                if existing_user:
+                    if existing_user.tenant_id != instance.id:
+                        return Response(
+                            {'error': f'Email "{email_clean}" já está em uso'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    # Mesmo tenant: usar esse usuário e atualizar (ex.: role diferente de 'admin')
+                    admin_user = existing_user
+                    admin_user.role = 'admin'
+                    admin_user.first_name = admin_user_data.get('first_name', '') or admin_user.first_name
+                    admin_user.last_name = admin_user_data.get('last_name', '') or admin_user.last_name
+                    admin_user.phone = admin_user_data.get('phone', '') or admin_user.phone
+                    admin_user.email = email_clean
+                    admin_user.username = email_clean
+                    new_password = admin_user_data.get('password')
+                    if new_password not in (None, ''):
+                        admin_user.set_password(new_password)
+                    admin_user.save()
+                    print(f"✅ Usuário admin atualizado (encontrado por email no tenant): {admin_user.email}")
+                else:
+                    # Criar usuário
+                    admin_user = User.objects.create(
+                        email=email_clean,
+                        username=email_clean,
+                        first_name=admin_user_data.get('first_name', ''),
+                        last_name=admin_user_data.get('last_name', ''),
+                        phone=admin_user_data.get('phone', ''),
+                        tenant=instance,
+                        role='admin',
+                        is_staff=False,
+                        is_superuser=False,
+                        is_active=True,
+                    )
+                    password = admin_user_data.get('password', 'changeme')
+                    admin_user.set_password(password)
+                    admin_user.save()
+                    print(f"✅ Novo usuário admin criado: {admin_user.email}")
         
         return Response(serializer.data)
     
