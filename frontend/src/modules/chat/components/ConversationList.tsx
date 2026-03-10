@@ -224,22 +224,17 @@ export function ConversationList() {
   // ✅ PERFORMANCE: Memoizar filtro de conversas para evitar recalcular a cada render
   // ✅ OTIMIZAÇÃO: Usar debouncedSearchTerm ao invés de searchTerm direto
   const filteredConversations = useMemo(() => {
-    if (!conversations.length) return [];
-    
-    const searchLower = debouncedSearchTerm.toLowerCase().trim();
-    
-    // ✅ CORREÇÃO: Renomear conv para conversationItem para evitar conflito de minificação
+    if (!Array.isArray(conversations) || !conversations.length) return [];
+
+    const searchLower = (debouncedSearchTerm || '').toLowerCase().trim();
+
     const filtered = conversations.filter((conversationItem) => {
-      // 1. Filtro de busca (nome ou telefone) - apenas se houver termo de busca
       if (searchLower) {
-        const matchesSearch = 
+        const matchesSearch =
           conversationItem.contact_name?.toLowerCase().includes(searchLower) ||
-          conversationItem.contact_phone.includes(debouncedSearchTerm) ||
+          conversationItem.contact_phone?.includes(debouncedSearchTerm) === true ||
           (conversationItem.group_metadata?.group_name || '').toLowerCase().includes(searchLower);
-        
-        if (!matchesSearch) {
-          return false;
-        }
+        if (!matchesSearch) return false;
       }
       
       // 2. Filtro de departamento (se houver departamento ativo)
@@ -248,117 +243,31 @@ export function ConversationList() {
         return true;
       }
       
-      const departmentId = typeof conversationItem.department === 'string' 
-        ? conversationItem.department 
+      const departmentId = typeof conversationItem.department === 'string'
+        ? conversationItem.department
         : conversationItem.department?.id || null;
       const convStatus = conversationItem.status || 'pending';
       const activeDeptId = String(activeDepartment.id);
       const convDeptId = departmentId ? String(departmentId) : null;
-      
-      // ✅ DEBUG CRÍTICO: Log detalhado para TODAS as conversas sendo filtradas
-      // Isso ajuda a identificar por que conversas não aparecem
-      const isActiveConversation = activeConversation?.id === conversationItem.id;
-      if (isActiveConversation || convStatus === 'pending' || convStatus === 'open') {
-        console.log('🔍 [FILTER] Verificando conversa:', {
-          conversationId: conversationItem.id,
-          conversationName: conversationItem.contact_name,
-          conversationPhone: conversationItem.contact_phone,
-          conversationDepartmentId: convDeptId,
-          conversationDepartmentName: conversationItem.department_name || 'N/A',
-          conversationStatus: convStatus,
-          activeDepartmentId: activeDeptId,
-          activeDepartmentName: activeDepartment.name,
-          isActiveConversation,
-          departmentMatch: convDeptId === activeDeptId,
-          statusMatch: convStatus === 'pending' || (convStatus === 'open' && activeDepartment.id !== 'inbox')
-        });
-      }
-      
+
       if (activeDepartment.id === 'inbox') {
         // Inbox: conversas pendentes SEM departamento
-        // ✅ CORREÇÃO: Inbox só mostra conversas SEM departamento E com status='pending'
-        const passes = !departmentId && convStatus === 'pending';
-        
-        // ✅ DEBUG: Log quando conversa não passa no filtro do Inbox
-        if (!passes) {
-          console.log('🔍 [FILTER] Conversa não passou no filtro do Inbox:', {
-            conversationId: conversationItem.id,
-            conversationName: conversationItem.contact_name,
-            departmentId: convDeptId,
-            status: convStatus,
-            reason: departmentId ? 'Tem departamento' : 'Status não é pending',
-            expected: 'Sem departamento E status=pending'
-          });
-        }
-        
-        return passes;
+        return !departmentId && convStatus === 'pending';
       }
-      
+
       if (activeDepartment.id === 'my_conversations') {
-        // Minhas Conversas: todas as conversas atribuídas ao usuário (com ou sem departamento)
         const { user } = useAuthStore.getState();
         if (!user) return false;
-        
         return (
           conversationItem.assigned_to === user.id &&
           conversationItem.status === 'open'
         );
-      } else {
-        // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
-        if (conversationItem.status === 'closed') {
-          console.warn('⚠️ [FILTER] Conversa fechada, excluindo:', {
-            conversationId: conversationItem.id,
-            conversationName: conversationItem.contact_name,
-            conversationPhone: conversationItem.contact_phone,
-            status: conversationItem.status,
-            department: conversationItem.department_name || 'N/A',
-            departmentId: convDeptId,
-            activeDepartmentId: activeDeptId,
-            activeDepartmentName: activeDepartment.name,
-            last_message_at: conversationItem.last_message_at,
-            isActiveConversation: isActiveConversation,
-            reason: 'Status é closed - conversa não deve aparecer na lista'
-          });
-          return false;
-        }
-        
-        const passes = convDeptId === activeDeptId;
-        
-        // ✅ DEBUG: Log quando conversa não passa no filtro do departamento
-        if (!passes) {
-          console.log('🔍 [FILTER] Conversa não passou no filtro do departamento:', {
-            conversationId: conversationItem.id,
-            conversationName: conversationItem.contact_name,
-            activeDepartmentId: activeDeptId,
-            activeDepartmentName: activeDepartment.name,
-            conversationDepartmentId: convDeptId,
-            conversationDepartmentName: conversationItem.department_name || 'N/A',
-            conversationStatus: convStatus,
-            reason: convDeptId !== activeDeptId ? 'Departamento diferente' : 'Status closed',
-            expected: `departmentId === ${activeDeptId}`
-          });
-        } else {
-          console.log('✅ [FILTER] Conversa passou no filtro do departamento:', {
-            conversationId: conversationItem.id,
-            conversationName: conversationItem.contact_name,
-            departmentId: convDeptId,
-            status: convStatus
-          });
-        }
-        
-        return passes;
       }
+
+      // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
+      if (conversationItem.status === 'closed') return false;
+      return convDeptId === activeDeptId;
     });
-    
-    // ✅ DEBUG: Log do resultado do filtro
-    if (filtered.length !== conversations.length) {
-      console.log('🔍 [FILTER] Resultado do filtro:', {
-        totalConversations: conversations.length,
-        filteredConversations: filtered.length,
-        activeDepartment: activeDepartment?.name || 'Nenhum',
-        searchTerm: debouncedSearchTerm || 'Nenhum'
-      });
-    }
 
     // Modo normal: mesma ordem do store (last_message_at desc)
     if (!waitingForResponseMode) return filtered;

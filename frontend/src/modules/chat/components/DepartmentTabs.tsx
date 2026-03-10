@@ -34,7 +34,6 @@ export function DepartmentTabs() {
     if (activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations') {
       const isAllowed = filteredDepartments.some(dept => dept.id === activeDepartment.id);
       if (!isAllowed) {
-        console.log('🔒 [DEPARTMENTS] Departamento ativo não permitido, mudando para Inbox');
         setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
       }
     }
@@ -95,28 +94,19 @@ export function DepartmentTabs() {
     }).length;
   }, [waitingForResponseMode, conversations, activeDepartment, user?.id]);
 
+  // Buscar departamentos só na montagem e a cada 30s (não ao trocar de aba — evita 7–10s de atraso)
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
         const response = await api.get('/auth/departments/');
         const depts = response.data.results || response.data;
-        
-        // ✅ DEBUG: Log para verificar se pending_count está vindo do backend
-        console.log('📊 [DEPARTMENTS] Departamentos recebidos:', depts.map((d: Department) => ({
-          id: d.id,
-          name: d.name,
-          pending_count: d.pending_count
-        })));
-        
         let filteredDepts = depts;
         if (!can_access_all_departments && departmentIds) {
           filteredDepts = depts.filter((d: Department) => departmentIds.includes(d.id));
         }
-        
         setDepartments(filteredDepts);
-        
-        // Se não tem departamento ativo, selecionar Inbox
-        if (!activeDepartment) {
+        const current = useChatStore.getState().activeDepartment;
+        if (!current) {
           setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
         }
       } catch (error) {
@@ -125,12 +115,9 @@ export function DepartmentTabs() {
     };
 
     fetchDepartments();
-    
-    // ✅ NOVO: Refetch departamentos a cada 30 segundos para atualizar contadores
     const interval = setInterval(fetchDepartments, 30000);
-    
     return () => clearInterval(interval);
-  }, [can_access_all_departments, departmentIds, setDepartments, setActiveDepartment, activeDepartment]);
+  }, [can_access_all_departments, departmentIds, setDepartments, setActiveDepartment]);
 
   return (
     <div className="flex-shrink-0 flex items-center justify-between gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
