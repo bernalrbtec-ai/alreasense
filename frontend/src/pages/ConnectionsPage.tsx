@@ -58,6 +58,7 @@ export default function ConnectionsPage() {
   const [metaValidationOk, setMetaValidationOk] = useState(false)
   const [showImportTemplatesModal, setShowImportTemplatesModal] = useState(false)
   const [importTemplatesAfterSave, setImportTemplatesAfterSave] = useState(false)
+  const [instanceSaveError, setInstanceSaveError] = useState<string | null>(null)
   
   // Função para formatar telefone
   const formatPhone = (phone: string) => {
@@ -189,6 +190,7 @@ export default function ConnectionsPage() {
         if (!editingInstance) instanceData.instance_name = crypto.randomUUID()
       }
 
+      setInstanceSaveError(null)
       let savedInstanceId: string | null = null
       if (editingInstance) {
         await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceData)
@@ -234,6 +236,10 @@ export default function ConnectionsPage() {
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar instância:', error)
+      const backendError = error?.response?.status === 400 && error?.response?.data?.error
+        ? (Array.isArray(error.response.data.error) ? error.response.data.error[0] : error.response.data.error)
+        : null
+      if (backendError) setInstanceSaveError(backendError)
       if (error.response?.data) {
         const errors = error.response.data
         const errMsg = errors.error || (typeof errors.detail === 'string' ? errors.detail : '')
@@ -278,6 +284,7 @@ export default function ConnectionsPage() {
   }
 
   const handleEditInstance = (instance: WhatsAppInstance) => {
+    setInstanceSaveError(null)
     setInstanceForm({
       friendly_name: instance.friendly_name,
       phone_number: instance.phone_number || '',
@@ -547,6 +554,7 @@ export default function ConnectionsPage() {
             access_token: '',
             business_account_id: '',
           })
+          setInstanceSaveError(null)
           setShowInstanceModal(true)
         }}>
           <MessageSquare className="h-4 w-4 mr-2" />
@@ -806,6 +814,7 @@ export default function ConnectionsPage() {
                     access_token: '',
                     business_account_id: '',
                   })
+                  setInstanceSaveError(null)
                   setShowInstanceModal(true)
                 }}>
                   <MessageSquare className="h-4 w-4 mr-2" />
@@ -833,6 +842,7 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setShowInstanceModal(false)
                   setEditingInstance(null)
+                  setInstanceSaveError(null)
                   setMetaValidationOk(false)
                   setImportTemplatesAfterSave(false)
                   setShowImportTemplatesModal(false)
@@ -851,6 +861,15 @@ export default function ConnectionsPage() {
                 <XIcon className="h-4 w-4" />
               </Button>
             </div>
+
+            {instanceSaveError && (
+              <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 mb-4">
+                <p className="text-sm font-medium text-red-800 dark:text-red-200">{instanceSaveError}</p>
+                <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                  Verifique seu plano ou faça upgrade para criar mais instâncias WhatsApp.
+                </p>
+              </div>
+            )}
             
             <div className="space-y-4">
               <div>
@@ -1018,6 +1037,7 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setShowInstanceModal(false)
                   setEditingInstance(null)
+                  setInstanceSaveError(null)
                   setMetaValidationOk(false)
                   setImportTemplatesAfterSave(false)
                   setShowImportTemplatesModal(false)

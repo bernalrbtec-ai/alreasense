@@ -309,6 +309,7 @@ export default function ConfigurationsPage() {
   const [testPhoneNumber, setTestPhoneNumber] = useState('')
   const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
   const [isValidatingMetaId, setIsValidatingMetaId] = useState<string | null>(null)
+  const [instanceFormError, setInstanceFormError] = useState<string | null>(null)
   
   // Estados para SMTP
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
@@ -742,6 +743,7 @@ export default function ConfigurationsPage() {
       payload.instance_name = crypto.randomUUID()
     }
     try {
+      setInstanceFormError(null)
       await api.post('/notifications/whatsapp-instances/', payload)
       updateToastSuccess(toastId, 'criar', 'Instância')
 
@@ -754,7 +756,12 @@ export default function ConfigurationsPage() {
       handleCloseInstanceModal()
     } catch (error: any) {
       console.error('Error creating instance:', error)
-      // Se o servidor retornar 500 com HTML, mostrar mensagem amigável em vez do corpo da página
+      const backendError = error?.response?.status === 400 && error?.response?.data?.error
+        ? (Array.isArray(error.response.data.error) ? error.response.data.error[0] : error.response.data.error)
+        : null
+      if (backendError) {
+        setInstanceFormError(backendError)
+      }
       const errPayload =
         error?.response?.status === 500 &&
         typeof error?.response?.data === 'string' &&
@@ -783,6 +790,7 @@ export default function ConfigurationsPage() {
     }
     const toastId = showLoadingToast('atualizar', 'Instância')
     try {
+      setInstanceFormError(null)
       await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, payload)
       updateToastSuccess(toastId, 'atualizar', 'Instância')
       
@@ -790,11 +798,16 @@ export default function ConfigurationsPage() {
       handleCloseInstanceModal()
     } catch (error: any) {
       console.error('Error updating instance:', error)
+      const backendError = error?.response?.status === 400 && error?.response?.data?.error
+        ? (Array.isArray(error.response.data.error) ? error.response.data.error[0] : error.response.data.error)
+        : null
+      if (backendError) setInstanceFormError(backendError)
       updateToastError(toastId, 'atualizar', 'Instância', error)
     }
   }
 
   const handleEditInstance = (instance: WhatsAppInstance) => {
+    setInstanceFormError(null)
     setEditingInstance(instance)
     setInstanceFormData({
       friendly_name: instance.friendly_name,
@@ -1093,6 +1106,7 @@ export default function ConfigurationsPage() {
   const handleCloseInstanceModal = () => {
     setIsInstanceModalOpen(false)
     setEditingInstance(null)
+    setInstanceFormError(null)
     setInstanceFormData({
       friendly_name: '',
       default_department: null,
@@ -2000,7 +2014,7 @@ export default function ConfigurationsPage() {
                   {showApiKeys ? 'Ocultar' : 'Mostrar'} API Keys
                 </Button>
                 <Button
-                  onClick={() => setIsInstanceModalOpen(true)}
+                  onClick={() => { setInstanceFormError(null); setIsInstanceModalOpen(true) }}
                   disabled={limits?.products?.flow && 
                     (limits.products.flow.current_usage || 0) >= (limits.products.flow.limit || 0)}
                 >
@@ -2015,7 +2029,7 @@ export default function ConfigurationsPage() {
                 <Server className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">Nenhuma instância cadastrada</h3>
                 <p className="text-gray-500 dark:text-gray-400 mb-4">Crie sua primeira instância WhatsApp para começar</p>
-                <Button onClick={() => setIsInstanceModalOpen(true)}>
+                <Button onClick={() => { setInstanceFormError(null); setIsInstanceModalOpen(true) }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Criar Primeira Instância
                 </Button>
@@ -3098,6 +3112,15 @@ export default function ConfigurationsPage() {
                   <h3 className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100 mb-4">
                     {editingInstance ? 'Editar Instância WhatsApp' : 'Nova Instância WhatsApp'}
                   </h3>
+
+                  {instanceFormError && (
+                    <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 mb-4">
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">{instanceFormError}</p>
+                      <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                        Verifique seu plano ou faça upgrade para criar mais instâncias WhatsApp.
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="space-y-4">
                     <div>
