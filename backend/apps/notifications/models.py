@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django_cryptography.fields import encrypt
 from apps.tenancy.models import Tenant
+from typing import Optional, Tuple
 import uuid
 
 User = get_user_model()
@@ -540,6 +541,41 @@ class WhatsAppInstance(models.Model):
         """Nome usado nas chamadas à Evolution API (UUID). Preferir evolution_instance_name se preenchido."""
         return (self.evolution_instance_name or self.instance_name or '').strip()
     
+    # Mensagens únicas para "servidor Evolution não configurado" (evitar duplicação e facilitar manutenção)
+    _EVOLUTION_NOT_CONFIGURED_MSG = (
+        '❌ Nenhum servidor Evolution API configurado!\n\n'
+        '📋 Passos para configurar:\n'
+        '1. Acesse: Admin → Servidor de Instância\n'
+        '2. Configure a URL e API Key do Evolution API\n'
+        '   (ou defina EVOLUTION_API_URL e EVOLUTION_API_KEY no .env)\n'
+        '3. Teste a conexão\n'
+        '4. Volte aqui e tente novamente'
+    )
+    _EVOLUTION_NOT_CONFIGURED_SHORT = 'Servidor Evolution não configurado (Admin ou .env)'
+
+    @staticmethod
+    def _get_evolution_server_config() -> Tuple[Optional[str], Optional[str]]:
+        """
+        Retorna (base_url, api_key) para chamadas à Evolution API.
+
+        Ordem de precedência:
+        1. EvolutionConnection ativo no banco (Admin → Servidor de Instância)
+        2. Variáveis de ambiente: EVOLUTION_API_URL/EVO_BASE_URL e EVOLUTION_API_KEY/EVO_API_KEY
+
+        Returns:
+            (base_url, api_key) com URL sem barra final, ou (None, None) se não configurado.
+        """
+        # Import tardio para evitar dependência circular apps.notifications → apps.connections
+        from apps.connections.models import EvolutionConnection
+        conn = EvolutionConnection.objects.filter(is_active=True).first()
+        if conn and conn.base_url and conn.api_key:
+            return (conn.base_url.rstrip('/'), conn.api_key)
+        url = getattr(settings, 'EVOLUTION_API_URL', None) or getattr(settings, 'EVO_BASE_URL', '')
+        key = getattr(settings, 'EVOLUTION_API_KEY', None) or getattr(settings, 'EVO_API_KEY', '')
+        if url and key:
+            return (url.rstrip('/'), key)
+        return (None, None)
+    
     def generate_qr_code(self):
         """Generate QR code for connection."""
         if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
@@ -547,41 +583,10 @@ class WhatsAppInstance(models.Model):
         import requests
         from django.utils import timezone
         from datetime import timedelta
-        from apps.connections.models import EvolutionConnection
         
-        # Buscar servidor Evolution ativo do sistema (configuração global do admin)
-        evolution_server = EvolutionConnection.objects.filter(
-            is_active=True
-        ).first()
-        
-        if not evolution_server:
-            error_msg = (
-                '❌ Nenhum servidor Evolution API configurado!\n\n'
-                '📋 Passos para configurar:\n'
-                '1. Acesse: Admin → Servidor de Instância\n'
-                '2. Configure a URL e API Key do Evolution API\n'
-                '3. Teste a conexão\n'
-                '4. Volte aqui e tente novamente'
-            )
-            self.last_error = error_msg
-            self.status = 'error'
-            self.save()
-            return None
-        
-        # SEMPRE usar URL e API Key do servidor global
-        api_url = evolution_server.base_url
-        system_api_key = evolution_server.api_key
-        
-        if not api_url:
-            error_msg = f'❌ Servidor Evolution "{evolution_server.name}" sem URL configurada. Configure em Admin → Servidor de Instância'
-            self.last_error = error_msg
-            self.status = 'error'
-            self.save()
-            return None
-        
-        if not system_api_key:
-            error_msg = f'❌ Servidor Evolution "{evolution_server.name}" sem API Key configurada. Configure em Admin → Servidor de Instância'
-            self.last_error = error_msg
+        api_url, system_api_key = self._get_evolution_server_config()
+        if not api_url or not system_api_key:
+            self.last_error = self._EVOLUTION_NOT_CONFIGURED_MSG
             self.status = 'error'
             self.save()
             return None
@@ -768,18 +773,11 @@ class WhatsAppInstance(models.Model):
         Pode ser chamado via API ou admin action.
         """
         import requests
-        from django.conf import settings
-        from apps.connections.models import EvolutionConnection
-        
-        # Buscar servidor Evolution
-        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
-            self.last_error = 'Servidor Evolution não configurado'
+        api_url, api_key = self._get_evolution_server_config()
+        if not api_url or not api_key:
+            self.last_error = self._EVOLUTION_NOT_CONFIGURED_SHORT
             self.save()
             return False
-        
-        api_url = evolution_server.base_url.rstrip('/')
-        api_key = evolution_server.api_key
         
         print(f"🔧 Atualizando webhook para instância: {self.instance_name}")
         
@@ -794,17 +792,11 @@ class WhatsAppInstance(models.Model):
         if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
             return True  # no-op para API oficial Meta (conexão é sempre via token)
         import requests
-        from apps.connections.models import EvolutionConnection
-        
-        # Buscar servidor Evolution global
-        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
-            self.last_error = 'Servidor Evolution não configurado'
+        api_url, api_master = self._get_evolution_server_config()
+        if not api_url or not api_master:
+            self.last_error = self._EVOLUTION_NOT_CONFIGURED_SHORT
             self.save()
             return False
-        
-        api_url = evolution_server.base_url
-        api_master = evolution_server.api_key  # ← API MASTER
         api_instance_name = self.evolution_api_instance_name or self.instance_name
         
         print(f"🔍 Verificando status da instância {api_instance_name}")
@@ -929,17 +921,11 @@ class WhatsAppInstance(models.Model):
         if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
             return True  # no-op para API oficial Meta
         import requests
-        from apps.connections.models import EvolutionConnection
-        
-        # Buscar servidor Evolution global
-        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
-            self.last_error = 'Servidor Evolution não configurado'
+        api_url, api_master = self._get_evolution_server_config()
+        if not api_url or not api_master:
+            self.last_error = self._EVOLUTION_NOT_CONFIGURED_SHORT
             self.save()
             return False
-        
-        api_url = evolution_server.base_url
-        api_master = evolution_server.api_key  # ← API MASTER
         
         try:
             response = requests.delete(
@@ -979,19 +965,13 @@ class WhatsAppInstance(models.Model):
         Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
         """
         import requests
-        from apps.connections.models import EvolutionConnection
-        
-        # Buscar servidor Evolution global
-        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
-            self.last_error = 'Servidor Evolution não configurado'
+        api_url, api_master = self._get_evolution_server_config()
+        if not api_url or not api_master:
+            self.last_error = self._EVOLUTION_NOT_CONFIGURED_SHORT
             self.status = 'error'
             self.connection_state = 'error'
             self.save()
             return False
-        
-        api_url = evolution_server.base_url
-        api_master = evolution_server.api_key  # ← API MASTER
         api_instance_name = self.evolution_api_instance_name or self.instance_name
         
         try:

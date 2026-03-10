@@ -1278,10 +1278,10 @@ export default function ConfigurationsPage() {
 
   const getConnectionStatusColor = (state: string) => {
     switch (state) {
-      case 'open': return 'text-green-600 bg-green-100'
-      case 'connecting': return 'text-yellow-600 bg-yellow-100'
-      case 'close': return 'text-red-600 bg-red-100'
-      default: return 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700'
+      case 'open': return 'text-green-700 dark:text-green-200 bg-green-100 dark:bg-green-900/40'
+      case 'connecting': return 'text-yellow-700 dark:text-yellow-200 bg-yellow-100 dark:bg-yellow-900/40'
+      case 'close': return 'text-red-700 dark:text-red-200 bg-red-100 dark:bg-red-900/40'
+      default: return 'text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-600'
     }
   }
 
@@ -1818,14 +1818,14 @@ export default function ConfigurationsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-600">
-        <nav className="-mb-px flex space-x-8">
+      <div className="border-b border-gray-200 dark:border-gray-600 dark:bg-gray-800/50">
+        <nav className="-mb-px flex flex-wrap gap-x-6 gap-y-1">
           <button
             onClick={() => setActiveTab('instances')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'instances'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Server className="h-4 w-4 inline mr-2" />
@@ -1833,10 +1833,10 @@ export default function ConfigurationsPage() {
           </button>
           <button
             onClick={() => setActiveTab('smtp')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'smtp'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Mail className="h-4 w-4 inline mr-2" />
@@ -1844,10 +1844,10 @@ export default function ConfigurationsPage() {
           </button>
           <button
             onClick={() => setActiveTab('plan')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'plan'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <CreditCard className="h-4 w-4 inline mr-2" />
@@ -1855,10 +1855,10 @@ export default function ConfigurationsPage() {
           </button>
           <button
             onClick={() => setActiveTab('team')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'team'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Users className="h-4 w-4 inline mr-2" />
@@ -1866,10 +1866,10 @@ export default function ConfigurationsPage() {
           </button>
           <button
             onClick={() => setActiveTab('notifications')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'notifications'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Bell className="h-4 w-4 inline mr-2" />
@@ -1877,10 +1877,10 @@ export default function ConfigurationsPage() {
           </button>
           <button
             onClick={() => setActiveTab('business-hours')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'business-hours'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
             }`}
           >
             <Clock className="h-4 w-4 inline mr-2" />
@@ -1889,10 +1889,10 @@ export default function ConfigurationsPage() {
           {isTenantAdmin && (
             <button
               onClick={() => setActiveTab('ai')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'ai'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
             >
               <Activity className="h-4 w-4 inline mr-2" />
@@ -1902,10 +1902,10 @@ export default function ConfigurationsPage() {
           {isTenantAdmin && (
             <button
               onClick={() => setActiveTab('welcome-menu')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+            className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'welcome-menu'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
               }`}
             >
               <MessageSquare className="h-4 w-4 inline mr-2" />
@@ -1915,7 +1915,7 @@ export default function ConfigurationsPage() {
           {isTenantAdmin && (
             <button
               onClick={() => navigate('/configurations/flows')}
-              className="py-2 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500"
+              className="py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
             >
               <List className="h-4 w-4 inline mr-2" />
               Fluxos (lista/botões)
@@ -1970,7 +1970,7 @@ export default function ConfigurationsPage() {
 
           {/* Limites do Plano */}
           {limits && (
-            <Card className="p-6">
+            <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Limites do Plano</h3>
                 <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
@@ -1980,19 +1980,19 @@ export default function ConfigurationsPage() {
               </div>
               
               {limits.products?.flow && (
-                <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="bg-blue-50 dark:bg-blue-900/25 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-medium text-blue-900">ALREA Flow (WhatsApp)</h4>
-                      <p className="text-sm text-blue-700">
+                      <h4 className="font-medium text-blue-900 dark:text-blue-100">ALREA Flow (WhatsApp)</h4>
+                      <p className="text-sm text-blue-700 dark:text-blue-200">
                         {limits.products.flow.current_usage || 0} de {limits.products.flow.limit || 0} instâncias
                       </p>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-blue-900">
+                      <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                         {limits.products.flow.current_usage || 0}/{limits.products.flow.limit || 0}
                       </div>
-                      <div className="text-sm text-blue-700">instâncias</div>
+                      <div className="text-sm text-blue-700 dark:text-blue-200">instâncias</div>
                     </div>
                   </div>
                 </div>
@@ -2001,14 +2001,15 @@ export default function ConfigurationsPage() {
           )}
 
           {/* Lista de Instâncias */}
-          <Card className="p-6">
+          <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Suas Instâncias WhatsApp</h3>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowApiKeys(!showApiKeys)}
+                  className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <Key className="h-4 w-4 mr-2" />
                   {showApiKeys ? 'Ocultar' : 'Mostrar'} API Keys
@@ -2037,7 +2038,7 @@ export default function ConfigurationsPage() {
             ) : (
               <div className="grid gap-4">
                 {instances.map((instance) => (
-                  <div key={instance.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4">
+                  <div key={instance.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50/50 dark:bg-gray-700/30 hover:border-gray-300 dark:hover:border-gray-500 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
@@ -2058,10 +2059,10 @@ export default function ConfigurationsPage() {
                           )}
                           <h4 className="font-medium text-gray-900 dark:text-gray-100">{instance.friendly_name}</h4>
                           {instance.integration_type === INTEGRATION_META_CLOUD && (
-                            <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">API Meta</span>
+                            <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200">API Meta</span>
                           )}
                           <span className={`ml-3 px-2 py-1 text-xs font-medium rounded-full ${
-                            instance.integration_type === INTEGRATION_META_CLOUD ? 'text-green-600 bg-green-100' : getConnectionStatusColor(instance.connection_state)
+                            instance.integration_type === INTEGRATION_META_CLOUD ? 'text-green-700 dark:text-green-200 bg-green-100 dark:bg-green-900/40' : getConnectionStatusColor(instance.connection_state)
                           }`}>
                             {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' : getConnectionStatusText(instance.connection_state)}
                           </span>
@@ -2093,7 +2094,7 @@ export default function ConfigurationsPage() {
                               onClick={() => handleValidateMeta(instance)}
                               disabled={isValidatingMetaId === instance.id}
                               title="Validar token e Phone Number ID"
-                              className="text-indigo-600 hover:text-indigo-700"
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
                             >
                               <ShieldCheck className={`h-4 w-4 ${isValidatingMetaId === instance.id ? 'animate-pulse' : ''}`} />
                             </Button>
@@ -2102,7 +2103,7 @@ export default function ConfigurationsPage() {
                               size="sm"
                               onClick={() => { setTestInstance(instance); setTestPhoneNumber('') }}
                               title="Enviar Mensagem de Teste"
-                              className="text-blue-600 hover:text-blue-700"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                             >
                               <Send className="h-4 w-4" />
                             </Button>
@@ -2115,6 +2116,7 @@ export default function ConfigurationsPage() {
                               onClick={() => handleCheckStatus(instance)}
                               disabled={checkingStatusId === instance.id}
                               title="Atualizar status (sincronizar com API não oficial)"
+                              className="border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
                             >
                               <RefreshCw className={`h-4 w-4 ${checkingStatusId === instance.id ? 'animate-spin' : ''}`} />
                             </Button>
@@ -2123,6 +2125,7 @@ export default function ConfigurationsPage() {
                               size="sm"
                               onClick={() => handleGenerateQR(instance)}
                               title="Gerar/Atualizar QR Code"
+                              className="border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
                             >
                               <QrCode className="h-4 w-4" />
                             </Button>
@@ -2132,7 +2135,7 @@ export default function ConfigurationsPage() {
                               onClick={() => { setTestInstance(instance); setTestPhoneNumber('') }}
                               disabled={instance.connection_state !== 'open'}
                               title="Enviar Mensagem de Teste"
-                              className="text-blue-600 hover:text-blue-700"
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                             >
                               <Send className="h-4 w-4" />
                             </Button>
@@ -2142,6 +2145,7 @@ export default function ConfigurationsPage() {
                               onClick={() => handleDisconnect(instance)}
                               disabled={instance.connection_state !== 'open'}
                               title="Desconectar Instância"
+                              className="border-gray-300 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600"
                             >
                               <X className="h-4 w-4" />
                             </Button>
@@ -2152,7 +2156,7 @@ export default function ConfigurationsPage() {
                           size="sm"
                           onClick={() => handleEditInstance(instance)}
                           title="Editar Instância"
-                          className="text-blue-600 hover:text-blue-700"
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -2160,7 +2164,7 @@ export default function ConfigurationsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleDeleteInstance(instance.id)}
-                          className="text-red-600 hover:text-red-700"
+                          className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"
                           title="Excluir Instância"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -2748,7 +2752,7 @@ export default function ConfigurationsPage() {
             </div>
           ) : (
             <>
-              <Card className="p-6">
+              <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -2770,13 +2774,13 @@ export default function ConfigurationsPage() {
                   </div>
 
                   {aiModelOptions.length === 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-200">
                       Nenhum modelo listado. A IA fica indisponível até o endpoint de modelos responder.
                     </div>
                   )}
 
                   {!aiSettings.ai_enabled && (
-                    <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300">
+                    <div className="bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg p-4 text-sm text-gray-700 dark:text-gray-300">
                       Habilite a IA para editar as configurações abaixo.
                     </div>
                   )}
@@ -2827,7 +2831,7 @@ export default function ConfigurationsPage() {
                         type="number"
                         value={aiSettings.transcription_min_seconds}
                         onChange={(e) => setAiSettings({ ...aiSettings, transcription_min_seconds: Number(e.target.value) })}
-                        className={`mt-1 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500' : ''}`}
+                        className={`mt-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500 dark:border-red-500' : ''}`}
                         disabled={!aiSettings.ai_enabled}
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -2841,7 +2845,7 @@ export default function ConfigurationsPage() {
                         type="number"
                         value={aiSettings.transcription_max_mb}
                         onChange={(e) => setAiSettings({ ...aiSettings, transcription_max_mb: Number(e.target.value) })}
-                        className={`mt-1 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500' : ''}`}
+                        className={`mt-1 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-900 dark:text-gray-100 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500 dark:border-red-500' : ''}`}
                         disabled={!aiSettings.ai_enabled}
                       />
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -2871,7 +2875,7 @@ export default function ConfigurationsPage() {
                         id="agent_model"
                         value={aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : ''}
                         onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
                       >
                         {aiModelOptions.map((option) => (
@@ -2891,12 +2895,12 @@ export default function ConfigurationsPage() {
 
                   {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
                   (aiSettings.ai_enabled && !aiSettings.n8n_ai_webhook_url) ? (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-200">
                       Preencha os webhooks obrigatórios para ativar transcrição e IA.
                     </div>
                   ) : null}
                   {aiSettingsErrors.n8n_models_webhook_url ? (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    <div className="bg-red-50 dark:bg-red-900/25 border border-red-200 dark:border-red-800 rounded-lg p-4 text-sm text-red-700 dark:text-red-200">
                       {aiSettingsErrors.n8n_models_webhook_url}
                     </div>
                   ) : null}
@@ -3048,17 +3052,17 @@ export default function ConfigurationsPage() {
       {activeTab === 'plan' && (
         <div className="space-y-6">
           {tenant && (
-            <Card className="p-6">
+            <Card className="p-6 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-sm">
               <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Informações do Plano</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Plano Atual</h4>
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <div className="text-2xl font-bold text-blue-900">
+                  <div className="bg-blue-50 dark:bg-blue-900/25 p-4 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                    <div className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                       {tenant.current_plan?.name || 'Sem plano'}
                     </div>
-                    <div className="text-blue-700">
+                    <div className="text-blue-700 dark:text-blue-200">
                       R$ {Number(tenant.current_plan?.price || 0).toFixed(2)}/mês
                     </div>
                   </div>
@@ -3066,11 +3070,11 @@ export default function ConfigurationsPage() {
                 
                 <div>
                   <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-2">Status da Conta</h4>
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <div className="text-2xl font-bold text-green-900 capitalize">
+                  <div className="bg-green-50 dark:bg-green-900/25 p-4 rounded-lg border border-green-100 dark:border-green-800/50">
+                    <div className="text-2xl font-bold text-green-900 dark:text-green-100 capitalize">
                       {tenant.status}
                     </div>
-                    <div className="text-green-700">
+                    <div className="text-green-700 dark:text-green-200">
                       Conta ativa
                     </div>
                   </div>
