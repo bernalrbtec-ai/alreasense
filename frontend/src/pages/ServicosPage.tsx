@@ -30,7 +30,7 @@ interface ProxyOverview {
     num_proxies: number
     num_instances: number
     num_updated: number
-    num_errors: number
+    num_errors?: number
   } | null
   last_errors: string[]
   is_running: boolean
@@ -469,15 +469,35 @@ export default function ServicosPage() {
               <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                 Overview – Rotação de Proxies
               </h2>
-              <Button
-                onClick={fetchOverview}
-                disabled={isLoadingOverview}
-                variant="outline"
-                size="sm"
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingOverview ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={fetchOverview}
+                  disabled={isLoadingOverview}
+                  variant="outline"
+                  size="sm"
+                  className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingOverview ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+                <Button
+                  onClick={handleRotate}
+                  disabled={isRotating || !overview?.config_ok || overview?.is_running}
+                  size="sm"
+                >
+                  {isRotating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Executando...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-1" />
+                      Executar rotação
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
 
             {isLoadingOverview ? (
@@ -527,10 +547,29 @@ export default function ServicosPage() {
                   </div>
                   <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Status</p>
-                    {overview.is_running ? (
-                      <div className="mt-1 flex items-center gap-2">
-                        <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                        <span className="font-medium">Em execução</span>
+                    {overview.is_running || isRotating ? (
+                      <div className="mt-1 flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-5 w-5 animate-spin text-blue-500 flex-shrink-0" />
+                          <span className="font-medium">Em execução</span>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Aguarde a conclusão...</p>
+                      </div>
+                    ) : overview.last_execution ? (
+                      <div className="mt-1 space-y-1">
+                        <p className="font-medium">
+                          {overview.last_execution.num_instances > 0
+                            ? `${overview.last_execution.num_updated}/${overview.last_execution.num_instances} processadas`
+                            : 'Ocioso'}
+                        </p>
+                        <div className="text-xs space-y-0.5">
+                          <p className="text-green-600 dark:text-green-400">
+                            Sucessos: {overview.last_execution.num_updated ?? 0}
+                          </p>
+                          <p className="text-red-600 dark:text-red-400">
+                            Erros: {overview.last_execution.num_errors ?? overview.last_execution.num_instances - overview.last_execution.num_updated}
+                          </p>
+                        </div>
                       </div>
                     ) : (
                       <p className="mt-1 font-medium">Ocioso</p>
@@ -559,25 +598,6 @@ export default function ServicosPage() {
                     </ul>
                   </div>
                 )}
-
-                <div className="pt-4">
-                  <Button
-                    onClick={handleRotate}
-                    disabled={isRotating || !overview.config_ok || overview.is_running}
-                  >
-                    {isRotating ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Executando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Executar rotação
-                      </>
-                    )}
-                  </Button>
-                </div>
               </div>
             ) : null}
           </Card>
