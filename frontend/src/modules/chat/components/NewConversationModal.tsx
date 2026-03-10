@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, Search, User, Phone, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { X, Search, User, Phone, Loader2, Tag as TagIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 import { rawInputToE164, isValidE164 } from '@/lib/phoneDDD';
 import { parseE164ToCountryAndNational, buildE164International } from '@/lib/countryCodes';
@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useTheme } from '@/hooks/useTheme';
 import { showErrorToast } from '@/lib/toastHelper';
+import { TagSelectModal } from './TagSelectModal';
 
 interface Contact {
   id: string;
@@ -45,6 +46,10 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [selectedTagsInfo, setSelectedTagsInfo] = useState<Array<{ id: string; name: string; color: string }>>([]);
+  const [isTagSelectModalOpen, setIsTagSelectModalOpen] = useState(false);
+  const searchAbortRef = useRef<AbortController | null>(null);
 
   // Departamentos reais do usuário (exclui inbox e my_conversations)
   const userDepartments = useMemo(() => {
@@ -165,41 +170,63 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return rawInputToE164(s, '17');
   }, []);
 
-  // Buscar contatos
+  // Buscar contatos (nome/telefone e/ou tags)
   useEffect(() => {
     if (!isOpen) {
       setSearchQuery('');
       setContacts([]);
       setPhoneInput('');
       setIsValidPhone(false);
+      setSelectedTagIds([]);
+      setSelectedTagsInfo([]);
+      setIsTagSelectModalOpen(false);
       return;
     }
 
+    const hasSearch = searchQuery.trim().length >= 2;
+    const hasTags = selectedTagIds.length > 0;
+    const delayMs = hasSearch ? 300 : 0;
+
     const searchContacts = async () => {
-      if (!searchQuery || searchQuery.length < 2) {
+      if (!hasSearch && !hasTags) {
         setContacts([]);
         return;
       }
 
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = new AbortController();
+      const signal = searchAbortRef.current.signal;
       setIsSearching(true);
       try {
-        const response = await api.get('/contacts/contacts/', {
-          params: { search: searchQuery, page_size: 10 }
-        });
-        const results = response.data.results || response.data || [];
+        const params: Record<string, string> = {};
+        if (hasSearch) {
+          params.search = searchQuery.trim();
+          params.page_size = '10';
+        } else {
+          params.page_size = '20';
+        }
+        if (hasTags) {
+          const tagIds = selectedTagIds.filter((id) => id != null && String(id).trim());
+          if (tagIds.length > 0) params.tags = tagIds.join(',');
+        }
+        const response = await api.get('/contacts/contacts/', { params, signal });
+        const results = (response?.data?.results ?? response?.data) ?? [];
         setContacts(Array.isArray(results) ? results : []);
       } catch (error) {
-        console.error('Erro ao buscar contatos:', error);
-        setContacts([]);
+        const isAbort = (error as { name?: string })?.name === 'CanceledError' || (error as { name?: string })?.name === 'AbortError';
+        if (!isAbort) console.error('Erro ao buscar contatos:', error);
+        if (!signal.aborted) setContacts([]);
       } finally {
         setIsSearching(false);
       }
     };
 
-    // Debounce de 300ms
-    const timeoutId = setTimeout(searchContacts, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchQuery, isOpen]);
+    const timeoutId = setTimeout(searchContacts, delayMs);
+    return () => {
+      clearTimeout(timeoutId);
+      searchAbortRef.current?.abort();
+    };
+  }, [searchQuery, isOpen, selectedTagIds]);
 
   // Validar telefone quando mudar
   useEffect(() => {
@@ -457,34 +484,77 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         )}
 
         {/* Search Input */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-600">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nome ou telefone..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                if (isPhoneQuery(e.target.value)) {
-                  setPhoneInput(e.target.value);
-                }
-              }}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800"
-              autoFocus
-            />
-            {isSearching && (
-              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400 animate-spin" />
-            )}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-600 space-y-2">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou telefone..."
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (isPhoneQuery(e.target.value)) {
+                    setPhoneInput(e.target.value);
+                  }
+                }}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-500 dark:placeholder-gray-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:ring-offset-gray-800"
+                autoFocus
+              />
+              {isSearching && (
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400 animate-spin" />
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsTagSelectModalOpen(true)}
+              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm font-medium active:scale-95"
+              title="Filtrar por tag"
+            >
+              <TagIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Tag</span>
+            </button>
           </div>
+          {selectedTagsInfo.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedTagsInfo.map((tag) => {
+                const color = tag.color || '#6b7280';
+                return (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center gap-0.5 pl-2 pr-1 py-1 rounded-full text-xs font-medium border transition-opacity duration-150"
+                  style={
+                    isDark
+                      ? { backgroundColor: 'rgb(55 65 81)', color: 'rgb(229 231 235)', borderColor: 'rgb(75 85 99)' }
+                      : { backgroundColor: `${color}20`, color, borderColor: `${color}40` }
+                  }
+                >
+                  {tag.name}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedTagIds((prev) => prev.filter((id) => id !== tag.id));
+                      setSelectedTagsInfo((prev) => prev.filter((t) => t.id !== tag.id));
+                    }}
+                    className="min-w-[28px] min-h-[28px] flex items-center justify-center rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors active:scale-90"
+                    aria-label={`Remover tag ${tag.name}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto p-4">
-          {searchQuery.length < 2 ? (
+          {searchQuery.length < 2 && selectedTagIds.length === 0 ? (
             <div className="text-center py-8">
               <Search className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />
               <p className="text-gray-500 dark:text-gray-400">Digite um nome ou telefone para buscar</p>
+              <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">ou use &quot;Tag&quot; para filtrar por tags</p>
             </div>
           ) : contacts.length > 0 ? (
             <div className="space-y-2">
@@ -569,13 +639,28 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400">Nenhum resultado encontrado</p>
+              <p className="text-gray-500 dark:text-gray-400">
+                {selectedTagIds.length > 0 && searchQuery.trim().length < 2
+                  ? 'Nenhum contato com as tags selecionadas'
+                  : 'Nenhum resultado encontrado'}
+              </p>
               {isPhone && !isValidPhone && (
                 <p className="text-sm text-red-500 dark:text-red-400 mt-2">Telefone inválido</p>
               )}
             </div>
           )}
         </div>
+
+        <TagSelectModal
+          isOpen={isTagSelectModalOpen}
+          onClose={() => setIsTagSelectModalOpen(false)}
+          selectedIds={selectedTagIds}
+          onApply={(ids, tagsInfo) => {
+            setSelectedTagIds(ids);
+            setSelectedTagsInfo(tagsInfo);
+            setIsTagSelectModalOpen(false);
+          }}
+        />
       </div>
     </div>
   );
