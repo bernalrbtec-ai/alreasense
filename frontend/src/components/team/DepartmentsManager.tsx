@@ -13,7 +13,12 @@ interface Department {
   transfer_message?: string;
 }
 
-export function DepartmentsManager() {
+interface DepartmentsManagerProps {
+  /** Called after create/update/delete so parent can refresh its departments list (e.g. ConfigurationsPage for other tabs). */
+  onDepartmentsChange?: () => void;
+}
+
+export function DepartmentsManager({ onDepartmentsChange }: DepartmentsManagerProps) {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -67,6 +72,7 @@ export function DepartmentsManager() {
       }
       
       fetchDepartments();
+      onDepartmentsChange?.();
       handleCloseModal();
     } catch (error: any) {
       console.error('Erro ao salvar departamento:', error);
@@ -111,6 +117,7 @@ export function DepartmentsManager() {
       await api.delete(`/auth/departments/${id}/`);
       toast.success('Departamento excluído!');
       fetchDepartments();
+      onDepartmentsChange?.();
     } catch (error) {
       toast.error('Erro ao excluir departamento');
     }

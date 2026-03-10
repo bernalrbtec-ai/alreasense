@@ -2449,7 +2449,7 @@ export default function ConfigurationsPage() {
             <UsersManager />
           </Card>
           <Card className="p-6">
-            <DepartmentsManager />
+            <DepartmentsManager onDepartmentsChange={fetchDepartments} />
           </Card>
         </div>
       )}

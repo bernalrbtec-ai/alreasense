@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Pencil, Trash2, Mail, Shield, Building2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { Button } from '../ui/Button';
@@ -50,9 +50,33 @@ export function UsersManager() {
     department_ids: [] as string[]
   });
 
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const response = await api.get('/auth/departments/');
+      let data = Array.isArray(response.data)
+        ? response.data
+        : (response.data?.results || []);
+      const uniqueDepartments = data.filter((dept, index, self) =>
+        index === self.findIndex((d) => d.id === dept.id)
+      );
+      setDepartments(uniqueDepartments);
+    } catch (error) {
+      console.error('Erro ao buscar departamentos:', error);
+      setDepartments([]);
+    }
+  }, []);
+
   useEffect(() => {
     Promise.all([fetchUsers(), fetchDepartments()]);
-  }, []);
+  }, [fetchDepartments]);
+
+  // Refetch departments when opening add/edit user modal so the list is up to date
+  // (e.g. after creating/editing a department in DepartmentsManager on the same page)
+  useEffect(() => {
+    if (showModal) {
+      fetchDepartments();
+    }
+  }, [showModal, fetchDepartments]);
 
   const fetchUsers = async (forceRefresh = false) => {
     try {
@@ -74,26 +98,6 @@ export function UsersManager() {
       setUsers([]); // Garantir array vazio em caso de erro
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchDepartments = async () => {
-    try {
-      const response = await api.get('/auth/departments/');
-      // Garantir que sempre temos um array
-      let data = Array.isArray(response.data) 
-        ? response.data 
-        : (response.data?.results || []);
-      
-      // Remover duplicatas baseando-se no ID
-      const uniqueDepartments = data.filter((dept, index, self) => 
-        index === self.findIndex((d) => d.id === dept.id)
-      );
-      
-      setDepartments(uniqueDepartments);
-    } catch (error) {
-      console.error('Erro ao buscar departamentos:', error);
-      setDepartments([]); // Garantir array vazio em caso de erro
     }
   };
 
