@@ -3210,11 +3210,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     base = base.split('-')[-1]
                 return base
 
+            # JIDs (e canônicos) que vieram na resposta da Evolution (para limpar instance_removed)
+            seen_group_jids = set()
+            seen_canonical_ids = set()
+
             for group in groups:
                 group_id_raw = group.get('id') or group.get('jid')
                 if not group_id_raw:
                     continue
                 group_jid = group_id_raw if str(group_id_raw).endswith('@g.us') else f"{group_id_raw}@g.us"
+                seen_group_jids.add(group_jid)
+                cid = _canonical_group_id(group_jid)
+                if cid:
+                    seen_canonical_ids.add(cid)
                 subject = (group.get('subject') or group.get('name') or '').strip() or 'Grupo WhatsApp'
                 canonical_id = _canonical_group_id(group_jid)
                 defaults = {
@@ -3267,6 +3275,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         updated += 1
                     # Evitar marcar como removido: este grupo (criado ou já existente) está na Evolution
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
+
+            # Garantir que todos os grupos presentes na Evolution tenham instance_removed limpo (incl. match por JID ou canonical)
+            for c in Conversation.objects.filter(
+                tenant=tenant,
+                conversation_type='group',
+                instance_name=instance_name,
+            ).only('id', 'contact_phone', 'group_metadata'):
+                gid = (c.group_metadata or {}).get('group_id') or c.contact_phone
+                if gid in seen_group_jids or (_canonical_group_id(gid) and _canonical_group_id(gid) in seen_canonical_ids):
+                    meta = dict(c.group_metadata or {})
+                    meta.pop('instance_removed', None)
+                    meta.pop('instance_removed_at', None)
+                    if meta != (c.group_metadata or {}):
+                        c.group_metadata = meta
+                        c.save(update_fields=['group_metadata'])
 
             # Fonte da verdade é a Evolution: grupos que não vieram na resposta = instância saiu/foi removida
             removed_count = 0
