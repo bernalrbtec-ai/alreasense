@@ -323,6 +323,28 @@ export function ConversationList() {
       return convDeptId === activeDeptId;
     });
 
+    // Aba Grupos: ordenar por tempo real da conversa (last_message_at); sem ela, ordem alfabética
+    if (activeDepartment?.id === 'groups' && !waitingForResponseMode && filtered.length > 0) {
+      const getGroupName = (c: typeof filtered[0]) =>
+        (c.group_metadata?.group_name || c.contact_name || c.contact_phone || '').toLowerCase().trim();
+      const hasRealTime = (c: typeof filtered[0]) => {
+        const t = c.last_message_at;
+        return t != null && t !== '' && !Number.isNaN(new Date(t).getTime());
+      };
+      return [...filtered].sort((a, b) => {
+        const aHas = hasRealTime(a);
+        const bHas = hasRealTime(b);
+        if (aHas && !bHas) return -1;
+        if (!aHas && bHas) return 1;
+        if (aHas && bHas) {
+          const tA = new Date(a.last_message_at!).getTime();
+          const tB = new Date(b.last_message_at!).getTime();
+          return tB - tA; // mais recente primeiro
+        }
+        return getGroupName(a).localeCompare(getGroupName(b), 'pt-BR');
+      });
+    }
+
     // Modo normal: mesma ordem do store (last_message_at desc)
     if (!waitingForResponseMode) return filtered;
 
