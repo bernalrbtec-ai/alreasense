@@ -62,6 +62,13 @@ export function ConversationList() {
   const [tabLoadError, setTabLoadError] = useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
   
+  // Limpar erro da aba quando trocar para Inbox ou departamento (evita estado órfão)
+  useEffect(() => {
+    if (activeDepartment?.id !== 'my_conversations' && activeDepartment?.id !== 'groups') {
+      setTabLoadError(null);
+    }
+  }, [activeDepartment?.id]);
+
   // ✅ PERFORMANCE: Debounce na busca para evitar filtros excessivos
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -414,10 +421,14 @@ export function ConversationList() {
               Tentar novamente
             </button>
           </div>
-        ) : tabLoadError ? (
+        ) : tabLoadError && (activeDepartment?.id === 'my_conversations' || activeDepartment?.id === 'groups') ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
             <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
-              {activeDepartment?.id === 'groups' ? 'Não foi possível carregar os grupos' : 'Não foi possível carregar'}
+              {activeDepartment?.id === 'groups'
+                ? 'Não foi possível carregar os grupos'
+                : activeDepartment?.id === 'my_conversations'
+                  ? 'Não foi possível carregar minhas conversas'
+                  : 'Não foi possível carregar'}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs mb-4">{tabLoadError}</p>
             <button
