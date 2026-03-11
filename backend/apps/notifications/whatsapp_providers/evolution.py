@@ -345,9 +345,9 @@ class EvolutionProvider(WhatsAppSenderBase):
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Envia mensagem interativa tipo lista via Evolution sendList.
-        Evolution API v2: POST /message/sendList/{instance}, body no nível raiz:
-        number, title, description, buttonText, footerText, values (array de {title, rows}).
-        Mapeia header_text -> title; body_text -> description; sections -> values; id -> rowId.
+        Evolution API: POST /message/sendList/{instance}, body no nível raiz:
+        number, title, description, buttonText, footerText, sections (array de {title, rows}).
+        Mapeia header_text -> title; body_text -> description; id -> rowId.
         """
         raw_phone = (phone or '').strip()
         if raw_phone.endswith('@g.us'):
@@ -414,8 +414,7 @@ class EvolutionProvider(WhatsAppSenderBase):
         if total_rows < 1:
             return False, {'error': 'Pelo menos uma opção (row) no total', 'error_code': 'INVALID_SECTIONS'}
 
-        # Evolution API v2: body must have number, title, description, buttonText, footerText, values at ROOT (no listMessage wrapper).
-        # See https://doc.evolution-api.com/v2/api-reference/message-controller/send-list
+        # Evolution API: body at ROOT (no listMessage wrapper). Some versions expect "sections", others "values".
         title_evolution = (header_text or '').strip()[:60] if header_text else (body_clean[:60] if len(body_clean) > 60 else body_clean)
         footer_clean = (footer_text or '').strip()[:60]
         if not footer_clean:
@@ -426,7 +425,7 @@ class EvolutionProvider(WhatsAppSenderBase):
             'description': body_clean[:1024],
             'buttonText': btn_clean,
             'footerText': footer_clean,
-            'values': list_sections,  # API expects "values", not "sections"
+            'sections': list_sections,  # Evolution instances may expect "sections" or "values"; "sections" works with current deploy
         }
         if quoted_message_id:
             payload['quoted'] = {
