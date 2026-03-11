@@ -61,6 +61,7 @@ export function ConversationList() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tabLoadError, setTabLoadError] = useState<string | null>(null);
   const [retryTrigger, setRetryTrigger] = useState(0);
+  const [syncingGroups, setSyncingGroups] = useState(false);
   
   // Limpar erro da aba quando trocar para Inbox ou departamento (evita estado órfão)
   useEffect(() => {
@@ -313,7 +314,7 @@ export function ConversationList() {
         if (!user) return false;
         return (
           conversationItem.assigned_to === user.id &&
-          conversationItem.status === 'open'
+          (conversationItem.status ?? 'open') === 'open'
         );
       }
 
@@ -368,29 +369,31 @@ export function ConversationList() {
 
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
-      {/* Search + New - Responsivo */}
-      <div className="flex-shrink-0 flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex-1 relative min-w-0">
-          <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
-          <input
-            type="search"
-            aria-label="Buscar conversas ou contatos"
-            placeholder="Buscar ou iniciar conversa"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
-          />
+      {/* Search + New - oculto na aba Grupos (só conversas individuais) */}
+      {activeDepartment?.id !== 'groups' && (
+        <div className="flex-shrink-0 flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex-1 relative min-w-0">
+            <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
+            <input
+              type="search"
+              aria-label="Buscar conversas ou contatos"
+              placeholder="Buscar ou iniciar conversa"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
+            />
+          </div>
+          <button
+            type="button"
+            aria-label="Nova conversa"
+            onClick={() => setShowNewConversation(true)}
+            className="flex-shrink-0 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+            title="Nova conversa"
+          >
+            <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" aria-hidden />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Nova conversa"
-          onClick={() => setShowNewConversation(true)}
-          className="flex-shrink-0 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
-          title="Nova conversa"
-        >
-          <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" aria-hidden />
-        </button>
-      </div>
+      )}
 
       {/* Conversations */}
       <div
@@ -466,9 +469,32 @@ export function ConversationList() {
             ) : activeDepartment?.id === 'groups' ? (
               <>
                 <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhum grupo</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
-                  Grupos aparecem aqui quando houver mensagens nas instâncias conectadas.
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs mb-4">
+                  Grupos da sua instância WhatsApp aparecem aqui quando alguém envia ou recebe mensagem no grupo pela plataforma, ou quando você sincroniza a lista.
                 </p>
+                <button
+                  type="button"
+                  disabled={syncingGroups}
+                  aria-busy={syncingGroups}
+                  aria-label={syncingGroups ? 'Sincronizando grupos' : 'Sincronizar grupos da instância'}
+                  onClick={async () => {
+                    setSyncingGroups(true);
+                    try {
+                      const { data } = await api.post('/chat/conversations/sync-groups/');
+                      toast.success(data?.message || `${data?.created ?? 0} grupo(s) adicionado(s).`);
+                      setTabLoadError(null);
+                      setRetryTrigger((r) => r + 1);
+                    } catch (error) {
+                      const msg = ApiErrorHandler.extractMessage(error);
+                      toast.error(msg);
+                    } finally {
+                      setSyncingGroups(false);
+                    }
+                  }}
+                  className="px-4 py-2 bg-[#8b5cf6] hover:bg-[#7c3aed] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {syncingGroups ? 'Sincronizando...' : 'Sincronizar grupos da instância'}
+                </button>
               </>
             ) : (
               <>

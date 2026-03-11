@@ -1983,7 +1983,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 defaults['group_metadata'] = {
                     'group_id': group_id,  # Tentar usar telefone convertido para @g.us
                     'group_id_lid': remote_jid_alt,  # ✅ Salvar LID também para referência
-                    'group_name': push_name or 'Grupo WhatsApp',
+                    'group_name': 'Grupo WhatsApp',  # Placeholder; nome real virá do refresh-info (pushName é do remetente)
                     'is_group': True,
                     'uses_lid': True,  # ✅ Flag para indicar que grupo usa LID
                 }
@@ -1991,14 +1991,14 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 group_id = remote_jid  # Usar remoteJid com @g.us
                 defaults['group_metadata'] = {
                     'group_id': group_id,
-                    'group_name': push_name or 'Grupo WhatsApp',
+                    'group_name': 'Grupo WhatsApp',  # Placeholder; nome real virá do refresh-info
                     'is_group': True,
                 }
             elif remote_jid.endswith('@lid'):
                 group_id = remote_jid  # Usar remoteJid @lid como group_id
                 defaults['group_metadata'] = {
                     'group_id': group_id,
-                    'group_name': push_name or 'Grupo WhatsApp',
+                    'group_name': 'Grupo WhatsApp',  # Placeholder; nome real virá do refresh-info
                     'is_group': True,
                 }
             else:
@@ -2007,11 +2007,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.warning(f"⚠️ [GRUPO] Construindo group_id a partir de telefone: {group_id}")
                 defaults['group_metadata'] = {
                     'group_id': group_id,
-                    'group_name': push_name or 'Grupo WhatsApp',
+                    'group_name': 'Grupo WhatsApp',  # Placeholder; nome real virá do refresh-info
                     'is_group': True,
                 }
-            
-            defaults['contact_name'] = push_name or 'Grupo WhatsApp'  # Usar pushName se disponível
+            # Nome real do grupo virá do refresh-info (findGroupInfos); pushName aqui é do remetente
+            defaults['contact_name'] = 'Grupo WhatsApp'
             logger.info(f"✅ [GRUPO] group_id salvo: {group_id}")
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone para busca consistente

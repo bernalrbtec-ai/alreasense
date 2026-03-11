@@ -3079,7 +3079,89 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-    
+
+    @action(detail=False, methods=['post'], url_path='sync-groups')
+    def sync_groups(self, request):
+        """
+        Sincroniza grupos da instância Evolution com o banco: cria/atualiza Conversation
+        para cada grupo retornado por fetchAllGroups, para que apareçam na aba Grupos
+        mesmo sem ter havido mensagem ainda.
+        """
+        tenant = request.user.tenant
+        if not tenant:
+            return Response(
+                {'error': 'Tenant não encontrado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        wa_instances = WhatsAppInstance.objects.filter(
+            tenant=tenant,
+            is_active=True,
+            status='active'
+        )
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            return Response(
+                {'error': 'Servidor Evolution não configurado'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        created = 0
+        updated = 0
+        for wa_instance in wa_instances:
+            base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+            api_key = wa_instance.api_key or evolution_server.api_key
+            instance_name = (wa_instance.instance_name or '').strip()
+            if not instance_name:
+                continue
+            headers = {'apikey': api_key, 'Content-Type': 'application/json'}
+            endpoint = f"{base_url}/group/fetchAllGroups/{instance_name}"
+            try:
+                with httpx.Client(timeout=15.0) as client:
+                    response = client.get(endpoint, headers=headers, params={'getParticipants': 'false'})
+                if response.status_code != 200:
+                    logger.warning(f"[SYNC_GROUPS] Instância {instance_name}: status {response.status_code}")
+                    continue
+                raw = response.json()
+                groups = raw if isinstance(raw, list) else raw.get('groups', []) if isinstance(raw, dict) else []
+            except Exception as e:
+                logger.warning(f"[SYNC_GROUPS] Erro ao buscar grupos da instância {instance_name}: {e}")
+                continue
+            if not isinstance(groups, list):
+                continue
+            friendly = (getattr(wa_instance, 'friendly_name', None) or '').strip() or instance_name
+            for group in groups:
+                group_id_raw = group.get('id') or group.get('jid')
+                if not group_id_raw:
+                    continue
+                group_jid = group_id_raw if str(group_id_raw).endswith('@g.us') else f"{group_id_raw}@g.us"
+                subject = (group.get('subject') or group.get('name') or '').strip() or 'Grupo WhatsApp'
+                defaults = {
+                    'conversation_type': 'group',
+                    'contact_name': subject,
+                    'instance_name': instance_name,
+                    'instance_friendly_name': friendly,
+                    'group_metadata': {
+                        'group_id': group_jid,
+                        'group_name': subject,
+                        'is_group': True,
+                    },
+                    'status': 'open',
+                    'department': None,
+                }
+                conv, created_this = Conversation.objects.update_or_create(
+                    tenant=tenant,
+                    contact_phone=group_jid,
+                    defaults=defaults,
+                )
+                if created_this:
+                    created += 1
+                else:
+                    updated += 1
+        return Response({
+            'created': created,
+            'updated': updated,
+            'message': f'{created} grupo(s) adicionado(s), {updated} atualizado(s).',
+        }, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def reopen(self, request, pk=None):
         """Reabre uma conversa."""

@@ -286,15 +286,16 @@ export function ChatWindow() {
             
             const needsParticipants: boolean = hasInconsistency || hasPoorQuality || isStale;
             
-            // ✅ Verificação padrão: foto e nome
-            const hasPhoto: boolean = Boolean(current.profile_pic_url);
-            const hasName: boolean = Boolean(
-              current.contact_name && 
-              current.contact_name !== 'Grupo WhatsApp' &&
-              !current.contact_name.match(/^\d+$/)
+            // Para grupos, nome real vem do refresh-info. Só confiar em group_name se tivermos participantes ou timestamp de refresh (senão pode ser nome do remetente salvo pelo webhook).
+            const groupName = (groupMetadata as any).group_name;
+            const hasParticipantsOrRefreshed = participants.length > 0 || Boolean(metadataAny.participants_updated_at);
+            const hasRealGroupName: boolean = Boolean(
+              typeof groupName === 'string' && groupName.trim() !== '' && groupName !== 'Grupo WhatsApp' && hasParticipantsOrRefreshed
             );
+            const hasPhoto: boolean = Boolean(current.profile_pic_url);
+            const hasName: boolean = hasRealGroupName;
             
-            // ✅ Decisão: só pular se tem foto + nome + participantes OK
+            // ✅ Decisão: só pular se tem foto + nome real do grupo + participantes OK
             if (hasPhoto && hasName && !needsParticipants && participants.length > 0) {
               console.log(`✅ [${type}] Informações completas (foto + nome + participantes), pulando refresh-info`);
               return;
