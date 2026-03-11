@@ -3265,6 +3265,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         created += 1
                     else:
                         updated += 1
+                    # Evitar marcar como removido: este grupo (criado ou já existente) está na Evolution
+                    existing_groups = [e for e in existing_groups if e.id != conv.id]
 
             # Fonte da verdade é a Evolution: grupos que não vieram na resposta = instância saiu/foi removida
             removed_count = 0
