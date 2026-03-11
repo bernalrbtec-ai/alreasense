@@ -994,13 +994,15 @@ export function ChatWindow() {
                   </button>
                 )}
 
-                <button
-                  onClick={handleCloseConversation}
-                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Fechar conversa
-                </button>
+                {activeConversation?.conversation_type !== 'group' && (
+                  <button
+                    onClick={handleCloseConversation}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Fechar conversa
+                  </button>
+                )}
               </div>
             )}
           </div>

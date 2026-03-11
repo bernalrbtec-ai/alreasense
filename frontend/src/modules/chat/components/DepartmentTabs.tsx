@@ -2,7 +2,7 @@
  * Tabs de departamentos - Estilo WhatsApp Web
  */
 import React, { useEffect, useMemo } from 'react';
-import { Inbox, User, CircleDot } from 'lucide-react';
+import { Inbox, User, Users, CircleDot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Department } from '../types';
@@ -31,7 +31,7 @@ export function DepartmentTabs() {
   // ✅ FIX: Limpar activeDepartment se não estiver mais na lista de departamentos permitidos
   // ✅ CORREÇÃO: Não limpar se for 'my_conversations' (tab especial)
   useEffect(() => {
-    if (activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations') {
+    if (activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations' && activeDepartment.id !== 'groups') {
       const isAllowed = filteredDepartments.some(dept => dept.id === activeDepartment.id);
       if (!isAllowed) {
         setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
@@ -40,57 +40,65 @@ export function DepartmentTabs() {
   }, [filteredDepartments, activeDepartment, setActiveDepartment]);
   
   // ✅ NOVO: Calcular contador de novas conversas (pendentes) para Inbox e departamentos
+  // status pode vir undefined da API; tratamos com ?? para evitar inconsistência
   const getPendingCount = (deptId: string | null) => {
+    const notGroup = (conv: typeof conversations[0]) => conv.conversation_type !== 'group';
     if (deptId === 'inbox') {
-      // Inbox: conversas pendentes SEM departamento
-      const inboxCount = conversations.filter(conv => 
-        conv.status === 'pending' && 
+      return conversations.filter(conv =>
+        notGroup(conv) &&
+        (conv.status ?? 'pending') === 'pending' &&
         (!conv.department || conv.department === null)
       ).length;
-      return inboxCount;
-    } else {
-      // ✅ MELHORIA: Usar pending_count do backend se disponível, senão calcular do frontend
-      const dept = filteredDepartments.find(d => d.id === deptId);
-      if (dept?.pending_count !== undefined && dept.pending_count !== null) {
-        return dept.pending_count;
-      }
-      
-      // Fallback: calcular do frontend
-      return conversations.filter(conv => 
-        conv.status === 'pending' && 
-        (typeof conv.department === 'string' ? conv.department === deptId : conv.department?.id === deptId)
-      ).length;
     }
+    const dept = filteredDepartments.find(d => d.id === deptId);
+    if (dept?.pending_count !== undefined && dept.pending_count !== null) {
+      return dept.pending_count;
+    }
+    return conversations.filter(conv =>
+      notGroup(conv) &&
+      (conv.status ?? 'pending') === 'pending' &&
+      (typeof conv.department === 'string' ? conv.department === deptId : conv.department?.id === deptId)
+    ).length;
   };
 
-  // ✅ Contador de minhas conversas (atribuídas ao usuário, com ou sem departamento)
+  // ✅ Contador de minhas conversas (atribuídas ao usuário, excluir grupos - aba Grupos)
   const getMyConversationsCount = () => {
     const { user } = useAuthStore.getState();
     if (!user) return 0;
-    
-    return conversations.filter(conv => 
-      conv.assigned_to === user.id && 
-      conv.status === 'open'
+    return conversations.filter(conv =>
+      conv.conversation_type !== 'group' &&
+      conv.assigned_to === user.id &&
+      (conv.status ?? 'open') === 'open'
     ).length;
   };
+
+  // ✅ PERFORMANCE: Evitar recalcular os mesmos contadores várias vezes por render
+  const pendingInboxCount = useMemo(() => getPendingCount('inbox'), [conversations]);
+  const myConversationsCount = useMemo(() => getMyConversationsCount(), [conversations, user?.id]);
 
   const waitingCount = useMemo(() => {
     if (!waitingForResponseMode) return 0;
     const incoming = (c: typeof conversations[0]) => c.last_message?.direction === 'incoming';
-    if (!activeDepartment) return conversations.filter(incoming).length;
-    if (activeDepartment.id === 'inbox') {
+    // Quando ainda não há tab ativa, excluir grupos (evita flash de contagem com grupos)
+    if (!activeDepartment) return conversations.filter((c) => c.conversation_type !== 'group' && incoming(c)).length;
+    // Aba Grupos: só grupos com última mensagem do cliente
+    if (activeDepartment?.id === 'groups') {
+      return conversations.filter((c) => c.conversation_type === 'group' && incoming(c)).length;
+    }
+    if (activeDepartment?.id === 'inbox') {
       return conversations.filter((c) => {
         const deptId = typeof c.department === 'string' ? c.department : c.department?.id ?? null;
-        return !deptId && c.status === 'pending' && incoming(c);
+        return !deptId && (c.status ?? 'pending') === 'pending' && incoming(c);
       }).length;
     }
-    if (activeDepartment.id === 'my_conversations') {
+    if (activeDepartment?.id === 'my_conversations') {
       if (!user) return 0;
-      return conversations.filter((c) => c.assigned_to === user.id && c.status === 'open' && incoming(c)).length;
+      return conversations.filter((c) => c.assigned_to === user.id && (c.status ?? 'open') === 'open' && incoming(c)).length;
     }
+    const deptId = activeDepartment?.id;
     return conversations.filter((c) => {
-      const deptId = typeof c.department === 'string' ? c.department : c.department?.id;
-      return deptId === activeDepartment.id && c.status !== 'closed' && incoming(c);
+      const cDeptId = typeof c.department === 'string' ? c.department : c.department?.id;
+      return cDeptId === deptId && (c.status ?? 'open') !== 'closed' && incoming(c);
     }).length;
   }, [waitingForResponseMode, conversations, activeDepartment, user?.id]);
 
@@ -124,6 +132,9 @@ export function DepartmentTabs() {
       <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-hide">
         {/* Tab Inbox - Responsivo */}
         <button
+          type="button"
+          aria-label={pendingInboxCount > 0 ? `Inbox, ${pendingInboxCount} pendentes` : 'Inbox'}
+          aria-current={activeDepartment?.id === 'inbox' ? 'true' : undefined}
           onClick={() => setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department)}
           className={`
             flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
@@ -133,24 +144,27 @@ export function DepartmentTabs() {
             }
           `}
         >
-          <Inbox className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <Inbox className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden />
           <span className="hidden sm:inline">
             Inbox
-            {getPendingCount('inbox') > 0 && (
+            {pendingInboxCount > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
-                {getPendingCount('inbox')}
+                {pendingInboxCount}
               </span>
             )}
           </span>
-          {getPendingCount('inbox') > 0 && (
+          {pendingInboxCount > 0 && (
             <span className="sm:hidden px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
-              {getPendingCount('inbox')}
+              {pendingInboxCount}
             </span>
           )}
         </button>
 
         {/* Tab Minhas Conversas */}
         <button
+          type="button"
+          aria-label={myConversationsCount > 0 ? `Minhas Conversas, ${myConversationsCount} abertas` : 'Minhas Conversas'}
+          aria-current={activeDepartment?.id === 'my_conversations' ? 'true' : undefined}
           onClick={() => setActiveDepartment({ id: 'my_conversations', name: 'Minhas Conversas', color: '#3b82f6' } as Department)}
           className={`
             flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
@@ -160,20 +174,39 @@ export function DepartmentTabs() {
             }
           `}
         >
-          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden />
           <span className="hidden sm:inline">
             Minhas Conversas
-            {getMyConversationsCount() > 0 && (
+            {myConversationsCount > 0 && (
               <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
-                {getMyConversationsCount()}
+                {myConversationsCount}
               </span>
             )}
           </span>
-          {getMyConversationsCount() > 0 && (
+          {myConversationsCount > 0 && (
             <span className="sm:hidden px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
-              {getMyConversationsCount()}
+              {myConversationsCount}
             </span>
           )}
+        </button>
+
+        {/* Tab Grupos */}
+        <button
+          type="button"
+          aria-label="Grupos"
+          aria-current={activeDepartment?.id === 'groups' ? 'true' : undefined}
+          onClick={() => setActiveDepartment({ id: 'groups', name: 'Grupos', color: '#8b5cf6' } as Department)}
+          className={`
+            flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
+            ${activeDepartment?.id === 'groups'
+              ? 'bg-[#8b5cf6] text-white'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95'
+            }
+          `}
+          title="Grupos"
+        >
+          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden />
+          <span className="hidden sm:inline">Grupos</span>
         </button>
 
         {/* Tabs Departamentos - Responsivo */}
@@ -181,7 +214,10 @@ export function DepartmentTabs() {
           const pendingCount = getPendingCount(dept.id);
           return (
             <button
+              type="button"
               key={dept.id}
+              aria-label={pendingCount > 0 ? `${dept.name}, ${pendingCount} pendentes` : dept.name}
+              aria-current={activeDepartment?.id === dept.id ? 'true' : undefined}
               onClick={() => setActiveDepartment(dept)}
               className={`
                 flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0

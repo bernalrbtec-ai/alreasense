@@ -279,7 +279,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     serializer_class = ConversationSerializer
     permission_classes = [IsAuthenticated, CanAccessChat]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'department', 'assigned_to']
+    filterset_fields = ['status', 'department', 'assigned_to', 'conversation_type']
     search_fields = ['contact_phone', 'contact_name']
     ordering_fields = ['last_message_at', 'created_at']
     # ✅ FIX: Removido ordering padrão - será aplicado no get_queryset com tratamento de NULL
