@@ -5435,7 +5435,10 @@ class UploadPresignedUrlView(APIView):
         if allowed_mime:
             allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
             def mime_ok(m):
-                return any((a.endswith('/*') and m.startswith(a[:-1])) or (a == m) for a in allowed)
+                return any(
+                    (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
+                    for a in allowed
+                )
             if not mime_ok(content_type):
                 return Response(
                     {'error': 'Tipo de arquivo não permitido'},
@@ -5695,7 +5698,10 @@ def chat_ping_evolution(request):
         if allowed_mime:
             allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
             def mime_ok(m):
-                return any((a.endswith('/*') and m.startswith(a[:-1])) or (a == m) for a in allowed)
+                return any(
+                    (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
+                    for a in allowed
+                )
             if not mime_ok(content_type):
                 return Response(
                     {'error': 'Tipo de arquivo não permitido'},
@@ -6054,7 +6060,7 @@ class ConfirmUploadBatchView(APIView):
             if not allowed_list:
                 return True
             return any(
-                (a.endswith('/*') and m.startswith(a[:-1])) or (a == m)
+                (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
                 for a in allowed_list
             )
 

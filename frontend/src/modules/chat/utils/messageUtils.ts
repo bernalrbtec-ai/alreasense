@@ -140,7 +140,8 @@ export function validateFileType(file: File, allowedTypes: string[]): { valid: b
       const baseType = type.slice(0, -2);
       return file.type.startsWith(baseType);
     }
-    return file.type === type;
+    // Aceita tipo exato ou com parâmetros (ex: "text/xml; charset=utf-8")
+    return file.type === type || file.type.startsWith(type + ';');
   });
   
   if (!isAllowed) {

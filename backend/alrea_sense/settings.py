@@ -620,8 +620,19 @@ S3_REGION = config('S3_REGION', default='us-east-1')
 # ============================
 ATTACHMENTS_MAX_SIZE_MB = config('ATTACHMENTS_MAX_SIZE_MB', default=50, cast=int)
 ATTACHMENTS_MAX_FILES_PER_MESSAGE = config('ATTACHMENTS_MAX_FILES_PER_MESSAGE', default=10, cast=int)
-# Word: .docx e .doc; Excel: .xlsx e .xls (application/vnd.ms-excel)
-ATTACHMENTS_ALLOWED_MIME = config('ATTACHMENTS_ALLOWED_MIME', default='image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel')
+# Tipos WhatsApp (documentos, imagens, áudio, vídeo) + extras: XML, JSON, ZIP, RAR, 7z
+ATTACHMENTS_ALLOWED_MIME = config(
+    'ATTACHMENTS_ALLOWED_MIME',
+    default=(
+        'image/*,video/*,audio/*,'
+        'text/plain,application/pdf,'
+        'application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,'
+        'application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'
+        'application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,'
+        'application/xml,text/xml,application/json,'
+        'application/zip,application/vnd.rar,application/x-rar-compressed,application/x-7z-compressed'
+    ),
+)
 S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)
 S3_DOWNLOAD_URL_EXPIRES = config('S3_DOWNLOAD_URL_EXPIRES', default=900, cast=int)
 ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, cast=int)

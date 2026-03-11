@@ -1,5 +1,5 @@
 /**
- * FileUploader - Componente para enviar anexos (imagem, PDF, DOC, Excel)
+ * FileUploader - Componente para enviar anexos (tipos WhatsApp + XML, JSON, ZIP, RAR, 7z)
  *
  * Suporta seleção de um ou vários arquivos (máx. ATTACHMENTS_MAX_FILES).
  */
@@ -32,21 +32,57 @@ export function FileUploader({
 }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // WhatsApp (documentos, imagens, áudio, vídeo) + extras: XML, JSON, ZIP, RAR, 7z
   const allowedTypes = [
-    'image/*',
+    'text/plain',
     'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/msword',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'image/jpeg',
+    'image/png',
+    'audio/aac',
+    'audio/amr',
+    'audio/mpeg',
+    'audio/mp4',
+    'audio/ogg',
+    'video/3gpp',
+    'video/mp4',
+    'application/xml',
+    'text/xml',
+    'application/json',
+    'application/zip',
+    'application/vnd.rar',
+    'application/x-rar-compressed',
+    'application/x-7z-compressed',
   ];
   const acceptAttr = [
-    ...allowedTypes,
+    '.txt',
+    '.pdf',
     '.doc',
     '.docx',
     '.xls',
     '.xlsx',
-    '.pdf',
+    '.ppt',
+    '.pptx',
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.aac',
+    '.amr',
+    '.mp3',
+    '.m4a',
+    '.ogg',
+    '.3gp',
+    '.mp4',
+    '.xml',
+    '.json',
+    '.zip',
+    '.rar',
+    '.7z',
   ].join(',');
 
   const handleFileSelect = useCallback(
