@@ -187,10 +187,14 @@ class EvolutionWebhookView(APIView):
                 remote_jid = contact_data.get('remoteJid', '')
                 push_name = contact_data.get('pushName', '')
                 profile_pic = contact_data.get('profilePicUrl', '')
-                
-                logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
-            
-                # 📸 Atualizar foto de perfil nas conversas E no Contact
+                is_group = remote_jid.endswith('@g.us')
+
+                logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}, is_group: {is_group}")
+                # ⚠️ Para grupos (@g.us), Evolution envia pushName do participante — NUNCA usar como nome da conversa; só atualizar foto.
+                if is_group and push_name:
+                    logger.debug(f"📞 [GRUPO] contacts.update para grupo — ignorando pushName '{push_name}' para nome da conversa")
+
+                # 📸 Atualizar foto de perfil nas conversas E no Contact (para individual)
                 if profile_pic and remote_jid:
                     try:
                         # Buscar instância WhatsApp pelo nome (pode ser UUID ou friendly_name)
@@ -203,32 +207,31 @@ class EvolutionWebhookView(APIView):
                         ).first()
                         
                         if whatsapp_instance:
-                            # Extrair telefone (remover @s.whatsapp.net)
+                            # Extrair telefone (remover @s.whatsapp.net); para grupos (@g.us) manter JID sem + para bater com Conversation.contact_phone
                             phone = remote_jid.replace('@s.whatsapp.net', '')
-                            if not phone.startswith('+'):
+                            if not is_group and not phone.startswith('+'):
                                 phone = f'+{phone}'
-                            
-                            # ✅ NOVO: Atualizar Contact primeiro (fonte única de verdade)
+                            # Para busca de Conversation (grupo ou individual): usar JID como está no banco (grupos = 120363...@g.us, individuais = +55...)
+                            conversation_phone = remote_jid if is_group else phone
+
+                            # ✅ Atualizar Contact apenas para contatos individuais (grupos não são Contact)
                             from apps.contacts.models import Contact
                             from apps.notifications.services import normalize_phone
-                            
-                            # Normalizar telefone para busca
-                            normalized_phone = normalize_phone(phone) or phone
-                            
-                            # Buscar contato pelo telefone normalizado
-                            contact = Contact.objects.filter(
-                                tenant=whatsapp_instance.tenant,
-                                phone=normalized_phone
-                            ).first()
-                            
-                            # Se não encontrou com telefone normalizado, tentar com telefone original
-                            if not contact:
+
+                            contact = None
+                            if not is_group:
+                                normalized_phone = normalize_phone(phone) or phone
                                 contact = Contact.objects.filter(
                                     tenant=whatsapp_instance.tenant,
-                                    phone=phone
+                                    phone=normalized_phone
                                 ).first()
-                            
-                            # ✅ Atualizar Contact apenas se URL mudou
+                                if not contact:
+                                    contact = Contact.objects.filter(
+                                        tenant=whatsapp_instance.tenant,
+                                        phone=phone
+                                    ).first()
+
+                            # ✅ Atualizar Contact apenas se URL mudou (só para individuais)
                             if contact:
                                 if contact.profile_pic_url != profile_pic:
                                     old_contact_pic = contact.profile_pic_url
@@ -239,16 +242,15 @@ class EvolutionWebhookView(APIView):
                                     logger.info(f"   URL nova: {profile_pic[:50]}...")
                                 else:
                                     logger.debug(f"🔄 [FOTO CONTACT] Foto do contato {contact.name} não mudou, mantendo atual")
-                            else:
+                            elif not is_group:
                                 logger.debug(f"ℹ️ [FOTO CONTACT] Contato não encontrado para {phone}, apenas atualizando conversas")
-                            
-                            # Atualizar todas as conversas com esse telefone
+
+                            # Atualizar conversa(s): para grupo usa JID (ex: 120363...@g.us), para individual usa phone
                             from apps.chat.models import Conversation
-                            
-                            # Buscar conversas para verificar se URL mudou
+
                             conversations = Conversation.objects.filter(
                                 tenant=whatsapp_instance.tenant,
-                                contact_phone=phone
+                                contact_phone=conversation_phone
                             )
                             
                             old_profile_pics = {conv.id: conv.profile_pic_url for conv in conversations}
@@ -256,7 +258,7 @@ class EvolutionWebhookView(APIView):
                             updated_count = conversations.update(profile_pic_url=profile_pic)
                             
                             if updated_count > 0:
-                                logger.info(f"✅ [FOTO CONVERSATION] Atualizada foto de perfil para {phone}: {profile_pic[:50]}...")
+                                logger.info(f"✅ [FOTO CONVERSATION] Atualizada foto de perfil para {conversation_phone}: {profile_pic[:50]}...")
                                 logger.info(f"   {updated_count} conversa(s) atualizada(s)")
                                 
                                 # Invalidar cache Redis se URL mudou
@@ -281,7 +283,7 @@ class EvolutionWebhookView(APIView):
                                     # Buscar e enviar atualização de cada conversa
                                     conversations = Conversation.objects.filter(
                                         tenant=whatsapp_instance.tenant,
-                                        contact_phone=phone
+                                        contact_phone=conversation_phone
                                     )
                                     
                                     for conv in conversations:

@@ -2690,6 +2690,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     wa_instance = WhatsAppInstance.objects.filter(
                         tenant=tenant, is_active=True, status='active'
                     ).first()
+                # ✅ FALLBACK: Usar instância do webhook (quem recebeu a mensagem) — conversas antigas podem não ter instance_name
+                if not wa_instance and instance_name and str(instance_name).strip():
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        Q(instance_name=instance_name.strip()) | Q(evolution_instance_name=instance_name.strip()),
+                        tenant=tenant, is_active=True
+                    ).first()
+                    if wa_instance and (not conversation.instance_name or not conversation.instance_name.strip()):
+                        conversation.instance_name = (wa_instance.instance_name or instance_name or '').strip()
+                        conversation.save(update_fields=['instance_name'])
+                        logger.info("👥 [GRUPO EXISTENTE] Instância obtida pelo webhook e gravada na conversa: %s", conversation.instance_name)
+                    elif wa_instance:
+                        logger.info("👥 [GRUPO EXISTENTE] Instância obtida pelo instance do webhook: %s", instance_name.strip())
 
                 evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
 
@@ -2732,7 +2744,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     )
                     logger.critical("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
                 else:
-                    logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
+                    if not wa_instance:
+                        logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp não encontrada (tenant=%s, instance_name conv=%s, webhook instance=%s)", tenant.id, getattr(conversation, 'instance_name', None) or '', instance_name or '')
+                    if not evolution_server:
+                        logger.warning("⚠️ [GRUPO EXISTENTE] Servidor Evolution não configurado ou inativo (EvolutionConnection.is_active=True)")
             except Exception as e:
                 logger.error("❌ [GRUPO EXISTENTE] Erro ao enfileirar busca: %s", e, exc_info=True)
         

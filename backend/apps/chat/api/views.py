@@ -3128,12 +3128,31 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             if not isinstance(groups, list):
                 continue
             friendly = (getattr(wa_instance, 'friendly_name', None) or '').strip() or instance_name
+            # Buscar conversas de grupo já existentes desta instância para matching (evitar duplicatas e atualizar nomes)
+            existing_groups = list(
+                Conversation.objects.filter(
+                    tenant=tenant,
+                    conversation_type='group',
+                    instance_name=instance_name,
+                ).only('id', 'contact_phone', 'group_metadata')
+            )
+
+            def _canonical_group_id(j):
+                """Id canônico para matching: parte numérica; LID xxx-yyy@g.us -> yyy."""
+                if not j or '@g.us' not in str(j):
+                    return None
+                base = (j or '').split('@')[0].replace('+', '').strip()
+                if '-' in base:
+                    base = base.split('-')[-1]
+                return base
+
             for group in groups:
                 group_id_raw = group.get('id') or group.get('jid')
                 if not group_id_raw:
                     continue
                 group_jid = group_id_raw if str(group_id_raw).endswith('@g.us') else f"{group_id_raw}@g.us"
                 subject = (group.get('subject') or group.get('name') or '').strip() or 'Grupo WhatsApp'
+                canonical_id = _canonical_group_id(group_jid)
                 defaults = {
                     'conversation_type': 'group',
                     'contact_name': subject,
@@ -3147,15 +3166,43 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     'status': 'open',
                     'department': None,
                 }
-                conv, created_this = Conversation.objects.update_or_create(
-                    tenant=tenant,
-                    contact_phone=group_jid,
-                    defaults=defaults,
-                )
-                if created_this:
-                    created += 1
-                else:
+                conv = None
+                for ex in existing_groups:
+                    if ex.contact_phone == group_jid:
+                        conv = ex
+                        break
+                    if (ex.group_metadata or {}).get('group_id') == group_jid:
+                        conv = ex
+                        break
+                    if canonical_id and _canonical_group_id(ex.contact_phone) == canonical_id:
+                        conv = ex
+                        break
+                if conv:
+                    Conversation.objects.filter(pk=conv.id).update(
+                        contact_phone=group_jid,
+                        contact_name=subject,
+                        instance_friendly_name=friendly,
+                        group_metadata={
+                            **(conv.group_metadata or {}),
+                            'group_id': group_jid,
+                            'group_name': subject,
+                            'is_group': True,
+                        },
+                        status='open',
+                        department=None,
+                    )
                     updated += 1
+                    existing_groups = [e for e in existing_groups if e.id != conv.id]
+                else:
+                    conv, created_this = Conversation.objects.update_or_create(
+                        tenant=tenant,
+                        contact_phone=group_jid,
+                        defaults=defaults,
+                    )
+                    if created_this:
+                        created += 1
+                    else:
+                        updated += 1
         return Response({
             'created': created,
             'updated': updated,
