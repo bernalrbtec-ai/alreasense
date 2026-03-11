@@ -692,7 +692,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         remote_jid = key.get('remoteJid', '')  # Ex: 5517999999999@s.whatsapp.net ou 120363123456789012@g.us (grupo)
         remote_jid_alt = key.get('remoteJidAlt', '')  # ✅ Telefone real quando remoteJid é @lid
         from_me = key.get('fromMe', False)
-        message_id = key.get('id')
+        raw_id = key.get('id')
+        message_id = (str(raw_id).strip() if raw_id is not None else '') or None
         participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
         
         # ✅ CORREÇÃO CRÍTICA: Detectar grupos quando remoteJidAlt é @lid
@@ -897,10 +898,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # O key.id do webhook principal pode ser o ID da mensagem original
                 # Ou pode estar em reactionMessage.key.id
                 reaction_key = reaction_data.get('key', {})
-                reaction_message_id = (
-                    reaction_key.get('id') or  # ID da mensagem original em reactionMessage.key
-                    key.get('id')  # ID da mensagem original no key principal
-                )
+                raw_rid = reaction_key.get('id') or key.get('id')
+                reaction_message_id = (str(raw_rid).strip() if raw_rid is not None else '') or None
                 
                 logger.info(f"   Message ID original: {reaction_message_id}")
                 logger.info(f"   Emoji: {emoji}")
@@ -925,31 +924,29 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 else:
                     logger.info(f"👍 [WEBHOOK REACTION] Reação com emoji: {emoji}")
                 
-                # Buscar mensagem original pelo message_id externo
-                # ✅ CORREÇÃO CRÍTICA: Tentar múltiplas formas de buscar mensagem (para suportar mensagens antigas)
+                # Buscar mensagem original: sempre por (conversation, message_id) para evitar colisão entre tenants
                 original_message = None
+                reaction_conversation = Conversation.objects.filter(
+                    tenant=tenant,
+                    contact_phone=normalize_contact_phone(remote_jid, is_group, remote_jid_alt)
+                ).first()
                 
-                try:
-                    # Tentativa 1: Buscar pelo message_id exato
+                if reaction_conversation and reaction_message_id:
                     original_message = Message.objects.select_related(
                         'conversation', 'conversation__tenant'
-                    ).get(
-                        message_id=reaction_message_id,
-                        conversation__tenant=tenant
-                    )
-                    logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id: {original_message.id}")
-                except Message.DoesNotExist:
-                    logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem não encontrada pelo message_id={reaction_message_id}")
-                    
+                    ).filter(
+                        conversation=reaction_conversation,
+                        message_id=reaction_message_id
+                    ).first()
+                    if original_message:
+                        logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada por (conversation, message_id): {original_message.id}")
+                
+                if not original_message:
+                    logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem não encontrada por (conversation, message_id), tentando fallbacks")
                     # Tentativa 2: Buscar pela conversa + tentar encontrar mensagem mais recente sem message_id
                     # (para mensagens antigas que podem não ter message_id salvo)
                     try:
-                        # Buscar conversa primeiro
-                        conversation = Conversation.objects.filter(
-                            tenant=tenant,
-                            contact_phone=normalize_contact_phone(remote_jid, is_group, remote_jid_alt)
-                        ).first()
-                        
+                        conversation = reaction_conversation
                         if conversation:
                             logger.info(f"🔍 [WEBHOOK REACTION] Tentando buscar mensagem na conversa {conversation.id} sem message_id...")
                             
@@ -3276,11 +3273,14 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.critical(f"   metadata ANTES de salvar: {message_defaults.get('metadata', {})}")
         logger.critical(f"   reply_to no metadata: {message_defaults.get('metadata', {}).get('reply_to', 'NÃO ENCONTRADO')}")
         
-        # ✅ FIX: Verificar se mensagem já existe antes de criar
-        # Isso evita duplicatas e garante que mensagens sejam encontradas
+        # ✅ FIX: Verificar se mensagem já existe nesta conversa (não globalmente).
+        # Unicidade é por (conversation_id, message_id); busca e get_or_create usam sempre esse par.
+        # O mesmo message_id da Evolution pode chegar em duas conversas (duas instâncias/tenants).
         existing_message = None
-        if message_id:
-            existing_message = Message.objects.filter(message_id=message_id).first()
+        if message_id and conversation:
+            existing_message = Message.objects.filter(
+                conversation=conversation, message_id=message_id
+            ).first()
         
         if existing_message:
             logger.critical(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={_mask_digits(message_id)}), preservando metadata existente")
@@ -3380,7 +3380,6 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             if from_me and message_id and conversation:
                 from django.utils import timezone
                 from datetime import timedelta
-                from django.db.models import Q
                 recent = timezone.now() - timedelta(seconds=120)
                 content_normalized = (content or '').strip()[:500]
                 candidate = (
@@ -3453,15 +3452,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.warning(f"⚠️ [WEBHOOK] message_id não encontrado, gerando: {message_id}")
                 
                 message_defaults['message_id'] = message_id
+                create_defaults = {k: v for k, v in message_defaults.items() if k not in ('conversation', 'message_id')}
                 message, msg_created = Message.objects.get_or_create(
+                    conversation=conversation,
                     message_id=message_id,
-                    defaults=message_defaults
+                    defaults=create_defaults,
                 )
                 # ✅ from_me + mensagem nova: pode ser duplicata (webhook veio antes do link). Copiar texto real dos botões da mensagem que criamos e remover a duplicada.
                 if msg_created and from_me and conversation:
                     from django.utils import timezone
                     from datetime import timedelta
-                    from django.db.models import Q
                     recent = timezone.now() - timedelta(seconds=120)
                     my_irb = (message.metadata or {}).get('interactive_reply_buttons') or {}
                     my_btns = my_irb.get('buttons') if isinstance(my_irb.get('buttons'), list) else []

@@ -48,7 +48,7 @@ class Command(BaseCommand):
             sender_id BIGINT REFERENCES authn_user(id) ON DELETE SET NULL,
             content TEXT,
             direction VARCHAR(10) NOT NULL DEFAULT 'incoming',
-            message_id VARCHAR(255) UNIQUE,
+            message_id VARCHAR(255),
             evolution_status VARCHAR(50),
             error_message TEXT,
             status VARCHAR(20) NOT NULL DEFAULT 'sent',
@@ -61,6 +61,7 @@ class Command(BaseCommand):
         CREATE INDEX IF NOT EXISTS idx_chat_message_created ON chat_message(created_at);
         CREATE INDEX IF NOT EXISTS idx_chat_message_evolution_id ON chat_message(message_id);
         CREATE INDEX IF NOT EXISTS idx_chat_message_status ON chat_message(status, direction);
+        CREATE UNIQUE INDEX IF NOT EXISTS uniq_chat_message_conversation_message_id ON chat_message (conversation_id, message_id) WHERE message_id IS NOT NULL;
 
         -- Tabela: MessageAttachment
         CREATE TABLE IF NOT EXISTS chat_attachment (

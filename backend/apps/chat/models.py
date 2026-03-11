@@ -252,9 +252,8 @@ class Message(models.Model):
         null=True,
         blank=True,
         db_index=True,
-        unique=True,
         verbose_name='ID da Evolution',
-        help_text='ID único para idempotência'
+        help_text='ID único por conversa (Evolution); mesmo id pode existir em conversas diferentes'
     )
     evolution_status = models.CharField(
         max_length=50,
@@ -322,6 +321,14 @@ class Message(models.Model):
             models.Index(fields=['conversation', 'created_at']),
             models.Index(fields=['message_id']),
             models.Index(fields=['status', 'direction']),
+        ]
+        constraints = [
+            # Mesmo message_id da Evolution pode existir em conversas diferentes (ex.: duas instâncias)
+            models.UniqueConstraint(
+                fields=['conversation', 'message_id'],
+                condition=models.Q(message_id__isnull=False),
+                name='uniq_chat_message_conversation_message_id',
+            ),
         ]
     
     def __str__(self):
