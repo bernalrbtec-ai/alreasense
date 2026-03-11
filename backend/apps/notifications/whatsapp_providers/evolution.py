@@ -345,8 +345,9 @@ class EvolutionProvider(WhatsAppSenderBase):
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         Envia mensagem interativa tipo lista via Evolution sendList.
-        Evolution API: POST /message/sendList/{instance}, body listMessage (title, description, buttonText, footerText, sections/rows).
-        Mapeia header_text -> listMessage.title; body_text -> description; id -> rowId.
+        Evolution API v2: POST /message/sendList/{instance}, body no nível raiz:
+        number, title, description, buttonText, footerText, values (array de {title, rows}).
+        Mapeia header_text -> title; body_text -> description; sections -> values; id -> rowId.
         """
         raw_phone = (phone or '').strip()
         if raw_phone.endswith('@g.us'):
@@ -413,17 +414,19 @@ class EvolutionProvider(WhatsAppSenderBase):
         if total_rows < 1:
             return False, {'error': 'Pelo menos uma opção (row) no total', 'error_code': 'INVALID_SECTIONS'}
 
+        # Evolution API v2: body must have number, title, description, buttonText, footerText, values at ROOT (no listMessage wrapper).
+        # See https://doc.evolution-api.com/v2/api-reference/message-controller/send-list
         title_evolution = (header_text or '').strip()[:60] if header_text else (body_clean[:60] if len(body_clean) > 60 else body_clean)
-        list_message = {
+        footer_clean = (footer_text or '').strip()[:60]
+        if not footer_clean:
+            footer_clean = ' '  # API requires footerText present; empty string can cause 400
+        payload = {
+            'number': remote_jid,
             'title': title_evolution or 'Mensagem',
             'description': body_clean[:1024],
             'buttonText': btn_clean,
-            'footerText': (footer_text or '').strip()[:60],
-            'sections': list_sections,
-        }
-        payload = {
-            'number': remote_jid,
-            'listMessage': list_message,
+            'footerText': footer_clean,
+            'values': list_sections,  # API expects "values", not "sections"
         }
         if quoted_message_id:
             payload['quoted'] = {
