@@ -347,6 +347,14 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         'conversation': 'Conversa não está atribuída a você.'
                     })
+
+            # Grupo do qual a instância foi removida (não existe mais na Evolution): bloquear envio
+            if conversation.conversation_type == 'group':
+                meta = conversation.group_metadata or {}
+                if meta.get('instance_removed') is True:
+                    raise serializers.ValidationError({
+                        'conversation': 'Este grupo não existe mais; a instância foi removida. Atualize a lista de grupos.'
+                    })
         
         return attrs
     

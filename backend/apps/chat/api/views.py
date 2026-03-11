@@ -372,6 +372,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # Filtrar por tenant (aplicado para TODOS os usuários, incluindo superusers)
         queryset = queryset.filter(tenant=user.tenant)
+
+        # Grupos dos quais a instância foi removida (fonte: Evolution no sync) não aparecem na listagem
+        queryset = queryset.exclude(
+            conversation_type='group',
+            group_metadata__instance_removed=True,
+        )
         
         # ✅ PERFORMANCE: Calcular unread_count em batch usando annotate
         # Isso evita N+1 queries quando serializer acessa unread_count
@@ -3236,16 +3242,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         conv = ex
                         break
                 if conv:
+                    meta = {**(conv.group_metadata or {}), 'group_id': group_jid, 'group_name': subject, 'is_group': True}
+                    meta.pop('instance_removed', None)
+                    meta.pop('instance_removed_at', None)
                     Conversation.objects.filter(pk=conv.id).update(
                         contact_phone=group_jid,
                         contact_name=subject,
                         instance_friendly_name=friendly,
-                        group_metadata={
-                            **(conv.group_metadata or {}),
-                            'group_id': group_jid,
-                            'group_name': subject,
-                            'is_group': True,
-                        },
+                        group_metadata=meta,
                         status='open',
                         department=None,
                     )
@@ -3261,6 +3265,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         created += 1
                     else:
                         updated += 1
+
+            # Fonte da verdade é a Evolution: grupos que não vieram na resposta = instância saiu/foi removida
+            removed_count = 0
+            for ex in existing_groups:
+                conv = Conversation.objects.filter(pk=ex.id).first()
+                if not conv:
+                    continue
+                meta = dict(conv.group_metadata or {})
+                meta['instance_removed'] = True
+                meta['instance_removed_at'] = timezone.now().isoformat()
+                conv.group_metadata = meta
+                conv.save(update_fields=['group_metadata'])
+                removed_count += 1
+            if removed_count:
+                logger.info("[SYNC_GROUPS] %s grupo(s) marcado(s) como removidos (não estão mais na Evolution)", removed_count)
+
         return Response({
             'created': created,
             'updated': updated,
@@ -3634,7 +3654,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # ✅ CORREÇÃO: Usar a mesma lógica de filtros do get_queryset()
             # Isso garante que contamos apenas as conversas que o usuário pode ver
             # Base queryset: filtrar por tenant primeiro (segurança)
-            base_queryset = Conversation.objects.filter(tenant=user.tenant)
+            base_queryset = Conversation.objects.filter(tenant=user.tenant).exclude(
+                conversation_type='group',
+                group_metadata__instance_removed=True,
+            )
             
             # Aplicar os mesmos filtros do get_queryset()
             # Admin vê tudo (incluindo pending)
@@ -4575,6 +4598,11 @@ class MessageViewSet(viewsets.ModelViewSet):
                 {'error': 'Conversa destino não encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        if destination_conversation.conversation_type == 'group' and (destination_conversation.group_metadata or {}).get('instance_removed') is True:
+            return Response(
+                {'error': 'Não é possível encaminhar para um grupo do qual a instância foi removida. Atualize a lista de grupos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Verificar se não está encaminhando para a mesma conversa
         if destination_conversation.id == message.conversation.id:
@@ -5344,6 +5372,11 @@ class UploadPresignedUrlView(APIView):
                 {'error': 'Conversa não encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        if conversation.conversation_type == 'group' and (conversation.group_metadata or {}).get('instance_removed') is True:
+            return Response(
+                {'error': 'Este grupo não existe mais; a instância foi removida. Atualize a lista de grupos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Gerar caminho S3
         attachment_id = uuid.uuid4()
@@ -5709,6 +5742,11 @@ class ConfirmUploadView(APIView):
                 {'error': 'Conversa não encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        if conversation.conversation_type == 'group' and (conversation.group_metadata or {}).get('instance_removed') is True:
+            return Response(
+                {'error': 'Este grupo não existe mais; a instância foi removida. Atualize a lista de grupos.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # 🎵 CONVERTER ÁUDIO OGG/WEBM → MP3 (para compatibilidade universal)
         from apps.chat.utils.audio_converter import should_convert_audio, convert_ogg_to_mp3, get_converted_filename
@@ -5948,6 +5986,11 @@ class ConfirmUploadBatchView(APIView):
             return Response(
                 {'error': 'Conversa não encontrada'},
                 status=status.HTTP_404_NOT_FOUND
+            )
+        if conversation.conversation_type == 'group' and (conversation.group_metadata or {}).get('instance_removed') is True:
+            return Response(
+                {'error': 'Este grupo não existe mais; a instância foi removida. Atualize a lista de grupos.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
         processed = []
