@@ -1,6 +1,6 @@
 /**
  * Página de Fluxos: lista/botões por Inbox ou departamento.
- * Lista fluxos, CRUD de nós e arestas, preview e envio de teste.
+ * Lista fluxos, CRUD de etapas e conexões, preview e envio de teste.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -25,7 +25,7 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
-import FlowCanvas from '../components/flow/FlowCanvas'
+import FlowCanvas, { FLOW_DROP_TYPE, FLOW_DROP_START } from '../components/flow/FlowCanvas'
 import { api } from '../lib/api'
 
 function getApiError(e: any): string {
@@ -72,6 +72,8 @@ interface FlowNode {
   sections: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>
   buttons: Array<{ id: string; title: string }>
   media_url?: string
+  position_x?: number | null
+  position_y?: number | null
   edges_out?: FlowEdge[]
 }
 
@@ -97,6 +99,24 @@ type ButtonForm = { id: string; title: string }
 
 const defaultSections: SectionForm[] = [{ title: 'Opções', rows: [{ id: 'op1', title: 'Opção 1', description: '' }, { id: 'op2', title: 'Opção 2', description: '' }] }]
 const defaultButtons: ButtonForm[] = [{ id: 'btn1', title: 'Botão 1' }, { id: 'btn2', title: 'Botão 2' }]
+
+const PALETTE_ITEMS: { id: string; label: string; nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file'; isStart: boolean }[] = [
+  { id: 'start', label: 'Início', nodeType: 'message', isStart: true },
+  { id: 'message', label: 'Mensagem', nodeType: 'message', isStart: false },
+  { id: 'list', label: 'Lista', nodeType: 'list', isStart: false },
+  { id: 'buttons', label: 'Botões', nodeType: 'buttons', isStart: false },
+  { id: 'image', label: 'Imagem', nodeType: 'image', isStart: false },
+  { id: 'file', label: 'Arquivo', nodeType: 'file', isStart: false },
+]
+
+function PaletteItemIcon({ nodeType }: { nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' }) {
+  const iconClass = 'h-4 w-4 shrink-0'
+  if (nodeType === 'list') return <List className={`${iconClass} text-accent-600 dark:text-accent-400`} />
+  if (nodeType === 'buttons') return <MessageSquare className={`${iconClass} text-accent-600 dark:text-accent-400`} />
+  if (nodeType === 'image') return <ImageIcon className={`${iconClass} text-gray-500 dark:text-gray-400`} />
+  if (nodeType === 'file') return <FileText className={`${iconClass} text-gray-500 dark:text-gray-400`} />
+  return <MessageSquare className={`${iconClass} text-gray-500 dark:text-gray-400`} />
+}
 
 function parseSectionsSafe(val: unknown): SectionForm[] {
   if (!Array.isArray(val) || val.length === 0) return defaultSections
@@ -161,6 +181,7 @@ export default function FlowPage() {
   const [nodeButtons, setNodeButtons] = useState<ButtonForm[]>(defaultButtons)
   const [nodeMediaUrl, setNodeMediaUrl] = useState('')
   const [savingNode, setSavingNode] = useState(false)
+  const [pendingDropPosition, setPendingDropPosition] = useState<{ x: number; y: number } | null>(null)
 
   // Edge form (add / edit)
   const [edgeFormOpen, setEdgeFormOpen] = useState(false)
@@ -343,7 +364,28 @@ export default function FlowPage() {
     }
   }
 
+  /** Sugere nome único para nova etapa (ex: mensagem_1, lista_1, etapa_2). */
+  const suggestNodeName = useCallback(
+    (nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean): string => {
+      const nodes = flowDetail?.nodes ?? []
+      const prefix = isStart ? 'inicio' : { message: 'mensagem', list: 'lista', buttons: 'botoes', image: 'imagem', file: 'arquivo' }[nodeType]
+      const existing = new Set(nodes.map((n) => n.name))
+      for (let i = 1; i <= (nodes.length + 5); i++) {
+        const name = `${prefix}_${i}`
+        if (!existing.has(name)) return name
+      }
+      return `${prefix}_${Date.now().toString(36)}`
+    },
+    [flowDetail?.nodes]
+  )
+
+  const closeNodeForm = useCallback(() => {
+    setNodeFormOpen(false)
+    setPendingDropPosition(null)
+  }, [])
+
   const openAddNode = () => {
+    setPendingDropPosition(null)
     setEditingNode(null)
     setNodeName('')
     setNodeType('list')
@@ -359,7 +401,31 @@ export default function FlowPage() {
     setNodeFormOpen(true)
   }
 
+  /** Abre o modal "Adicionar etapa" após soltar um bloco da paleta no canvas; POST só ao salvar. */
+  const openAddNodeFromDrop = useCallback(
+    (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean) => {
+      const nodes = flowDetail?.nodes ?? []
+      const nextOrder = nodes.length === 0 ? 0 : Math.max(...nodes.map((n) => n.order), 0) + 1
+      setPendingDropPosition(position)
+      setEditingNode(null)
+      setNodeType(nodeType)
+      setNodeOrder(nextOrder)
+      setNodeIsStart(isStart)
+      setNodeName(suggestNodeName(nodeType, isStart))
+      setNodeBodyText('')
+      setNodeButtonText('Ver opções')
+      setNodeHeaderText('')
+      setNodeFooterText('')
+      setNodeSections(defaultSections)
+      setNodeButtons(defaultButtons)
+      setNodeMediaUrl('')
+      setNodeFormOpen(true)
+    },
+    [flowDetail?.nodes, suggestNodeName]
+  )
+
   const openEditNode = (n: FlowNode) => {
+    setPendingDropPosition(null)
     setEditingNode(n)
     setNodeName(n.name)
     setNodeType(n.node_type)
@@ -377,7 +443,7 @@ export default function FlowPage() {
 
   const handleSaveNode = async () => {
     if (!selectedFlow?.id || !nodeName.trim()) {
-      toast.error('Nome do nó é obrigatório')
+      toast.error('Nome da etapa é obrigatório')
       return
     }
     let sections: FlowNode['sections'] = []
@@ -456,14 +522,18 @@ export default function FlowPage() {
         buttons: nodeType === 'buttons' ? buttons : [],
       }
       if (nodeType === 'image' || nodeType === 'file') payload.media_url = nodeMediaUrl.trim()
+      if (pendingDropPosition) {
+        payload.position_x = pendingDropPosition.x
+        payload.position_y = pendingDropPosition.y
+      }
       if (editingNode) {
         await api.patch(`/chat/flow-nodes/${editingNode.id}/`, payload)
-        toast.success('Nó atualizado')
+        toast.success('Etapa atualizada')
       } else {
         await api.post('/chat/flow-nodes/', payload)
-        toast.success('Nó criado')
+        toast.success('Etapa criada')
       }
-      setNodeFormOpen(false)
+      closeNodeForm()
       fetchFlowDetail(selectedFlow.id)
     } catch (e: any) {
       toast.error(getApiError(e))
@@ -480,7 +550,7 @@ export default function FlowPage() {
     setDeletingId(node.id)
     try {
       await api.delete(`/chat/flow-nodes/${node.id}/`)
-      toast.success('Nó excluído')
+      toast.success('Etapa excluída')
       fetchFlowDetail(selectedFlow.id)
     } catch (e: any) {
       toast.error(getApiError(e))
@@ -499,6 +569,59 @@ export default function FlowPage() {
     setEdgeFormOpen(true)
   }
 
+  /** Abre o modal de conexão ao soltar uma conexão do Handle no canvas (de source → target). */
+  const openAddEdgeFromConnect = useCallback(
+    (fromNodeId: string, toNodeId: string) => {
+      if (!flowDetail?.nodes) return
+      const fromNode = flowDetail.nodes.find((n) => n.id === fromNodeId)
+      let suggestedOptionId = 'ok'
+      if (fromNode?.node_type === 'list' && fromNode.sections?.length) {
+        const firstRow = fromNode.sections[0]?.rows?.[0]
+        if (firstRow?.id) suggestedOptionId = firstRow.id
+      } else if (fromNode?.node_type === 'buttons' && fromNode.buttons?.length) {
+        if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
+      }
+      setEditingEdge(null)
+      setEdgeFromNodeId(fromNodeId)
+      setEdgeOptionId(suggestedOptionId)
+      setEdgeToNodeId(toNodeId)
+      setEdgeTargetDepartmentId(null)
+      setEdgeTargetAction('next')
+      setEdgeFormOpen(true)
+    },
+    [flowDetail?.nodes]
+  )
+
+  const handleCanvasNodeClick = useCallback(
+    (nodeId: string) => {
+      const node = flowDetail?.nodes?.find((n) => n.id === nodeId)
+      if (node) openEditNode(node)
+    },
+    [flowDetail?.nodes]
+  )
+
+  const handleCanvasConnect = useCallback(
+    (params: { source: string; target: string }) => openAddEdgeFromConnect(params.source, params.target),
+    [openAddEdgeFromConnect]
+  )
+
+  const handleCanvasNodeDragStop = useCallback(
+    async (nodeId: string, position: { x: number; y: number }) => {
+      if (!selectedFlow?.id) return
+      try {
+        await api.patch(`/chat/flow-nodes/${nodeId}/`, {
+          position_x: position.x,
+          position_y: position.y,
+        })
+        await fetchFlowDetail(selectedFlow.id)
+        toast.success('Posição salva')
+      } catch (e: any) {
+        toast.error(getApiError(e))
+      }
+    },
+    [selectedFlow?.id, fetchFlowDetail]
+  )
+
   const openEditEdge = (e: FlowEdge) => {
     setEditingEdge(e)
     setEdgeFromNodeId(e.from_node)
@@ -512,11 +635,11 @@ export default function FlowPage() {
   const handleSaveEdge = async () => {
     if (savingEdge) return
     if (!edgeFromNodeId || !edgeOptionId.trim()) {
-      toast.error('Nó de origem e ID da opção são obrigatórios')
+      toast.error('Etapa de origem e opção são obrigatórios')
       return
     }
     if (edgeTargetAction === 'next' && !edgeToNodeId) {
-      toast.error('Selecione o próximo nó para ação "Próxima etapa"')
+      toast.error('Selecione a próxima etapa para ação "Próxima etapa"')
       return
     }
     if (edgeTargetAction === 'transfer' && !edgeTargetDepartmentId) {
@@ -534,10 +657,10 @@ export default function FlowPage() {
       }
       if (editingEdge) {
         await api.patch(`/chat/flow-edges/${editingEdge.id}/`, payload)
-        toast.success('Aresta atualizada')
+        toast.success('Conexão atualizada')
       } else {
         await api.post('/chat/flow-edges/', payload)
-        toast.success('Aresta criada')
+        toast.success('Conexão criada')
       }
       setEdgeFormOpen(false)
       if (selectedFlow?.id) fetchFlowDetail(selectedFlow.id)
@@ -556,7 +679,7 @@ export default function FlowPage() {
     setDeletingId(edge.id)
     try {
       await api.delete(`/chat/flow-edges/${edge.id}/`)
-      toast.success('Aresta excluída')
+      toast.success('Conexão excluída')
       fetchFlowDetail(selectedFlow.id)
     } catch (e: any) {
       toast.error(getApiError(e))
@@ -568,14 +691,14 @@ export default function FlowPage() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (nodeFormOpen) setNodeFormOpen(false)
+        if (nodeFormOpen) closeNodeForm()
         else if (edgeFormOpen) setEdgeFormOpen(false)
         else if (editFlowOpen) setEditFlowOpen(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [nodeFormOpen, edgeFormOpen, editFlowOpen])
+  }, [nodeFormOpen, edgeFormOpen, editFlowOpen, closeNodeForm])
 
   const previewLines: string[] = []
   if (flowDetail?.nodes) {
@@ -776,19 +899,42 @@ export default function FlowPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Clique em um nó para editar. Arraste para reposicionar.</p>
-                <FlowCanvas
-                  nodes={flowDetail.nodes ?? []}
-                  onNodeClick={(nodeId) => {
-                    const node = flowDetail.nodes?.find((n) => n.id === nodeId)
-                    if (node) openEditNode(node)
-                  }}
-                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Arraste etapas da barra lateral para o canvas. Clique para editar, arraste para reposicionar, conecte pelo handle.</p>
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1.5 shrink-0 w-36 py-2">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Etapas</span>
+                    {PALETTE_ITEMS.map((item) => (
+                      <div
+                        key={item.id}
+                        draggable
+                        aria-label={`Arrastar etapa ${item.label} para o canvas`}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(FLOW_DROP_TYPE, item.nodeType)
+                          e.dataTransfer.setData(FLOW_DROP_START, item.isStart ? '1' : '0')
+                          e.dataTransfer.effectAllowed = 'copy'
+                        }}
+                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing hover:border-accent-300 dark:hover:border-accent-600 hover:bg-accent-50/50 dark:hover:bg-accent-900/20 transition-colors"
+                      >
+                        <PaletteItemIcon nodeType={item.nodeType} />
+                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <FlowCanvas
+                      nodes={flowDetail.nodes ?? []}
+                      onNodeClick={handleCanvasNodeClick}
+                      onNodeDragStop={handleCanvasNodeDragStop}
+                      onConnect={handleCanvasConnect}
+                      onDrop={openAddNodeFromDrop}
+                    />
+                  </div>
+                </div>
               </Card>
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                 <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">Preview (texto)</h3>
                 <pre className="text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg overflow-auto max-h-48 border border-gray-100 dark:border-gray-800">
-                  {previewLines.length ? previewLines.join('\n') : 'Nenhum nó ainda. Adicione um nó abaixo.'}
+                  {previewLines.length ? previewLines.join('\n') : 'Nenhuma etapa ainda. Adicione uma etapa abaixo.'}
                 </pre>
               </Card>
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
@@ -811,9 +957,9 @@ export default function FlowPage() {
               </Card>
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Nós ({flowDetail.nodes?.length || 0})</h3>
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Etapas ({flowDetail.nodes?.length || 0})</h3>
                   <Button size="sm" onClick={openAddNode} className="rounded-lg transition-all duration-200 hover:scale-[1.02]">
-                    <Plus className="h-4 w-4 mr-1" /> Adicionar nó
+                    <Plus className="h-4 w-4 mr-1" /> Adicionar etapa
                   </Button>
                 </div>
                 <ul className="space-y-3">
@@ -830,14 +976,14 @@ export default function FlowPage() {
                           {n.is_start && <span className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full font-medium">início</span>}
                         </span>
                         <div className="flex gap-1">
-                          <Button size="sm" variant="outline" onClick={() => openEditNode(n)} aria-label={`Editar nó ${n.name}`} className="rounded-lg transition-opacity hover:opacity-90"><Edit className="h-3 w-3" /></Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDeleteNodeClick(n)} disabled={deletingId === n.id} aria-label={`Excluir nó ${n.name}`} className="rounded-lg text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="h-3 w-3" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditNode(n)} aria-label={`Editar etapa ${n.name}`} className="rounded-lg transition-opacity hover:opacity-90"><Edit className="h-3 w-3" /></Button>
+                          <Button size="sm" variant="outline" onClick={() => handleDeleteNodeClick(n)} disabled={deletingId === n.id} aria-label={`Excluir etapa ${n.name}`} className="rounded-lg text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="h-3 w-3" /></Button>
                         </div>
                       </div>
                       <div className="mt-2 pl-6">
-                        <div className="text-xs text-gray-500 mb-1">Arestas (opção → destino)</div>
+                        <div className="text-xs text-gray-500 mb-1">Conexões (opção → destino)</div>
                         {(n.edges_out || []).length === 0 ? (
-                          <span className="text-sm text-gray-400">Nenhuma aresta.</span>
+                          <span className="text-sm text-gray-400">Nenhuma conexão.</span>
                         ) : (
                           <ul className="space-y-1">
                             {(n.edges_out || []).map((e) => (
@@ -852,7 +998,7 @@ export default function FlowPage() {
                           </ul>
                         )}
                         <Button size="sm" variant="outline" className="mt-1" onClick={() => openAddEdge(n.id)}>
-                          <Plus className="h-3 w-3 mr-1" /> Adicionar aresta
+                          <Plus className="h-3 w-3 mr-1" /> Conectar
                         </Button>
                       </div>
                     </li>
@@ -874,7 +1020,7 @@ export default function FlowPage() {
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um fluxo</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                  Escolha um fluxo na lista ao lado para ver o canvas, editar nós e arestas, ou crie um novo.
+                  Escolha um fluxo na lista ao lado para ver o canvas, editar etapas e conexões, ou crie um novo.
                 </p>
               </Card>
             </motion.div>
@@ -891,7 +1037,7 @@ export default function FlowPage() {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-          onClick={() => setNodeFormOpen(false)}
+          onClick={closeNodeForm}
           role="dialog"
           aria-modal="true"
           aria-labelledby="node-form-title"
@@ -906,8 +1052,8 @@ export default function FlowPage() {
           >
           <Card className="p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 id="node-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingNode ? 'Editar nó' : 'Adicionar nó'}</h2>
-              <button type="button" onClick={() => setNodeFormOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
+              <h2 id="node-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingNode ? 'Editar etapa' : 'Adicionar etapa'}</h2>
+              <button type="button" onClick={closeNodeForm} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-3">
               <div>
@@ -935,7 +1081,7 @@ export default function FlowPage() {
                 </div>
                 <label className="flex items-center gap-2 pt-6">
                   <input type="checkbox" checked={nodeIsStart} onChange={(e) => setNodeIsStart(e.target.checked)} />
-                  <span className="text-sm">Nó inicial</span>
+                  <span className="text-sm">Etapa inicial</span>
                 </label>
               </div>
               {(nodeType === 'message' || nodeType === 'list' || nodeType === 'buttons') && (
@@ -1024,7 +1170,7 @@ export default function FlowPage() {
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleSaveNode} disabled={savingNode}>{savingNode ? <LoadingSpinner size="sm" /> : 'Salvar'}</Button>
-              <Button variant="outline" onClick={() => setNodeFormOpen(false)}>Cancelar</Button>
+              <Button variant="outline" onClick={closeNodeForm}>Cancelar</Button>
             </div>
           </Card>
           </motion.div>
@@ -1054,12 +1200,12 @@ export default function FlowPage() {
           >
           <Card className="w-full max-w-md p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 id="edge-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingEdge ? 'Editar aresta' : 'Adicionar aresta'}</h2>
+              <h2 id="edge-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{editingEdge ? 'Editar conexão' : 'Conectar'}</h2>
               <button type="button" onClick={() => setEdgeFormOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
             </div>
             <div className="space-y-3">
               <div>
-                <Label>Nó de origem</Label>
+                <Label>Etapa de origem</Label>
                 <select
                   className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                   value={edgeFromNodeId || ''}
@@ -1072,8 +1218,8 @@ export default function FlowPage() {
                 </select>
               </div>
               <div>
-                <Label>ID da opção (rowId / id do botão)</Label>
-                <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: op1, btn1" />
+                <Label>Para onde leva esta opção?</Label>
+                <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: opcao1" />
               </div>
               <div>
                 <Label>Destino</Label>
@@ -1082,14 +1228,14 @@ export default function FlowPage() {
                   value={edgeTargetAction}
                   onChange={(e) => setEdgeTargetAction(e.target.value)}
                 >
-                  <option value="next">Próxima etapa (outro nó)</option>
+                  <option value="next">Próxima etapa</option>
                   <option value="transfer">Transferir para departamento</option>
                   <option value="end">Encerrar conversa</option>
                 </select>
               </div>
               {edgeTargetAction === 'next' && (
                 <div>
-                  <Label>Próximo nó</Label>
+                  <Label>Próxima etapa</Label>
                   <select
                     className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                     value={edgeToNodeId || ''}
@@ -1130,8 +1276,8 @@ export default function FlowPage() {
 
       <ConfirmDialog
         show={!!confirmDeleteNode}
-        title="Excluir nó"
-        message={confirmDeleteNode ? `Excluir o nó "${confirmDeleteNode.name}"? As arestas ligadas também serão removidas.` : ''}
+        title="Excluir etapa"
+        message={confirmDeleteNode ? `Excluir a etapa "${confirmDeleteNode.name}"? As conexões ligadas também serão removidas.` : ''}
         confirmText="Excluir"
         variant="danger"
         onConfirm={handleDeleteNodeConfirm}
@@ -1139,8 +1285,8 @@ export default function FlowPage() {
       />
       <ConfirmDialog
         show={!!confirmDeleteEdge}
-        title="Excluir aresta"
-        message={confirmDeleteEdge ? `Excluir a aresta "${confirmDeleteEdge.option_id}"?` : ''}
+        title="Excluir conexão"
+        message={confirmDeleteEdge ? `Excluir a conexão "${confirmDeleteEdge.option_id}"?` : ''}
         confirmText="Excluir"
         variant="danger"
         onConfirm={handleDeleteEdgeConfirm}
@@ -1149,7 +1295,7 @@ export default function FlowPage() {
       <ConfirmDialog
         show={!!confirmDeleteFlow}
         title="Excluir fluxo"
-        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? Todos os nós e arestas serão removidos.` : ''}
+        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? Todas as etapas e conexões serão removidas.` : ''}
         confirmText="Excluir"
         variant="danger"
         onConfirm={handleDeleteFlowConfirm}

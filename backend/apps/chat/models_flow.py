@@ -128,6 +128,10 @@ class FlowNode(models.Model):
         help_text="Para tipo imagem ou arquivo: URL da imagem/documento (até 1024 caracteres).",
     )
 
+    # Posição no canvas (arrastar e soltar); null = usar layout por order
+    position_x = models.FloatField(null=True, blank=True, verbose_name="Posição X")
+    position_y = models.FloatField(null=True, blank=True, verbose_name="Posição Y")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

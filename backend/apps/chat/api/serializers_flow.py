@@ -53,6 +53,8 @@ class FlowNodeSerializer(serializers.ModelSerializer):
             "sections",
             "buttons",
             "media_url",
+            "position_x",
+            "position_y",
             "edges_out",
             "created_at",
             "updated_at",
@@ -79,6 +81,8 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             "sections",
             "buttons",
             "media_url",
+            "position_x",
+            "position_y",
             "created_at",
             "updated_at",
         ]
@@ -87,8 +91,18 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
     def validate_name(self, value):
         name = (value or "").strip()
         if not name:
-            raise serializers.ValidationError("Nome do nó é obrigatório.")
+            raise serializers.ValidationError("Nome da etapa é obrigatório.")
         return name
+
+    def validate_position_x(self, value):
+        if value is not None and (value < -1e6 or value > 1e6):
+            raise serializers.ValidationError("Posição X deve estar entre -1000000 e 1000000.")
+        return value
+
+    def validate_position_y(self, value):
+        if value is not None and (value < -1e6 or value > 1e6):
+            raise serializers.ValidationError("Posição Y deve estar entre -1000000 e 1000000.")
+        return value
 
     def _get_attr_or_instance(self, attrs, key, default=""):
         """Em PATCH, usa valor da instance quando o campo não vem no body. Em create (instance None), retorna default."""
