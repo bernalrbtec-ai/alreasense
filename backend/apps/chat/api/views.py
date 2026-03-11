@@ -445,7 +445,13 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Observação: já excluímos grupos removidos via instance_removed acima.
         conversation_type_param = (self.request.query_params.get('conversation_type') or '').strip().lower()
         if conversation_type_param == 'group':
-            return queryset.filter(conversation_type='group').exclude(status='closed')
+            qs_groups = queryset.filter(conversation_type='group').exclude(status='closed')
+            logger.info(
+                "[GET_QUERYSET] conversation_type=group tenant_id=%s count=%s",
+                getattr(user.tenant, 'id', None),
+                qs_groups.count(),
+            )
+            return qs_groups
         
         # ✅ MULTI-INSTÂNCIA: Filtrar por instância quando informado (ex: modal Nova Conversa "Enviar por").
         # Parâmetro opcional: só quem envia "instance" ou "instance_id" recebe filtro; demais listagens inalteradas.
@@ -3193,6 +3199,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     continue
                 raw = response.json()
                 groups = raw if isinstance(raw, list) else raw.get('groups', []) if isinstance(raw, dict) else []
+                # Fallback: Evolution pode devolver lista em outra chave
+                if isinstance(raw, dict) and not groups:
+                    groups = raw.get('groupList', raw.get('data', []))
+                if not isinstance(groups, list):
+                    groups = []
+                logger.info(
+                    "[SYNC_GROUPS] instance_name=%s len(groups)=%s raw_keys=%s",
+                    instance_name,
+                    len(groups),
+                    list(raw.keys()) if isinstance(raw, dict) else "n/a",
+                )
             except Exception as e:
                 logger.warning(f"[SYNC_GROUPS] Erro ao buscar grupos da instância {instance_name}: {e}")
                 continue
@@ -3339,7 +3356,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 conv.save(update_fields=['group_metadata'])
                 removed_count += 1
             if removed_count:
-                logger.info("[SYNC_GROUPS] %s grupo(s) marcado(s) como removidos (não estão mais na Evolution)", removed_count)
+                logger.info(
+                    "[SYNC_GROUPS] instance_name=%s: %s grupo(s) marcado(s) como removidos (não estão mais na Evolution)",
+                    instance_name,
+                    removed_count,
+                )
 
         return Response({
             'created': created,
