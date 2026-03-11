@@ -2518,6 +2518,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     update_fields_list.append('status')
                 needs_update = True
         
+        # ✅ Controle em tempo real: se recebemos mensagem em grupo, a instância ainda está no grupo
+        if conversation_type == 'group' and conversation.group_metadata:
+            meta = dict(conversation.group_metadata)
+            if meta.get('instance_removed') is True:
+                meta.pop('instance_removed', None)
+                meta.pop('instance_removed_at', None)
+                conversation.group_metadata = meta
+                if 'group_metadata' not in update_fields_list:
+                    update_fields_list.append('group_metadata')
+                needs_update = True
+                logger.info(
+                    f"✅ [GRUPO] instance_removed limpo em tempo real (messages.upsert): conv_id={conversation.id}"
+                )
+        
         if needs_update:
             conversation.save(update_fields=update_fields_list)
             logger.info(f"✅ [ROUTING] Conversa atualizada: {phone}")
