@@ -373,7 +373,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Filtrar por tenant (aplicado para TODOS os usuários, incluindo superusers)
         queryset = queryset.filter(tenant=user.tenant)
 
-        # Grupos dos quais a instância foi removida (fonte: Evolution no sync) não aparecem na listagem
+        # Só exibir grupos ativos: Evolution é a fonte da verdade no sync; removidos ficam ocultos
         queryset = queryset.exclude(
             conversation_type='group',
             group_metadata__instance_removed=True,
@@ -3142,9 +3142,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['post'], url_path='sync-groups')
     def sync_groups(self, request):
         """
-        Sincroniza grupos da instância Evolution com o banco: cria/atualiza Conversation
-        para cada grupo retornado por fetchAllGroups, para que apareçam na aba Grupos
-        mesmo sem ter havido mensagem ainda.
+        Sincroniza grupos da instância Evolution com o banco.
+        Fonte da verdade: Evolution API (fetchAllGroups). Só são considerados ativos
+        os grupos que constam na resposta; os que não constam são marcados
+        instance_removed e não aparecem na listagem.
         """
         tenant = request.user.tenant
         if not tenant:
@@ -3222,12 +3223,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     base = base.split('-')[-1]
                 return base or None
 
-            # JIDs (e canônicos) que vieram na resposta da Evolution (para limpar instance_removed)
+            # JIDs, canônicos e dígitos que vieram na resposta da Evolution (para limpar instance_removed)
             seen_group_jids = set()
             seen_canonical_ids = set()
+            seen_digits = set()  # fallback: dígitos do JID para match mesmo com formato diferente no BD
+
+            def _digits_of(j):
+                return ''.join(c for c in str(j or '') if c.isdigit())
 
             for group in groups:
-                group_id_raw = group.get('id') or group.get('jid')
+                group_id_raw = group.get('id') or group.get('jid') or group.get('groupId')
                 if not group_id_raw:
                     continue
                 group_jid = _normalize_group_jid(group_id_raw)
@@ -3237,8 +3242,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 cid = _canonical_group_id(group_jid)
                 if cid:
                     seen_canonical_ids.add(cid)
+                d = _digits_of(group_jid)
+                if len(d) >= 10:  # só usar dígitos para match se for identificador longo (evitar colisão)
+                    seen_digits.add(d)
                 subject = (group.get('subject') or group.get('name') or '').strip() or 'Grupo WhatsApp'
-                canonical_id = _canonical_group_id(group_jid)
                 defaults = {
                     'conversation_type': 'group',
                     'contact_name': subject,
@@ -3260,7 +3267,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     if (ex.group_metadata or {}).get('group_id') == group_jid:
                         conv = ex
                         break
-                    if canonical_id and _canonical_group_id(ex.contact_phone) == canonical_id:
+                    if cid and _canonical_group_id(ex.contact_phone) == cid:
                         conv = ex
                         break
                 if conv:
@@ -3290,14 +3297,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     # Evitar marcar como removido: este grupo (criado ou já existente) está na Evolution
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
 
-            # Garantir que todos os grupos presentes na Evolution tenham instance_removed limpo (incl. match por JID ou canonical)
+            # Garantir que todos os grupos presentes na Evolution tenham instance_removed limpo
+            # Match por: JID exato, canonical ou dígitos do JID (fallback para formatos diferentes no BD)
             for c in Conversation.objects.filter(
                 tenant=tenant,
                 conversation_type='group',
                 instance_name=instance_name,
             ).only('id', 'contact_phone', 'group_metadata'):
                 gid = (c.group_metadata or {}).get('group_id') or c.contact_phone
-                if gid in seen_group_jids or (_canonical_group_id(gid) and _canonical_group_id(gid) in seen_canonical_ids):
+                c_canonical = _canonical_group_id(gid)
+                c_digits = _digits_of(gid)
+                # Só considerar ativo se constar na resposta da Evolution (JID exato, canonical ou dígitos longos)
+                if (
+                    gid in seen_group_jids
+                    or (c_canonical and c_canonical in seen_canonical_ids)
+                    or (len(c_digits) >= 10 and c_digits in seen_digits)
+                ):
                     meta = dict(c.group_metadata or {})
                     meta.pop('instance_removed', None)
                     meta.pop('instance_removed_at', None)
