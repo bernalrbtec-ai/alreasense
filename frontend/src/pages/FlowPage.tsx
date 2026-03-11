@@ -705,7 +705,13 @@ export default function FlowPage() {
     for (const node of flowDetail.nodes) {
       previewLines.push(`[${node.is_start ? 'Início' : 'Etapa'}] ${node.name} (${node.node_type})`)
       for (const edge of node.edges_out || []) {
-        const dest = edge.to_node_name || edge.target_department_name || 'Encerrar'
+        const dest = edge.target_action === 'transfer'
+          ? (edge.target_department_name ? `Transferir: ${edge.target_department_name}` : 'Transferir')
+          : edge.target_action === 'end'
+            ? 'Encerrar'
+            : edge.to_node_name
+              ? `Próxima: ${edge.to_node_name}`
+              : 'Próxima etapa'
         previewLines.push(`  -- ${edge.option_id} → ${dest}`)
       }
     }
@@ -981,14 +987,25 @@ export default function FlowPage() {
                         </div>
                       </div>
                       <div className="mt-2 pl-6">
-                        <div className="text-xs text-gray-500 mb-1">Conexões (opção → destino)</div>
+                        <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tomadas de decisão (opção → destino)</div>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-1.5">Cada opção pode levar à próxima etapa, transferir para departamento ou encerrar.</p>
                         {(n.edges_out || []).length === 0 ? (
-                          <span className="text-sm text-gray-400">Nenhuma conexão.</span>
+                          <span className="text-sm text-gray-400">Nenhuma decisão configurada. Use &quot;Conectar&quot; para definir.</span>
                         ) : (
                           <ul className="space-y-1">
                             {(n.edges_out || []).map((e) => (
                               <li key={e.id} className="flex items-center justify-between text-sm">
-                                <span><code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{e.option_id}</code> → {e.to_node_name || e.target_department_name || 'Encerrar'}</span>
+                                <span>
+                                  <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{e.option_id}</code>
+                                  {' → '}
+                                  {e.target_action === 'transfer'
+                                    ? (e.target_department_name ? `Transferir: ${e.target_department_name}` : 'Transferir')
+                                    : e.target_action === 'end'
+                                      ? 'Encerrar'
+                                      : e.to_node_name
+                                        ? `Próxima: ${e.to_node_name}`
+                                        : 'Próxima etapa'}
+                                </span>
                                 <div className="flex gap-2">
                                   <button type="button" onClick={() => openEditEdge(e)} className="text-accent-600 dark:text-accent-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80">Editar</button>
                                   <button type="button" onClick={() => handleDeleteEdgeClick(e)} disabled={deletingId === e.id} className="text-red-600 dark:text-red-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50">Excluir</button>
@@ -998,7 +1015,7 @@ export default function FlowPage() {
                           </ul>
                         )}
                         <Button size="sm" variant="outline" className="mt-1" onClick={() => openAddEdge(n.id)}>
-                          <Plus className="h-3 w-3 mr-1" /> Conectar
+                          <Plus className="h-3 w-3 mr-1" /> Conectar (próxima etapa / transferir / encerrar)
                         </Button>
                       </div>
                     </li>
@@ -1222,16 +1239,21 @@ export default function FlowPage() {
                 <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: opcao1" />
               </div>
               <div>
-                <Label>Destino</Label>
+                <Label>O que acontece quando o usuário escolhe esta opção?</Label>
                 <select
                   className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                   value={edgeTargetAction}
                   onChange={(e) => setEdgeTargetAction(e.target.value)}
                 >
-                  <option value="next">Próxima etapa</option>
+                  <option value="next">Ir para outra etapa do fluxo</option>
                   <option value="transfer">Transferir para departamento</option>
                   <option value="end">Encerrar conversa</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {edgeTargetAction === 'next' && 'O fluxo continua em outra etapa (ex.: menu, resposta).'}
+                  {edgeTargetAction === 'transfer' && 'A conversa é enviada para outro departamento.'}
+                  {edgeTargetAction === 'end' && 'A conversa é finalizada.'}
+                </p>
               </div>
               {edgeTargetAction === 'next' && (
                 <div>
@@ -1250,7 +1272,7 @@ export default function FlowPage() {
               )}
               {edgeTargetAction === 'transfer' && (
                 <div>
-                  <Label>Departamento</Label>
+                  <Label>Transferir para qual departamento?</Label>
                   <select
                     className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                     value={edgeTargetDepartmentId || ''}
@@ -1372,6 +1394,9 @@ export default function FlowPage() {
                   </select>
                 </div>
               )}
+              <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-1">
+                Tomadas de decisão e transferência: na lista &quot;Etapas&quot; abaixo, use &quot;Conectar&quot; em cada etapa para definir para onde leva cada opção (próxima etapa, transferir para departamento ou encerrar).
+              </p>
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleSaveFlow} disabled={savingFlow}>

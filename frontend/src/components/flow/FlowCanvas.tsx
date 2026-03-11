@@ -267,12 +267,16 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
         <Background gap={12} size={1} />
       </ReactFlow>
       {nodes.length === 0 && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/50 pointer-events-none">
-          <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3">
+        <div
+          className="absolute inset-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/50"
+          onDragOver={onDrop ? handleDragOver : undefined}
+          onDrop={onDrop ? handleDrop : undefined}
+        >
+          <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3 pointer-events-none">
             <span className="text-lg text-gray-400 dark:text-gray-500">◇</span>
           </div>
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Nenhuma etapa ainda</p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">Arraste uma etapa da barra lateral para o canvas para começar.</p>
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 pointer-events-none">Nenhuma etapa ainda</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 pointer-events-none">Arraste uma etapa da barra lateral para o canvas para começar.</p>
         </div>
       )}
     </div>
