@@ -3151,17 +3151,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             is_active=True,
             status='active'
         )
+        # EvolutionConnection é opcional aqui: se não houver, tentamos usar api_url/api_key da própria instância.
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server:
-            return Response(
-                {'error': 'Servidor Evolution não configurado'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
         created = 0
         updated = 0
         for wa_instance in wa_instances:
-            base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-            api_key = wa_instance.api_key or evolution_server.api_key
+            # Determinar base_url e api_key: preferir config da instância; usar EvolutionConnection apenas como fallback.
+            base_url = (wa_instance.api_url or (evolution_server.base_url if evolution_server else '')).rstrip('/') if (wa_instance.api_url or (evolution_server and evolution_server.base_url)) else ''
+            api_key = wa_instance.api_key or (evolution_server.api_key if evolution_server else '')
+            if not base_url or not api_key:
+                logger.warning(
+                    "[SYNC_GROUPS] Ignorando instância %s: sem base_url/api_key configurados (api_url=%r, evolution=%r)",
+                    getattr(wa_instance, 'instance_name', None),
+                    wa_instance.api_url,
+                    bool(evolution_server),
+                )
+                continue
             instance_name = (wa_instance.instance_name or '').strip()
             if not instance_name:
                 continue
