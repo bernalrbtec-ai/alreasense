@@ -2705,49 +2705,48 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
 
                 evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
 
-                if wa_instance and evolution_server:
-                    # ✅ VALIDAÇÃO CRÍTICA: Garantir que group_jid é realmente um grupo (@g.us)
-                    group_jid = None
-                    
-                    if remote_jid.endswith('@g.us'):
-                        group_jid = remote_jid
-                    elif conversation.group_metadata and conversation.group_metadata.get('group_id'):
-                        group_jid = conversation.group_metadata.get('group_id')
-                        # ✅ Verificar se group_id realmente termina com @g.us
-                        if not group_jid.endswith('@g.us'):
-                            logger.critical(f"❌ [WEBHOOK] ERRO CRÍTICO: group_id no metadata não termina com @g.us!")
-                            logger.critical(f"   group_id: {group_jid}")
-                            logger.critical(f"   remote_jid: {remote_jid}")
-                            logger.critical(f"   ⚠️ NÃO ENFILEIRANDO fetch_group_info para evitar erro 400!")
-                            group_jid = None
+                # Calcular group_jid uma vez (necessário para enfileirar com ou sem EvolutionConnection)
+                group_jid = None
+                if remote_jid.endswith('@g.us'):
+                    group_jid = remote_jid
+                elif conversation.group_metadata and conversation.group_metadata.get('group_id'):
+                    gid = conversation.group_metadata.get('group_id')
+                    if gid and str(gid).endswith('@g.us'):
+                        group_jid = gid
                     else:
-                        logger.critical(f"❌ [WEBHOOK] ERRO CRÍTICO: is_group=True mas remote_jid não é @g.us e não há group_id no metadata!")
-                        logger.critical(f"   remote_jid: {remote_jid}")
-                        logger.critical(f"   conversation_type: {conversation.conversation_type}")
-                        logger.critical(f"   ⚠️ NÃO ENFILEIRANDO fetch_group_info para evitar erro 400!")
-                    
-                    if group_jid:
-                        logger.critical("👥 [GRUPO EXISTENTE] Enfileirando busca para Group JID: %s", group_jid)
+                        logger.warning("⚠️ [GRUPO EXISTENTE] group_id no metadata não termina com @g.us, ignorando")
+                else:
+                    logger.warning("⚠️ [GRUPO EXISTENTE] is_group=True mas remote_jid não é @g.us e não há group_id no metadata")
 
-                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                    api_key = wa_instance.api_key or evolution_server.api_key
-                    # ✅ CRÍTICO: Usar instance da conversa (instância que tem o grupo)
-                    instance_name = (conversation.instance_name and conversation.instance_name.strip()) or wa_instance.instance_name
+                base_url = None
+                api_key = None
+                if evolution_server:
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/') if wa_instance else None
+                    api_key = (wa_instance.api_key or evolution_server.api_key) if wa_instance else None
+                # Fallback: usar server_url e apikey do payload do webhook (quando Evolution não está cadastrado no Django)
+                if (not base_url or not api_key) and wa_instance and data:
+                    payload_url = (data.get('server_url') or '').strip().rstrip('/')
+                    payload_key = (data.get('apikey') or '').strip()
+                    if payload_url and payload_key:
+                        base_url = base_url or payload_url
+                        api_key = api_key or payload_key
+                        logger.info("👥 [GRUPO EXISTENTE] Usando server_url/apikey do payload do webhook (EvolutionConnection não configurado no banco)")
 
-                    # ✅ MELHORIA: Sempre enfileirar busca de info (garante nome e foto atualizados)
+                if wa_instance and base_url and api_key and group_jid:
+                    instance_name_for_task = (conversation.instance_name and conversation.instance_name.strip()) or wa_instance.instance_name
                     fetch_group_info.delay(
                         conversation_id=str(conversation.id),
                         group_jid=group_jid,
-                        instance_name=instance_name,
+                        instance_name=instance_name_for_task,
                         api_key=api_key,
                         base_url=base_url
                     )
-                    logger.critical("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
+                    logger.info("✅ [GRUPO EXISTENTE] Task fetch_group_info enfileirada - nome/foto do grupo serão atualizados em background")
                 else:
                     if not wa_instance:
                         logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp não encontrada (tenant=%s, instance_name conv=%s, webhook instance=%s)", tenant.id, getattr(conversation, 'instance_name', None) or '', instance_name or '')
-                    if not evolution_server:
-                        logger.warning("⚠️ [GRUPO EXISTENTE] Servidor Evolution não configurado ou inativo (EvolutionConnection.is_active=True)")
+                    if not (base_url and api_key):
+                        logger.warning("⚠️ [GRUPO EXISTENTE] Sem Evolution (EvolutionConnection inativo ou server_url/apikey ausentes no webhook)")
             except Exception as e:
                 logger.error("❌ [GRUPO EXISTENTE] Erro ao enfileirar busca: %s", e, exc_info=True)
         

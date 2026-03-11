@@ -395,6 +395,35 @@ export function ConversationList() {
         </div>
       )}
 
+      {/* Aba Grupos: botão Sincronizar sempre visível (atualizar nomes / trazer grupos novos) */}
+      {activeDepartment?.id === 'groups' && (
+        <div className="flex-shrink-0 flex items-center justify-center p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
+          <button
+            type="button"
+            disabled={syncingGroups}
+            aria-busy={syncingGroups}
+            aria-label={syncingGroups ? 'Sincronizando grupos' : 'Sincronizar grupos da instância'}
+            onClick={async () => {
+              setSyncingGroups(true);
+              try {
+                const { data } = await api.post('/chat/conversations/sync-groups/');
+                toast.success(data?.message || `${data?.created ?? 0} grupo(s) adicionado(s), ${data?.updated ?? 0} atualizado(s).`);
+                setTabLoadError(null);
+                setRetryTrigger((r) => r + 1);
+              } catch (error) {
+                const msg = ApiErrorHandler.extractMessage(error);
+                toast.error(msg);
+              } finally {
+                setSyncingGroups(false);
+              }
+            }}
+            className="px-4 py-2 bg-[#8b5cf6] hover:bg-[#7c3aed] disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {syncingGroups ? 'Sincronizando...' : 'Atualizar grupos'}
+          </button>
+        </div>
+      )}
+
       {/* Conversations */}
       <div
         className="flex-1 overflow-y-auto custom-scrollbar"
