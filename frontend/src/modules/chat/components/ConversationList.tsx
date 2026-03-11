@@ -341,11 +341,21 @@ export function ConversationList() {
     return needsPin && activeConversation ? [activeConversation, ...sortedWaiting] : sortedWaiting;
   }, [conversations, debouncedSearchTerm, activeDepartment, waitingForResponseMode, activeConversation?.id]);
 
-  // ✅ PERFORMANCE: Memoizar função de formatação
+  // ✅ PERFORMANCE: Memoizar funções de formatação
   const formatTime = useCallback((dateString: string | undefined) => {
     if (!dateString) return '';
     try {
       return formatDistanceToNow(new Date(dateString), { addSuffix: false, locale: ptBR });
+    } catch {
+      return '';
+    }
+  }, []);
+
+  // Para subtítulo sem última mensagem: "há cerca de 4 horas" (mais natural em pt-BR)
+  const formatTimeAgo = useCallback((dateString: string | undefined) => {
+    if (!dateString) return '';
+    try {
+      return formatDistanceToNow(new Date(dateString), { addSuffix: true, locale: ptBR });
     } catch {
       return '';
     }
@@ -683,9 +693,9 @@ export function ConversationList() {
                       }
                     </p>
                   ) : (
-                    // ✅ CORREÇÃO: Para conversas novas sem mensagens, mostrar texto estático ao invés de loading infinito
-                    <p className="text-sm text-gray-400 dark:text-gray-400 italic truncate">
-                      Nova conversa
+                    // Sem última mensagem: mostrar tempo relativo (ex.: "há cerca de 4 horas")
+                    <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                      {formatTimeAgo(conversationItem.updated_at || conversationItem.last_message_at) || '—'}
                     </p>
                   )}
                   {conversationItem.unread_count > 0 && (

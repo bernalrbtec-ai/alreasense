@@ -428,8 +428,63 @@ class EvolutionWebhookView(APIView):
         return JsonResponse({'status': 'success', 'event': 'chats.set'})
     
     def handle_groups_upsert(self, data):
-        """Handle groups.upsert events."""
-        logger.info(f"👥 Group upsert: {data.get('event')}")
+        """
+        Handle groups.upsert events.
+        Disparado quando a instância é adicionada a grupos ou a lista de grupos é atualizada.
+        Cria/atualiza Conversation para cada grupo para que apareçam na aba Grupos sem clicar em Atualizar.
+        """
+        logger.info(f"👥 [GROUPS.UPSERT] Evento recebido: {data.get('event')}")
+        try:
+            instance_name = (data.get('instance') or '').strip()
+            if not instance_name:
+                logger.warning("⚠️ [GROUPS.UPSERT] Payload sem instance")
+                return JsonResponse({'status': 'success', 'event': 'groups.upsert'})
+            whatsapp_instance = resolve_wa_instance_by_webhook_id(instance_name)
+            if not whatsapp_instance:
+                logger.warning(f"⚠️ [GROUPS.UPSERT] WhatsAppInstance não encontrada: {instance_name}")
+                return JsonResponse({'status': 'success', 'event': 'groups.upsert'})
+            tenant = whatsapp_instance.tenant
+            raw = data.get('data') or data.get('groups') or data
+            groups = raw if isinstance(raw, list) else [raw] if isinstance(raw, dict) else []
+            if not groups:
+                logger.info("👥 [GROUPS.UPSERT] Nenhum grupo no payload")
+                return JsonResponse({'status': 'success', 'event': 'groups.upsert'})
+            from apps.chat.models import Conversation
+            created = 0
+            updated = 0
+            friendly = (getattr(whatsapp_instance, 'friendly_name', None) or '').strip() or instance_name
+            for group in groups:
+                group_id_raw = group.get('id') or group.get('jid')
+                if not group_id_raw:
+                    continue
+                group_jid = group_id_raw if str(group_id_raw).endswith('@g.us') else f"{group_id_raw}@g.us"
+                subject = (group.get('subject') or group.get('name') or '').strip() or 'Grupo WhatsApp'
+                defaults = {
+                    'conversation_type': 'group',
+                    'contact_name': subject,
+                    'instance_name': instance_name,
+                    'instance_friendly_name': friendly,
+                    'group_metadata': {
+                        'group_id': group_jid,
+                        'group_name': subject,
+                        'is_group': True,
+                    },
+                    'status': 'open',
+                    'department': None,
+                }
+                conv, created_this = Conversation.objects.update_or_create(
+                    tenant=tenant,
+                    contact_phone=group_jid,
+                    defaults=defaults,
+                )
+                if created_this:
+                    created += 1
+                else:
+                    updated += 1
+            if created or updated:
+                logger.info(f"✅ [GROUPS.UPSERT] {created} grupo(s) criado(s), {updated} atualizado(s) - tenant {tenant.name}")
+        except Exception as e:
+            logger.error(f"❌ [GROUPS.UPSERT] Erro: {e}", exc_info=True)
         return JsonResponse({'status': 'success', 'event': 'groups.upsert'})
     
     def handle_groups_update(self, data):
@@ -481,7 +536,18 @@ class EvolutionWebhookView(APIView):
             
             tenant = whatsapp_instance.tenant
             logger.info(f"✅ [GROUP PARTICIPANTS] Tenant encontrado: {tenant.name}")
-            
+
+            # Resolver Evolution + API uma vez (usado ao criar conversa e ao buscar participantes)
+            connection = EvolutionConnection.objects.filter(is_active=True).first()
+            if not connection:
+                logger.warning("⚠️ [GROUP PARTICIPANTS] EvolutionConnection não encontrada")
+                return JsonResponse({'status': 'error', 'message': 'Evolution connection not found'}, status=404)
+            base_url = (whatsapp_instance.api_url or connection.base_url or '').rstrip('/')
+            api_key = whatsapp_instance.api_key or connection.api_key or ''
+            if not base_url or not api_key:
+                logger.warning("⚠️ [GROUP PARTICIPANTS] API URL ou key não configurados")
+                return JsonResponse({'status': 'error', 'message': 'API not configured'}, status=500)
+
             # Buscar conversa do grupo
             # Normalizar group_jid para formato usado no banco
             normalized_group_jid = group_jid
@@ -505,12 +571,43 @@ class EvolutionWebhookView(APIView):
             ).first()
             
             if not conversation:
-                logger.warning(f"⚠️ [GROUP PARTICIPANTS] Conversa não encontrada")
-                logger.warning(f"   group_jid: {group_jid}")
-                logger.warning(f"   normalized_group_jid: {normalized_group_jid}")
-                return JsonResponse({'status': 'error', 'message': 'Conversation not found'}, status=404)
-            
-            logger.info(f"✅ [GROUP PARTICIPANTS] Conversa encontrada: {conversation.id} - {conversation.contact_name}")
+                # Instância foi adicionada a um grupo novo: criar Conversation para aparecer na aba Grupos
+                from apps.authn.models import Department
+                default_dept = None
+                if getattr(whatsapp_instance, 'default_department_id', None):
+                    default_dept = Department.objects.filter(
+                        id=whatsapp_instance.default_department_id, tenant=tenant
+                    ).first()
+                conversation = Conversation.objects.create(
+                    tenant=tenant,
+                    contact_phone=normalized_group_jid,
+                    conversation_type='group',
+                    contact_name='Grupo WhatsApp',
+                    instance_name=instance_name,
+                    instance_friendly_name=(getattr(whatsapp_instance, 'friendly_name', None) or '').strip() or instance_name,
+                    group_metadata={
+                        'group_id': normalized_group_jid,
+                        'group_name': 'Grupo WhatsApp',
+                        'is_group': True,
+                    },
+                    status='open',
+                    department=default_dept,
+                )
+                logger.info(f"✅ [GROUP PARTICIPANTS] Conversa criada (instância entrou no grupo): {conversation.id}")
+                try:
+                    from apps.chat.tasks import fetch_group_info
+                    fetch_group_info.delay(
+                        conversation_id=str(conversation.id),
+                        group_jid=normalized_group_jid,
+                        instance_name=instance_name,
+                        api_key=api_key,
+                        base_url=base_url,
+                    )
+                    logger.info("✅ [GROUP PARTICIPANTS] fetch_group_info enfileirada para novo grupo")
+                except Exception as e:
+                    logger.warning("⚠️ [GROUP PARTICIPANTS] Não foi possível enfileirar fetch_group_info: %s", e)
+            else:
+                logger.info(f"✅ [GROUP PARTICIPANTS] Conversa encontrada: {conversation.id} - {conversation.contact_name}")
             
             # Extrair participantes adicionados e removidos
             participants_added = data.get('participants', {}).get('add', []) or data.get('added', []) or []
@@ -529,22 +626,8 @@ class EvolutionWebhookView(APIView):
             logger.info(f"👥 [GROUP PARTICIPANTS] Adicionados: {len(participants_added)}, Removidos: {len(participants_removed)}")
             
             # Buscar lista atual de participantes do grupo via API Evolution
-            # Isso garante que temos a lista completa e atualizada
-            from apps.notifications.models import EvolutionConnection
             import httpx
-            
-            connection = EvolutionConnection.objects.filter(is_active=True).first()
-            if not connection:
-                logger.warning(f"⚠️ [GROUP PARTICIPANTS] EvolutionConnection não encontrada")
-                return JsonResponse({'status': 'error', 'message': 'Evolution connection not found'}, status=404)
-            
-            base_url = (whatsapp_instance.api_url or connection.base_url).rstrip('/')
-            api_key = whatsapp_instance.api_key or connection.api_key
-            
-            if not base_url or not api_key:
-                logger.warning(f"⚠️ [GROUP PARTICIPANTS] API URL ou key não configurados")
-                return JsonResponse({'status': 'error', 'message': 'API not configured'}, status=500)
-            
+
             headers = {'apikey': api_key, 'Content-Type': 'application/json'}
             
             # Buscar lista completa de participantes da API
