@@ -83,6 +83,21 @@ def _build_interactive_buttons_payload(node: FlowNode) -> Dict[str, Any]:
     }
 
 
+def _conversation_uses_evolution(conversation: Conversation) -> bool:
+    """True se a conversa usa instância Evolution (lista/botões desativados na Evolution 2.3.7)."""
+    from django.db.models import Q
+    from apps.notifications.models import WhatsAppInstance
+    if not conversation or not getattr(conversation, "instance_name", None):
+        return False
+    instance_name = (conversation.instance_name or "").strip()
+    if not instance_name:
+        return False
+    inst = WhatsAppInstance.objects.filter(tenant_id=conversation.tenant_id).filter(
+        Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
+    ).first()
+    return inst is not None and getattr(inst, "integration_type", None) == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
+
+
 def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Message]:
     """
     Cria mensagem (texto, imagem, arquivo, lista ou botões) do nó e enfileira envio.
@@ -138,14 +153,20 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
             logger.warning("[FLOW] Nó lista inválido (body/button/sections): %s", node.id)
             return None
         content = payload["body_text"]
-        metadata["interactive_list"] = payload
+        if not _conversation_uses_evolution(conversation):
+            metadata["interactive_list"] = payload
+        else:
+            logger.info("[FLOW] Instância Evolution: enviando nó lista como texto (listas desativadas na Evolution 2.3.7)")
     elif node.node_type == FlowNode.NODE_TYPE_BUTTONS:
         payload = _build_interactive_buttons_payload(node)
         if not payload.get("body_text") or not payload.get("buttons"):
             logger.warning("[FLOW] Nó botões inválido (body/buttons): %s", node.id)
             return None
         content = payload["body_text"]
-        metadata["interactive_reply_buttons"] = payload
+        if not _conversation_uses_evolution(conversation):
+            metadata["interactive_reply_buttons"] = payload
+        else:
+            logger.info("[FLOW] Instância Evolution: enviando nó botões como texto (botões desativados na Evolution 2.3.7)")
     else:
         logger.warning("[FLOW] Tipo de nó desconhecido: %s", node.node_type)
         return None

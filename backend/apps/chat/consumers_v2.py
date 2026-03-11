@@ -992,7 +992,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def get_conversation_supports_interactive_list(self, conversation_id):
-        """Retorna True se a conversa usa instância Meta ou Evolution (suportam lista interativa)."""
+        """Retorna True apenas para instância Meta Cloud. Evolution (2.3.7) tem bug em lista/botões, então bloqueamos."""
         from django.db.models import Q
         from apps.chat.models import Conversation
         from apps.notifications.models import WhatsAppInstance
@@ -1007,10 +1007,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             if not inst:
                 return False
             it = getattr(inst, 'integration_type', None)
-            return it in (
-                WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
-                WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION,
-            )
+            return it == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
         except Exception:
             return False
 

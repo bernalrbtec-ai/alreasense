@@ -78,6 +78,16 @@ class FlowViewSet(viewsets.ModelViewSet):
         instance = WhatsAppInstance.objects.filter(tenant=request.user.tenant, is_active=True).first()
         if not instance:
             return Response({"detail": "Nenhuma instância WhatsApp ativa"}, status=status.HTTP_400_BAD_REQUEST)
+        if start_node.node_type in (FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS) and getattr(
+            instance, "integration_type", None
+        ) == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
+            return Response(
+                {
+                    "detail": "Lista e botões estão desativados para instâncias Evolution API (bug na v2.3.7). "
+                    "O fluxo de teste usaria o nó inicial como lista/botões. Use uma instância Meta ou altere o nó inicial para mensagem de texto."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         phone_digits = "".join(c for c in phone.replace("+", "").replace(" ", "").replace("-", "") if c.isdigit())
         if not phone_digits:
             return Response({"detail": "Número de telefone inválido"}, status=status.HTTP_400_BAD_REQUEST)
