@@ -966,6 +966,10 @@ export function ChatWindow() {
                           warning: groupData.warning || null
                         };
                         setGroupInfo(safeGroupInfo);
+                        // Atualizar nome/foto na lista e no header quando o backend retornar conversation
+                        if (response.data?.conversation) {
+                          useChatStore.getState().updateConversation(response.data.conversation);
+                        }
                       } catch (error: any) {
                         console.error('Erro ao buscar informações do grupo:', error);
                         toast.error(error?.response?.data?.error || 'Erro ao buscar informações do grupo');

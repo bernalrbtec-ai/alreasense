@@ -1284,31 +1284,55 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Buscar instância WhatsApp ativa
-        wa_instance = WhatsAppInstance.objects.filter(
-            tenant=request.user.tenant,
-            is_active=True,
-            status='active'
-        ).first()
+        def _group_info_from_cache(conv, warning=None):
+            """Resposta 200 com dados da conversa (cache) quando Evolution/instância indisponível."""
+            meta = conv.group_metadata or {}
+            participants = meta.get('participants', [])
+            return Response({
+                'group_id': conv.contact_phone or '',
+                'group_name': conv.contact_name or meta.get('group_name', 'Grupo WhatsApp'),
+                'group_pic_url': conv.profile_pic_url or meta.get('group_pic_url'),
+                'description': meta.get('description', ''),
+                'participants_count': len(participants),
+                'creation_date': None,
+                'participants': clean_participants_for_metadata(participants),
+                'admins': [],
+                'uses_lid': False,
+                'warning': warning,
+                'conversation': ConversationSerializer(conv).data,
+            }, status=status.HTTP_200_OK)
+        
+        # Buscar instância WhatsApp: preferir a da conversa (grupo pode estar em instância específica)
+        wa_instance = None
+        if conversation.instance_name and str(conversation.instance_name).strip():
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active'
+            ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active'
+            ).first()
         
         if not wa_instance:
-            return Response(
-                {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return _group_info_from_cache(conversation, 'Nenhuma instância WhatsApp ativa - informações do cache')
         
         # Buscar configuração do servidor Evolution
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
         if not evolution_server:
-            return Response(
-                {'error': 'Servidor Evolution não configurado'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return _group_info_from_cache(
+                conversation,
+                'Servidor Evolution não configurado - informações podem estar desatualizadas',
             )
-        
-        # Preparar configuração
+
+        # Preparar configuração (usar instância da conversa para o grupo)
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
-        instance_name = wa_instance.instance_name
+        instance_name = (conversation.instance_name and str(conversation.instance_name).strip()) or wa_instance.instance_name
         
         headers = {
             'apikey': api_key,
@@ -1343,7 +1367,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'participants': clean_participants_for_metadata(participants_from_metadata),
                 'admins': [],  # Não disponível para grupos com LID
                 'uses_lid': True,
-                'warning': 'Grupo usa LID - algumas informações podem não estar disponíveis'
+                'warning': 'Grupo usa LID - algumas informações podem não estar disponíveis',
+                'conversation': ConversationSerializer(conversation).data,
             })
         
         try:
@@ -1524,6 +1549,32 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     
                     logger.info(f"✅ [GROUP INFO] {len(participants_list)} participantes processados ({len(admins_list)} admins)")
                     
+                    # Persistir nome e foto na conversa para o header/lista atualizarem
+                    update_fields = []
+                    if group_name and group_name != conversation.contact_name:
+                        conversation.contact_name = group_name
+                        update_fields.append('contact_name')
+                    if group_pic_url and group_pic_url != conversation.profile_pic_url:
+                        conversation.profile_pic_url = group_pic_url
+                        update_fields.append('profile_pic_url')
+                    cleaned_participants = clean_participants_for_metadata(participants_list)
+                    conversation.group_metadata = {
+                        **(conversation.group_metadata or {}),
+                        'group_id': group_jid,
+                        'group_name': group_name,
+                        'group_pic_url': group_pic_url,
+                        'participants_count': len(participants_list),
+                        'description': description,
+                        'is_group': True,
+                        'participants': cleaned_participants,
+                        'participants_updated_at': timezone.now().isoformat(),
+                    }
+                    update_fields.append('group_metadata')
+                    if update_fields:
+                        conversation.save(update_fields=update_fields)
+                        conversation.refresh_from_db()
+                        logger.info(f"✅ [GROUP INFO] Conversa atualizada: {update_fields}")
+                    
                     return Response({
                         'group_id': group_jid,
                         'group_name': group_name,
@@ -1533,7 +1584,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         'creation_date': creation_date,
                         'participants': participants_list,
                         'admins': admins_list,
-                        'uses_lid': False
+                        'uses_lid': False,
+                        'conversation': ConversationSerializer(conversation).data,
                     })
                     
                 elif response.status_code == 404:
@@ -1552,7 +1604,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         'participants': clean_participants_for_metadata(participants_from_metadata),
                         'admins': [],
                         'uses_lid': False,
-                        'warning': 'Grupo não encontrado na Evolution API - retornando dados do cache'
+                        'warning': 'Grupo não encontrado na Evolution API - retornando dados do cache',
+                        'conversation': ConversationSerializer(conversation).data,
                     })
                 else:
                     logger.error(f"❌ [GROUP INFO] Erro API: {response.status_code}")
