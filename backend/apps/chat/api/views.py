@@ -3201,14 +3201,26 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 ).only('id', 'contact_phone', 'group_metadata')
             )
 
-            def _canonical_group_id(j):
-                """Id canônico para matching: parte numérica; LID xxx-yyy@g.us -> yyy."""
-                if not j or '@g.us' not in str(j):
+            def _normalize_group_jid(raw):
+                """Mantém @g.us ou @lid; caso contrário acrescenta @g.us."""
+                s = (raw or '').strip()
+                if not s:
                     return None
-                base = (j or '').split('@')[0].replace('+', '').strip()
-                if '-' in base:
+                if s.endswith('@g.us') or s.endswith('@lid'):
+                    return s
+                return f"{s.rstrip('@')}@g.us"
+
+            def _canonical_group_id(j):
+                """Id canônico para matching: parte numérica; LID xxx-yyy@g.us -> yyy; 123@lid -> 123."""
+                if not j:
+                    return None
+                j = str(j)
+                if '@g.us' not in j and '@lid' not in j:
+                    return None
+                base = j.split('@')[0].replace('+', '').strip()
+                if '-' in base and '@g.us' in j:
                     base = base.split('-')[-1]
-                return base
+                return base or None
 
             # JIDs (e canônicos) que vieram na resposta da Evolution (para limpar instance_removed)
             seen_group_jids = set()
@@ -3218,7 +3230,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 group_id_raw = group.get('id') or group.get('jid')
                 if not group_id_raw:
                     continue
-                group_jid = group_id_raw if str(group_id_raw).endswith('@g.us') else f"{group_id_raw}@g.us"
+                group_jid = _normalize_group_jid(group_id_raw)
+                if not group_jid:
+                    continue
                 seen_group_jids.add(group_jid)
                 cid = _canonical_group_id(group_jid)
                 if cid:
