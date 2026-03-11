@@ -373,10 +373,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Filtrar por tenant (aplicado para TODOS os usuários, incluindo superusers)
         queryset = queryset.filter(tenant=user.tenant)
 
-        # Só exibir grupos ativos: Evolution é a fonte da verdade no sync; removidos ficam ocultos
+        # Só exibir grupos ativos: Evolution é a fonte da verdade no sync; removidos ficam ocultos.
+        # Usar __contains para excluir só quando a chave existe e é True (evita bug Django JSONField
+        # onde exclude(__key=True) pode excluir registros com chave ausente).
         queryset = queryset.exclude(
             conversation_type='group',
-            group_metadata__instance_removed=True,
+            group_metadata__contains={'instance_removed': True},
         )
         
         # ✅ PERFORMANCE: Calcular unread_count em batch usando annotate
@@ -3737,7 +3739,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # Base queryset: filtrar por tenant primeiro (segurança)
             base_queryset = Conversation.objects.filter(tenant=user.tenant).exclude(
                 conversation_type='group',
-                group_metadata__instance_removed=True,
+                group_metadata__contains={'instance_removed': True},
             )
             
             # Aplicar os mesmos filtros do get_queryset()
