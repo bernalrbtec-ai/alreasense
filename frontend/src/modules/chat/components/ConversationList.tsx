@@ -242,12 +242,14 @@ export function ConversationList() {
     // ✅ Refresh silencioso em background (não mostrar loading)
     const refreshConversations = async () => {
       try {
-        const response = await api.get('/chat/conversations/', {
-          params: { ordering: '-last_message_at' }
-        });
-        
+        const { activeDepartment, conversations: currentConvs } = useChatStore.getState();
+        const params: Record<string, string> = { ordering: '-last_message_at' };
+        if (activeDepartment?.id === 'groups') {
+          params.conversation_type = 'group';
+        }
+        const response = await api.get('/chat/conversations/', { params });
+
         const convs = response.data.results || response.data;
-        const { conversations: currentConvs } = useChatStore.getState();
         let updatedConvs = currentConvs;
         
         // ✅ Usar upsert para não perder conversas do WebSocket
