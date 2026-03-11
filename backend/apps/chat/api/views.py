@@ -446,7 +446,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation_type_param = (self.request.query_params.get('conversation_type') or '').strip().lower()
         if conversation_type_param == 'group':
             qs_groups = queryset.filter(conversation_type='group').exclude(status='closed')
-            logger.info(
+            logger.warning(
                 "[GET_QUERYSET] conversation_type=group tenant_id=%s count=%s",
                 getattr(user.tenant, 'id', None),
                 qs_groups.count(),
@@ -3204,7 +3204,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     groups = raw.get('groupList', raw.get('data', []))
                 if not isinstance(groups, list):
                     groups = []
-                logger.info(
+                logger.warning(
                     "[SYNC_GROUPS] instance_name=%s len(groups)=%s raw_keys=%s",
                     instance_name,
                     len(groups),
@@ -3356,7 +3356,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 conv.save(update_fields=['group_metadata'])
                 removed_count += 1
             if removed_count:
-                logger.info(
+                logger.warning(
                     "[SYNC_GROUPS] instance_name=%s: %s grupo(s) marcado(s) como removidos (não estão mais na Evolution)",
                     instance_name,
                     removed_count,
