@@ -16,6 +16,8 @@ import { getMessagePreviewText } from '../utils/messageUtils';
 import { NewConversationModal } from './NewConversationModal';
 import { useAuthStore } from '@/stores/authStore';
 import { usePermissions } from '@/hooks/usePermissions';
+import { toast } from 'sonner';
+import { ApiErrorHandler } from '@/lib/apiErrorHandler';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -56,6 +58,9 @@ export function ConversationList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [showNewConversation, setShowNewConversation] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [tabLoadError, setTabLoadError] = useState<string | null>(null);
+  const [retryTrigger, setRetryTrigger] = useState(0);
   
   // ✅ PERFORMANCE: Debounce na busca para evitar filtros excessivos
   useEffect(() => {
@@ -91,6 +96,7 @@ export function ConversationList() {
     
     const fetchConversations = async () => {
       try {
+        setLoadError(null);
         setLoading(true);
         
         // Buscar conversas com parâmetro assigned_to_me se necessário
@@ -121,7 +127,9 @@ export function ConversationList() {
         setHasLoaded(true);
         setLastRefresh(Date.now());
       } catch (error) {
-        console.error('❌ [ConversationList] Erro ao carregar conversas:', error);
+        const msg = ApiErrorHandler.extractMessage(error);
+        toast.error(msg);
+        setLoadError(msg);
         setHasLoaded(true); // Marcar como carregado mesmo em erro para não tentar novamente
       } finally {
         setLoading(false);
@@ -135,6 +143,7 @@ export function ConversationList() {
   // ✅ NOVO: Buscar conversas quando mudar para "Minhas Conversas"
   useEffect(() => {
     if (activeDepartment?.id === 'my_conversations' && hasLoaded) {
+      setTabLoadError(null);
       const fetchMyConversations = async () => {
         try {
           setLoading(true);
@@ -154,7 +163,9 @@ export function ConversationList() {
           
           setConversations(updatedConvs);
         } catch (error) {
-          console.error('❌ [ConversationList] Erro ao carregar minhas conversas:', error);
+          const msg = ApiErrorHandler.extractMessage(error);
+          toast.error(msg);
+          setTabLoadError(msg);
         } finally {
           setLoading(false);
         }
@@ -162,7 +173,37 @@ export function ConversationList() {
       
       fetchMyConversations();
     }
-  }, [activeDepartment?.id, hasLoaded, setConversations]);
+  }, [activeDepartment?.id, hasLoaded, setConversations, retryTrigger]);
+
+  // ✅ Aba Grupos: buscar grupos quando entrar na tab (após primeira carga)
+  useEffect(() => {
+    if (activeDepartment?.id === 'groups' && hasLoaded) {
+      setTabLoadError(null);
+      const fetchGroups = async () => {
+        try {
+          setLoading(true);
+          const params: Record<string, string> = { ordering: '-last_message_at', conversation_type: 'group' };
+          const response = await api.get('/chat/conversations/', { params });
+          const convs = response.data.results || response.data;
+          const { clearUpdateCache } = await import('../store/conversationUpdater');
+          clearUpdateCache();
+          const { conversations: currentConvs } = useChatStore.getState();
+          let updatedConvs = currentConvs;
+          for (const conversationItem of convs) {
+            updatedConvs = upsertConversation(updatedConvs, conversationItem);
+          }
+          setConversations(updatedConvs);
+        } catch (error) {
+          const msg = ApiErrorHandler.extractMessage(error);
+          toast.error(msg);
+          setTabLoadError(msg);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchGroups();
+    }
+  }, [activeDepartment?.id, hasLoaded, setConversations, retryTrigger]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -236,13 +277,18 @@ export function ConversationList() {
           (conversationItem.group_metadata?.group_name || '').toLowerCase().includes(searchLower);
         if (!matchesSearch) return false;
       }
-      
-      // 2. Filtro de departamento (se houver departamento ativo)
-      if (!activeDepartment) {
-        // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
-        return true;
+
+      // Aba Grupos: só grupos não fechados (não aplicar regras de inbox/departamento)
+      if (activeDepartment?.id === 'groups') {
+        return conversationItem.conversation_type === 'group' && (conversationItem.status ?? 'open') !== 'closed';
       }
-      
+
+      // Demais abas (e quando activeDepartment for null): excluir grupos
+      if (conversationItem.conversation_type === 'group') return false;
+
+      // Sem departamento ativo: mostrar conversas (já excluímos grupos)
+      if (!activeDepartment) return true;
+
       const departmentId = typeof conversationItem.department === 'string'
         ? conversationItem.department
         : conversationItem.department?.id || null;
@@ -320,31 +366,30 @@ export function ConversationList() {
         <div className="flex-1 relative min-w-0">
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
           <input
-            type="text"
+            type="search"
+            aria-label="Buscar conversas ou contatos"
             placeholder="Buscar ou iniciar conversa"
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              // ✅ PERFORMANCE: Debounce é feito no useEffect acima
-            }}
+            onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
           />
         </div>
         <button
-          onClick={() => {
-            console.log('🆕 [CONVERSATION LIST] Botão Nova Conversa clicado');
-            setShowNewConversation(true);
-            console.log('🆕 [CONVERSATION LIST] showNewConversation setado para true');
-          }}
+          type="button"
+          aria-label="Nova conversa"
+          onClick={() => setShowNewConversation(true)}
           className="flex-shrink-0 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
           title="Nova conversa"
         >
-          <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" aria-hidden />
         </button>
       </div>
 
       {/* Conversations */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <div
+        className="flex-1 overflow-y-auto custom-scrollbar"
+        aria-label={activeDepartment?.id === 'groups' ? 'Lista de grupos' : 'Lista de conversas'}
+      >
         {loading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="flex gap-2 mb-3">
@@ -353,6 +398,38 @@ export function ConversationList() {
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversas...</p>
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Não foi possível carregar as conversas</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs mb-4">{loadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoadError(null);
+                setHasLoaded(false);
+              }}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : tabLoadError ? (
+          <div className="flex flex-col items-center justify-center py-12 px-4">
+            <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {activeDepartment?.id === 'groups' ? 'Não foi possível carregar os grupos' : 'Não foi possível carregar'}
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs mb-4">{tabLoadError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setTabLoadError(null);
+                setRetryTrigger((r) => r + 1);
+              }}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Tentar novamente
+            </button>
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
@@ -374,6 +451,13 @@ export function ConversationList() {
                 >
                   Desative o filtro
                 </button>
+              </>
+            ) : activeDepartment?.id === 'groups' ? (
+              <>
+                <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhum grupo</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
+                  Grupos aparecem aqui quando houver mensagens nas instâncias conectadas.
+                </p>
               </>
             ) : (
               <>
@@ -431,21 +515,20 @@ export function ConversationList() {
                       src={getMediaProxyUrl(conversationItem.profile_pic_url)}
                       alt={getDisplayName(conversationItem)}
                     className="w-full h-full object-cover"
-                      onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conversationItem.contact_name}`)}
                       onError={(e) => {
-                        console.error(`❌ [IMG LIST] Erro ao carregar foto: ${conversationItem.contact_name}`, e.currentTarget.src);
                       // Fallback se imagem não carregar
                       e.currentTarget.style.display = 'none';
+                      const initial = conversationItem.conversation_type === 'group' ? '👥' : (getDisplayName(conversationItem) || '?')[0].toUpperCase();
                       e.currentTarget.parentElement!.innerHTML = `
                         <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                          ${conversationItem.conversation_type === 'group' ? '👥' : (conversationItem.contact_name || conversationItem.contact_phone)[0].toUpperCase()}
+                          ${initial}
                         </div>
                       `;
                     }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium text-lg">
-                    {conversationItem.conversation_type === 'group' ? '👥' : getDisplayName(conversationItem)[0].toUpperCase()}
+                    {conversationItem.conversation_type === 'group' ? '👥' : (getDisplayName(conversationItem) || '?')[0].toUpperCase()}
                   </div>
                 )}
                 
