@@ -440,6 +440,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status='pending',
                 department__isnull=True  # ← CRÍTICO: Apenas conversas SEM departamento no Inbox
             )
+
+        # Aba Grupos (ou filtro explícito): grupos do tenant não dependem de departamento/assign
+        # Observação: já excluímos grupos removidos via instance_removed acima.
+        conversation_type_param = (self.request.query_params.get('conversation_type') or '').strip().lower()
+        if conversation_type_param == 'group':
+            return queryset.filter(conversation_type='group').exclude(status='closed')
         
         # ✅ MULTI-INSTÂNCIA: Filtrar por instância quando informado (ex: modal Nova Conversa "Enviar por").
         # Parâmetro opcional: só quem envia "instance" ou "instance_id" recebe filtro; demais listagens inalteradas.
