@@ -1396,14 +1396,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.info(f"💬 [WEBHOOK] Mensagem de sticker é resposta de: {quoted_id}")
             
             logger.info(f"🎨 [WEBHOOK] Sticker recebido - processando como imagem")
-        elif message_type == 'contactMessage':
+        elif message_type in ('contactMessage', 'contactsArrayMessage'):
             # ✅ Extrair dados do(s) contato(s) compartilhado(s) - suporta um ou vários
             import re
-            contact_data = message_info.get('contactMessage', {})
+            if message_type == 'contactMessage':
+                contact_data = message_info.get('contactMessage', {})
+                contacts_array = contact_data.get('contactsArray', [])
+            else:
+                # contactsArrayMessage: campo contacts[]
+                contact_data = message_info.get('contactsArrayMessage', {})
+                contacts_array = contact_data.get('contacts', []) or contact_data.get('contactsArray', [])
             
             # Formato 1: contactMessage.contactsArray[] (vários ou um)
             # Formato 2: contactMessage.displayName e contactMessage.vcard (um contato direto)
-            contacts_array = contact_data.get('contactsArray', [])
             if not isinstance(contacts_array, list):
                 contacts_array = [contacts_array] if isinstance(contacts_array, dict) else []
 
