@@ -351,6 +351,21 @@ class Command(BaseCommand):
                 }
                 send_websocket_notification(user, 'agenda_reminder', data)
                 logger.info(f'✅ [AGENDA REMINDER] Lembrete WebSocket enviado para {user.email}')
+                # Também enviar pelo canal do chat para quem está na tela do chat (toast + sino)
+                try:
+                    from apps.chat.utils.websocket import send_user_notification
+                    send_user_notification(
+                        str(user.tenant_id),
+                        str(user.id),
+                        'agenda_reminder',
+                        {
+                            'message': message,
+                            'date': current_date.isoformat(),
+                            'upcoming_tasks': data.get('upcoming_tasks', []),
+                        },
+                    )
+                except Exception as send_err:
+                    logger.warning('⚠️ send_user_notification (agenda_reminder) falhou: %s', send_err)
                 return True
             
             return False

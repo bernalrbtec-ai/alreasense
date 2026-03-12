@@ -33,6 +33,7 @@ import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
 import { ThemeToggle } from './ThemeToggle'
+import { NotificationBell } from './NotificationBell'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -100,6 +101,7 @@ export default function Layout() {
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   const { isAdmin, isGerente, isAgente } = usePermissions()
+  const showNotificationBell = Boolean(canAccessChat()?.canAccess || canAccessAgenda()?.canAccess)
   
   // Fechar dropdown quando clicar fora
   useEffect(() => {
@@ -228,7 +230,7 @@ export default function Layout() {
           <div className="flex h-16 items-center justify-between px-4">
             <Logo size="sm" />
             <div className="flex items-center gap-2">
-              {/* ✅ Tema escuro/claro toggle */}
+              {showNotificationBell && <NotificationBell />}
               <ThemeToggle size="sm" />
               <Button
                 variant="ghost"
@@ -365,7 +367,7 @@ export default function Layout() {
           <div className="flex h-16 items-center justify-between px-4">
             {!sidebarCollapsed && <Logo size="sm" />}
             <div className="flex items-center gap-2 ml-auto">
-              {/* ✅ Tema escuro/claro toggle */}
+              {showNotificationBell && <NotificationBell />}
               <ThemeToggle size="sm" />
               <Button
                 variant="ghost"
@@ -525,6 +527,7 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
+          {showNotificationBell && <NotificationBell />}
         </div>
 
         {/* Page content */}

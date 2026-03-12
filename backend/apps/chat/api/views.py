@@ -4185,6 +4185,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             try:
                 broadcast_conversation_updated(conversation, request=request)
                 logger.info(f"✅ [TRANSFER] Broadcast conversation_updated enviado para conversa {conversation.id}")
+                if conversation.assigned_to:
+                    from apps.chat.utils.websocket import send_user_notification
+                    send_user_notification(
+                        str(conversation.tenant_id),
+                        str(conversation.assigned_to.id),
+                        'conversation_transferred',
+                        {
+                            'conversation_id': str(conversation.id),
+                            'conversation': conversation_data,
+                            'conversation_name': (conversation.contact_name or conversation.contact_phone or 'Conversa')[:80],
+                            'message': 'Uma conversa foi transferida para você',
+                            'transferred_by': user.email,
+                        },
+                    )
             except Exception as e:
                 logger.error(f"❌ [TRANSFER] Erro no broadcast após commit: {e}", exc_info=True)
         

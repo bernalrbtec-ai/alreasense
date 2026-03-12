@@ -48,6 +48,33 @@ def broadcast_to_tenant(tenant_id: str, event_type: str, data: Dict[str, Any]) -
         logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
 
 
+def send_user_notification(
+    tenant_id: str,
+    target_user_id: str,
+    notification_type: str,
+    data: Dict[str, Any],
+) -> None:
+    """
+    Envia notificação para um usuário específico via canal do chat (chat_tenant_{id}).
+    O frontend filtra por target_user_id e exibe toast/sino apenas para o usuário alvo.
+
+    Args:
+        tenant_id: UUID do tenant
+        target_user_id: ID do usuário alvo (string)
+        notification_type: 'conversation_transferred' | 'task_reminder' | 'agenda_reminder'
+        data: Dados da notificação (conversation_id, conversation, message, task_id, etc.)
+    """
+    payload = {
+        "target_user_id": str(target_user_id),
+        "notification_type": notification_type,
+        **data,
+    }
+    broadcast_to_tenant(tenant_id, "user_notification", payload)
+    logger.debug(
+        f"📡 [WEBSOCKET] user_notification enviado: {notification_type} para user {target_user_id}"
+    )
+
+
 def broadcast_conversation_updated(conversation, request=None, message_id=None) -> None:
     """
     Broadcast específico para quando uma conversa é atualizada.

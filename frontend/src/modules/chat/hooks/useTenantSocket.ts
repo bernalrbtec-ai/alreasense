@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
+import { useNotificationStore, clearUserNotifications } from '@/stores/notificationStore';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getDisplayName } from '../utils/phoneFormatter';
@@ -81,7 +82,8 @@ export function closeGlobalTenantSocket(): void {
   }
   globalWebSocketTenantId = null;
   globalToastRegistry.clear();
-  console.log('✅ [TENANT WS] WebSocket global e toasts limpos (logout)');
+  clearUserNotifications();
+  console.log('✅ [TENANT WS] WebSocket global, toasts e notificações limpos (logout)');
 }
 
 /**
@@ -221,6 +223,85 @@ export function useTenantSocket() {
           }
         }
         break;
+
+      case 'user_notification': {
+        if (String(data.target_user_id) !== String(user?.id)) break;
+        const notifType = data.notification_type;
+        const validTypes = ['conversation_transferred', 'task_reminder', 'agenda_reminder'];
+        if (!notifType || !validTypes.includes(notifType)) {
+          console.warn('🔕 [TENANT WS] user_notification sem notification_type válido:', notifType);
+          break;
+        }
+        const conversationId = data.conversation_id;
+        const taskId = data.task_id;
+        const dateVal = data.date;
+        if (notifType === 'conversation_transferred' && !conversationId) {
+          console.warn('🔕 [TENANT WS] user_notification conversation_transferred sem conversation_id');
+          break;
+        }
+        const notificationId = `${notifType}-${conversationId || taskId || dateVal || Date.now()}`;
+        const titles: Record<string, string> = {
+          conversation_transferred: 'Conversa transferida',
+          task_reminder: 'Tarefa pendente',
+          agenda_reminder: 'Lembrete de agenda',
+        };
+        const title = titles[notifType] || notifType;
+        const message = data.message || title;
+
+        useNotificationStore.getState().addNotification({
+          id: notificationId,
+          type: notifType,
+          title,
+          message,
+          conversation_id: conversationId,
+          task_id: taskId,
+          due_date: data.due_date,
+          date: dateVal,
+          conversation: data.conversation,
+        });
+
+        const toastKey = `user_notification-${notifType}-${conversationId || taskId || dateVal || notificationId}`;
+        if (globalToastRegistry.addToast(toastKey)) {
+          const openConversation = () => {
+            const { conversations, setActiveConversation, addConversation } = useChatStore.getState();
+            const existing = conversations.find((c) => String(c.id) === String(conversationId));
+            const conv = existing ?? data.conversation;
+            if (conv) {
+              if (!existing && data.conversation) addConversation(data.conversation);
+              navigateToChat(conv);
+            }
+          };
+          const openAgenda = () => {
+            window.history.pushState({}, '', '/agenda');
+            window.dispatchEvent(new PopStateEvent('popstate'));
+          };
+          if (notifType === 'conversation_transferred') {
+            toast.success(title, {
+              description: message,
+              duration: 4000,
+              id: toastKey,
+              action: { label: 'Abrir', onClick: openConversation },
+              onDismiss: () => globalToastRegistry.removeToast(toastKey),
+              onAutoClose: () => globalToastRegistry.removeToast(toastKey),
+            });
+            globalToastRegistry.clearAfterTimeout(toastKey, 6000);
+          } else if (notifType === 'task_reminder') {
+            toast.info(title, {
+              description: message,
+              duration: 4000,
+              id: toastKey,
+              action: { label: 'Ver agenda', onClick: openAgenda },
+              onDismiss: () => globalToastRegistry.removeToast(toastKey),
+              onAutoClose: () => globalToastRegistry.removeToast(toastKey),
+            });
+            globalToastRegistry.clearAfterTimeout(toastKey, 6000);
+          } else {
+            toast.info(title, { description: message, duration: 4000, id: toastKey });
+            globalToastRegistry.clearAfterTimeout(toastKey, 5000);
+          }
+        }
+        break;
+      }
 
       case 'attachment_updated':
         // ✅ Atualizar attachment quando mídia (imagem/áudio) é processada - garante auto-update do chat

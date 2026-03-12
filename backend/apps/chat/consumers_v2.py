@@ -725,7 +725,29 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'type': 'conversation_updated',
             'conversation': event.get('conversation')
         }))
-    
+
+    async def user_notification(self, event):
+        """Notificação para um usuário específico (transferência, tarefa, agenda). Repassa ao cliente."""
+        try:
+            payload = {
+                'type': 'user_notification',
+                'target_user_id': event.get('target_user_id'),
+                'notification_type': event.get('notification_type'),
+            }
+            for key, value in event.items():
+                if key not in ('type', 'target_user_id', 'notification_type'):
+                    payload[key] = value
+            await self.send(text_data=json.dumps(payload))
+            logger.debug(
+                "[CHAT WS V2] user_notification enviado: %s para user %s",
+                event.get('notification_type'),
+                event.get('target_user_id'),
+            )
+        except (TypeError, ValueError) as e:
+            logger.warning("[CHAT WS V2] user_notification serialization failed: %s", e)
+        except Exception as e:
+            logger.warning("[CHAT WS V2] user_notification send failed: %s", e)
+
     async def conversation_transferred(self, event):
         """✅ NOVO: Broadcast quando conversa é transferida."""
         # Converter para conversation_updated para manter compatibilidade

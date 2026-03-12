@@ -295,7 +295,23 @@ class Command(BaseCommand):
                     'notification_type': notification_type,
                 }
             )
-            
+            # Também enviar pelo canal do chat para quem está na tela do chat receber (toast + sino)
+            try:
+                from apps.chat.utils.websocket import send_user_notification
+                send_user_notification(
+                    str(task.tenant_id),
+                    str(user.id),
+                    'task_reminder',
+                    {
+                        'task_id': str(task.id),
+                        'title': task.title,
+                        'message': message,
+                        'due_date': task.due_date.isoformat(),
+                    },
+                )
+            except Exception as send_err:
+                logger.warning('⚠️ send_user_notification (task_reminder) falhou: %s', send_err)
+
             logger.info(f'✅ Notificação no navegador ({notification_type}) enviada para {user.email}')
             return True
             
