@@ -333,6 +333,50 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 Q(department__isnull=True, status='pending')  # Inbox do tenant
             ).distinct()
     
+    def _build_groups_queryset(self, user):
+        """
+        QuerySet só para aba Grupos: NÃO aplica filtro por departamento/assigned_to.
+        Grupos têm department=None e não são atribuídos; se usarmos o mixin, agentes veriam 0 grupos.
+        Usado por admin, gerente e agente — todos veem os mesmos grupos do tenant.
+        """
+        from django.db.models import Prefetch, Count, Q
+        from django.db.models.functions import Coalesce
+        from apps.chat.models import Message
+
+        # Base sem DepartmentFilterMixin: usar self.queryset (só tenant depois)
+        qs = self.queryset.filter(tenant=user.tenant)
+        qs = qs.exclude(
+            conversation_type='group',
+            group_metadata__contains={'instance_removed': True},
+        )
+        qs = qs.annotate(
+            unread_count_annotated=Count(
+                'messages',
+                filter=Q(
+                    messages__direction='incoming',
+                    messages__status__in=['sent', 'delivered'],
+                    messages__is_deleted=False
+                ),
+                distinct=True
+            )
+        )
+        last_message_queryset = Message.objects.filter(
+            is_deleted=False
+        ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at')[:1]
+        qs = qs.prefetch_related(
+            Prefetch('messages', queryset=last_message_queryset, to_attr='last_message_list')
+        )
+        qs = qs.annotate(last_message_at_safe=Coalesce('last_message_at', 'created_at'))
+        ordering_param = self.request.query_params.get('ordering', '-last_message_at')
+        if 'last_message_at' in (ordering_param or ''):
+            if (ordering_param or '').startswith('-'):
+                qs = qs.order_by('-last_message_at_safe', '-created_at')
+            else:
+                qs = qs.order_by('last_message_at_safe', '-created_at')
+        else:
+            qs = qs.order_by('-last_message_at_safe', '-created_at')
+        return qs.filter(conversation_type='group').exclude(status='closed')
+
     def get_queryset(self):
         """
         Override para incluir conversas pending (Inbox) no filtro.
@@ -341,6 +385,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         REGRA IMPORTANTE: Conversas com departamento NÃO aparecem no Inbox,
         mesmo que tenham status='pending'
+        
+        ✅ Aba Grupos: para conversation_type=group NÃO usamos o DepartmentFilterMixin,
+        para que admin, gerente e agente vejam os mesmos grupos do tenant.
         
         ✅ PERFORMANCE: Otimizações aplicadas:
         - Calcula unread_count em batch (evita N+1 queries)
@@ -351,8 +398,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from django.db.models import Prefetch, Count, Q, OuterRef, Subquery
         from apps.chat.models import Message
         
-        queryset = super().get_queryset()
         user = self.request.user
+        conversation_type_param = (self.request.query_params.get('conversation_type') or '').strip().lower()
+
+        # ✅ Aba Grupos: retornar grupos do tenant SEM filtro por departamento/agente
+        # (DepartmentFilterMixin excluiria grupos para agentes, pois grupos têm department=None)
+        if conversation_type_param == 'group':
+            if not user.is_authenticated or not user.tenant:
+                return Conversation.objects.none()
+            qs_groups = self._build_groups_queryset(user)
+            logger.info(
+                "[GET_QUERYSET] conversation_type=group tenant_id=%s role=%s count=%s",
+                getattr(user.tenant, 'id', None),
+                getattr(user, 'role', None),
+                qs_groups.count(),
+            )
+            return qs_groups
+
+        queryset = super().get_queryset()
         
         # ✅ SEGURANÇA CRÍTICA: SEMPRE filtrar por tenant primeiro
         # Isso previne vazamento de dados entre tenants
@@ -443,18 +506,6 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 department__isnull=True  # ← CRÍTICO: Apenas conversas SEM departamento no Inbox
             )
 
-        # Aba Grupos (ou filtro explícito): grupos do tenant não dependem de departamento/assign
-        # Observação: já excluímos grupos removidos via instance_removed acima.
-        conversation_type_param = (self.request.query_params.get('conversation_type') or '').strip().lower()
-        if conversation_type_param == 'group':
-            qs_groups = queryset.filter(conversation_type='group').exclude(status='closed')
-            logger.warning(
-                "[GET_QUERYSET] conversation_type=group tenant_id=%s count=%s",
-                getattr(user.tenant, 'id', None),
-                qs_groups.count(),
-            )
-            return qs_groups
-        
         # ✅ MULTI-INSTÂNCIA: Filtrar por instância quando informado (ex: modal Nova Conversa "Enviar por").
         # Parâmetro opcional: só quem envia "instance" ou "instance_id" recebe filtro; demais listagens inalteradas.
         instance_param = (self.request.query_params.get('instance') or self.request.query_params.get('instance_id') or '').strip()
