@@ -2046,27 +2046,30 @@ export default function ConfigurationsPage() {
                   <div key={instance.id} className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50/50 dark:bg-gray-700/30 hover:border-gray-300 dark:hover:border-gray-500 transition-colors">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center mb-2">
-                          {instance.integration_type === INTEGRATION_META_CLOUD && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMetaTemplatesModalInstanceId(instance.id)
-                                fetchMetaTemplates()
-                                setShowMetaTemplatesListModal(true)
-                              }}
-                              className="mr-2 p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex-shrink-0"
-                              title="Templates WhatsApp (Meta)"
-                              aria-label="Abrir Templates WhatsApp (Meta)"
-                            >
-                              <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400" />
-                            </button>
-                          )}
+                        <div className="flex items-center mb-2 flex-wrap gap-x-2 gap-y-1">
                           <h4 className="font-medium text-gray-900 dark:text-gray-100">{instance.friendly_name}</h4>
                           {instance.integration_type === INTEGRATION_META_CLOUD && (
-                            <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200">API Meta</span>
+                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200">API Meta</span>
                           )}
-                          <span className={`ml-3 px-2 py-1 text-xs font-medium rounded-full ${
+                          {(() => {
+                            const score = Math.min(100, Math.max(0, Number(instance.health_score ?? 100) || 0))
+                            const ledGreen = score >= 80
+                            const ledYellow = score >= 50 && score < 80
+                            return (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span
+                                  className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                                    ledGreen ? 'bg-emerald-500' : ledYellow ? 'bg-amber-500' : 'bg-red-500'
+                                  }`}
+                                  title={`Saúde: ${score}%`}
+                                />
+                                <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                  Saúde em: {score}%
+                                </span>
+                              </span>
+                            )
+                          })()}
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                             instance.integration_type === INTEGRATION_META_CLOUD ? 'text-green-700 dark:text-green-200 bg-green-100 dark:bg-green-900/40' : getConnectionStatusColor(instance.connection_state)
                           }`}>
                             {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' : getConnectionStatusText(instance.connection_state)}
@@ -2102,6 +2105,19 @@ export default function ConfigurationsPage() {
                               className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
                             >
                               <ShieldCheck className={`h-4 w-4 ${isValidatingMetaId === instance.id ? 'animate-pulse' : ''}`} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setMetaTemplatesModalInstanceId(instance.id)
+                                fetchMetaTemplates()
+                                setShowMetaTemplatesListModal(true)
+                              }}
+                              title="Templates WhatsApp (Meta)"
+                              className="border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                            >
+                              <FileText className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="outline"

@@ -11,7 +11,7 @@ import { useAuthStore } from '../stores/authStore'
 import { api } from '../lib/api'
 import { ApiErrorHandler } from '../lib/apiErrorHandler'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown, AlertTriangle, Activity } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileText, AlertTriangle, Activity } from 'lucide-react'
 import { InstanceHealthModal } from '../components/instances/InstanceHealthModal'
 
 const INTEGRATION_EVOLUTION = 'evolution'
@@ -611,22 +611,41 @@ export default function ConnectionsPage() {
               {/* Header com nome e badges - mais compacto */}
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{instance.friendly_name}</h3>
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                   {instance.integration_type === INTEGRATION_META_CLOUD && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200">
                       API Meta
                     </span>
                   )}
+                  {(() => {
+                    const score = Math.min(100, Math.max(0, Number(instance.health_score ?? 100) || 0))
+                    const ledGreen = score >= 80
+                    const ledYellow = score >= 50 && score < 80
+                    const ledRed = score < 50
+                    return (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                            ledGreen ? 'bg-emerald-500' : ledYellow ? 'bg-amber-500' : 'bg-red-500'
+                          }`}
+                          title={`Saúde: ${score}%`}
+                        />
+                        <span className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                          Saúde em: {score}%
+                        </span>
+                      </span>
+                    )
+                  })()}
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
                     instance.status === 'error' || instance.connection_state === 'error'
-                      ? 'bg-amber-100 text-amber-800'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
                       : instance.integration_type === INTEGRATION_META_CLOUD
-                      ? 'bg-green-100 text-green-800'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
                       : instance.connection_state === 'open'
-                      ? 'bg-green-100 text-green-800'
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200'
                       : instance.connection_state === 'connecting'
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : 'bg-red-100 text-red-800'
+                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200'
                   }`}>
                     {instance.status === 'error' || instance.connection_state === 'error' ? 'Indisponível' :
                      instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' :
@@ -697,13 +716,13 @@ export default function ConnectionsPage() {
                       size="sm"
                       onClick={() => handleImportTemplates(instance)}
                       disabled={importingTemplatesId === instance.id}
-                      className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                      title="Importar templates da Meta (para envio fora da janela 24h)"
+                      className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30"
+                      title="Templates WhatsApp (Meta) - Importar"
                     >
                       {importingTemplatesId === instance.id ? (
                         <span className="animate-spin inline-block h-3 w-3 border-2 border-emerald-600 border-t-transparent rounded-full" />
                       ) : (
-                        <FileDown className="h-3 w-3" />
+                        <FileText className="h-3 w-3" />
                       )}
                     </Button>
                     <Button
