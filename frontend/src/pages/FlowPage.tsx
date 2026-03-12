@@ -49,12 +49,20 @@ function getApiError(e: any): string {
   return parts.length ? parts.join(' ') : 'Erro na requisição.'
 }
 
+interface WhatsAppInstanceOption {
+  id: string
+  friendly_name: string
+  instance_name: string
+}
+
 interface Flow {
   id: string
   name: string
   scope: string
   department: string | null
   department_name: string | null
+  whatsapp_instance?: string | null
+  whatsapp_instance_name?: string | null
   is_active: boolean
   nodes?: FlowNode[]
 }
@@ -168,7 +176,10 @@ export default function FlowPage() {
   const [editFlowName, setEditFlowName] = useState('')
   const [editFlowScope, setEditFlowScope] = useState<'inbox' | 'department'>('inbox')
   const [editFlowDepartmentId, setEditFlowDepartmentId] = useState<string | null>(null)
+  const [editFlowInstanceId, setEditFlowInstanceId] = useState<string | null>(null)
   const [savingFlow, setSavingFlow] = useState(false)
+  const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
+  const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
 
   // Node form (add / edit)
   const [nodeFormOpen, setNodeFormOpen] = useState(false)
@@ -218,6 +229,15 @@ export default function FlowPage() {
     }
   }
 
+  const fetchFlowInstances = async () => {
+    try {
+      const { data } = await api.get('/chat/flows/available_instances/')
+      setFlowInstances(Array.isArray(data) ? data : [])
+    } catch {
+      setFlowInstances([])
+    }
+  }
+
   const fetchFlowDetail = useCallback(async (id: string) => {
     setDetailLoading(true)
     try {
@@ -232,7 +252,7 @@ export default function FlowPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchFlows(), fetchDepartments()]).finally(() => setLoading(false))
+    Promise.all([fetchFlows(), fetchDepartments(), fetchFlowInstances()]).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -256,6 +276,7 @@ export default function FlowPage() {
         name: newFlowName.trim(),
         scope: newFlowScope,
         department: newFlowScope === 'department' ? newFlowDepartmentId : null,
+        whatsapp_instance: newFlowInstanceId || null,
         is_active: true,
       })
       const id = data?.id
@@ -268,6 +289,7 @@ export default function FlowPage() {
       setNewFlowName('')
       setNewFlowScope('inbox')
       setNewFlowDepartmentId(null)
+      setNewFlowInstanceId(null)
       await fetchFlows()
       setSelectedFlow({
         id: String(id),
@@ -275,6 +297,8 @@ export default function FlowPage() {
         scope: data?.scope ?? 'inbox',
         department: data?.department ?? null,
         department_name: data?.department_name ?? null,
+        whatsapp_instance: data?.whatsapp_instance ?? null,
+        whatsapp_instance_name: data?.whatsapp_instance_name ?? null,
         is_active: data?.is_active ?? true,
       })
       selectedFlowIdRef.current = String(id)
@@ -291,6 +315,7 @@ export default function FlowPage() {
     setEditFlowName(selectedFlow.name)
     setEditFlowScope((selectedFlow.scope as 'inbox' | 'department') || 'inbox')
     setEditFlowDepartmentId(selectedFlow.department || null)
+    setEditFlowInstanceId(selectedFlow.whatsapp_instance ?? null)
     setEditFlowOpen(true)
   }
 
@@ -311,6 +336,7 @@ export default function FlowPage() {
         name,
         scope: editFlowScope,
         department: editFlowScope === 'department' ? editFlowDepartmentId : null,
+        whatsapp_instance: editFlowInstanceId || null,
       })
       toast.success('Fluxo atualizado')
       setEditFlowOpen(false)
@@ -321,6 +347,8 @@ export default function FlowPage() {
         scope: data?.scope ?? editFlowScope,
         department: data?.department ?? null,
         department_name: data?.department_name ?? null,
+        whatsapp_instance: data?.whatsapp_instance ?? null,
+        whatsapp_instance_name: data?.whatsapp_instance_name ?? null,
         is_active: data?.is_active ?? selectedFlow.is_active,
       })
       selectedFlowIdRef.current = selectedFlow.id
@@ -867,6 +895,20 @@ export default function FlowPage() {
                 </select>
               </div>
             )}
+            <div>
+              <Label>Instância WhatsApp (enviar/responder por)</Label>
+              <select
+                className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                value={newFlowInstanceId || ''}
+                onChange={(e) => setNewFlowInstanceId(e.target.value || null)}
+              >
+                <option value="">Usar instância da conversa</option>
+                {flowInstances.map((i) => (
+                  <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                ))}
+              </select>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher, o fluxo sempre envia por essa instância.</p>
+            </div>
             <div className="flex gap-2">
               <Button onClick={handleCreateFlow} disabled={creatingFlow}>
                 {creatingFlow ? <LoadingSpinner size="sm" className="mr-1" /> : null}
@@ -963,7 +1005,14 @@ export default function FlowPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Arraste um tipo da lista à esquerda e solte na área cinza. Depois clique na etapa para editar ou conecte pelo handle.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                  Arraste um tipo da lista à esquerda e solte na área cinza. Depois clique na etapa para editar ou conecte pelo handle.
+                  {flowDetail?.whatsapp_instance_name ? (
+                    <span className="block mt-1 font-medium text-gray-700 dark:text-gray-300">Instância: {flowDetail.whatsapp_instance_name}</span>
+                  ) : (
+                    <span className="block mt-1 text-gray-500 dark:text-gray-400">Instância: usar da conversa</span>
+                  )}
+                </p>
                 <div className="flex gap-4">
                   <div className="flex flex-col gap-1.5 shrink-0 w-40 py-2">
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Arraste para o canvas</span>
@@ -1489,6 +1538,20 @@ export default function FlowPage() {
                   </select>
                 </div>
               )}
+              <div>
+                <Label>Instância WhatsApp (enviar/responder por)</Label>
+                <select
+                  className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
+                  value={editFlowInstanceId || ''}
+                  onChange={(e) => setEditFlowInstanceId(e.target.value || null)}
+                >
+                  <option value="">Usar instância da conversa</option>
+                  {flowInstances.map((i) => (
+                    <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                  ))}
+                </select>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher uma instância, o fluxo sempre envia por ela.</p>
+              </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-1">
                 Tomadas de decisão e transferência: na lista &quot;Etapas&quot; abaixo, use &quot;Conectar&quot; em cada etapa para definir para onde leva cada opção (próxima etapa, transferir para departamento ou encerrar).
               </p>

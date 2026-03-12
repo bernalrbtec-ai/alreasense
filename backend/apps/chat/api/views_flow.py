@@ -29,7 +29,7 @@ class FlowViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def get_queryset(self):
-        qs = Flow.objects.filter(tenant=self.request.user.tenant).select_related("department").prefetch_related("nodes", "nodes__edges_out")
+        qs = Flow.objects.filter(tenant=self.request.user.tenant).select_related("department", "whatsapp_instance").prefetch_related("nodes", "nodes__edges_out")
         scope = self.request.query_params.get("scope")
         if scope:
             qs = qs.filter(scope=scope)
@@ -51,6 +51,16 @@ class FlowViewSet(viewsets.ModelViewSet):
         """Lista departamentos do tenant para dropdown."""
         departments = Department.objects.filter(tenant=request.user.tenant).order_by("name")
         return Response(DepartmentOptionSerializer(departments, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def available_instances(self, request):
+        """Lista instâncias WhatsApp ativas do tenant para o fluxo enviar/responder por uma delas."""
+        from apps.notifications.models import WhatsAppInstance
+        instances = WhatsAppInstance.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True,
+        ).order_by("friendly_name").values("id", "friendly_name", "instance_name")
+        return Response(list(instances))
 
     @action(detail=True, methods=["post"])
     def send_test(self, request, pk=None):

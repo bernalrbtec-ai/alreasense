@@ -39,6 +39,15 @@ class Flow(models.Model):
         verbose_name="Departamento",
         help_text="Null quando scope=inbox",
     )
+    whatsapp_instance = models.ForeignKey(
+        "notifications.WhatsAppInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="flows",
+        verbose_name="Instância WhatsApp",
+        help_text="Quando definida, o fluxo envia/responde por esta instância.",
+    )
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

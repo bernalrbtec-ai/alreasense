@@ -228,6 +228,7 @@ class FlowEdgeWriteSerializer(serializers.ModelSerializer):
 
 class FlowSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True)
+    whatsapp_instance_name = serializers.CharField(source="whatsapp_instance.friendly_name", read_only=True, allow_null=True)
     nodes = FlowNodeSerializer(many=True, read_only=True)
 
     class Meta:
@@ -239,6 +240,8 @@ class FlowSerializer(serializers.ModelSerializer):
             "scope",
             "department",
             "department_name",
+            "whatsapp_instance",
+            "whatsapp_instance_name",
             "is_active",
             "nodes",
             "created_at",
@@ -249,6 +252,7 @@ class FlowSerializer(serializers.ModelSerializer):
 
 class FlowListSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True)
+    whatsapp_instance_name = serializers.CharField(source="whatsapp_instance.friendly_name", read_only=True, allow_null=True)
 
     class Meta:
         model = Flow
@@ -258,6 +262,8 @@ class FlowListSerializer(serializers.ModelSerializer):
             "scope",
             "department",
             "department_name",
+            "whatsapp_instance",
+            "whatsapp_instance_name",
             "is_active",
             "created_at",
             "updated_at",

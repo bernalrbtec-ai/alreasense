@@ -729,7 +729,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
         instance = None
         extra = extra if isinstance(extra, dict) else {}
         use_fallback = extra.get('use_fallback') is True
-        inst_name = (message.conversation.instance_name or '').strip()
+        meta = message.metadata or {}
+        inst_name = (meta.get('flow_prefer_instance_name') or message.conversation.instance_name or '').strip()
         conversation_bound_to_instance = bool(inst_name)
         if inst_name:
             # Lookup por instance_name / evolution_instance_name (Evolution)

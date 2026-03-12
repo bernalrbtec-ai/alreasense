@@ -242,12 +242,12 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
     [onDrop]
   )
 
+  const dropZoneActive = onDrop && (nodes.length === 0 || isDraggingFromPalette)
+
   return (
     <div
       className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-h-[300px] overflow-hidden relative ${className}`}
       style={{ height }}
-      onDragOver={onDrop ? handleDragOver : undefined}
-      onDrop={onDrop ? handleDrop : undefined}
     >
       <ReactFlow
         ref={reactFlowRef as any}
@@ -266,32 +266,36 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
         maxZoom={1.5}
         defaultEdgeOptions={{ type: 'smoothstep', deletable: false }}
         nodeOrigin={[0.5, 0.5]}
+        proOptions={{ hideAttribution: true }}
       >
         <Controls />
         <Background gap={12} size={1} />
       </ReactFlow>
-      {/* Overlay vazio: instrução quando não há etapas */}
-      {nodes.length === 0 && (
+      {/* Camada que recebe o drop: cobre o canvas, z-50 para ficar acima do React Flow. Ativa quando não há nós (sempre) ou quando está arrastando da paleta. */}
+      {onDrop && (
         <div
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/90 dark:bg-gray-900/80"
-          onDragOver={onDrop ? handleDragOver : undefined}
-          onDrop={onDrop ? handleDrop : undefined}
-        >
-          <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3 pointer-events-none">
-            <span className="text-lg text-gray-400 dark:text-gray-500">◇</span>
-          </div>
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 pointer-events-none">Solte aqui para adicionar etapa</p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 pointer-events-none">Arraste um tipo da lista à esquerda (Início, Mensagem, Lista, etc.) e solte nesta área.</p>
-        </div>
-      )}
-      {/* Overlay durante arraste da paleta: garante que o drop seja recebido mesmo com nós no canvas */}
-      {nodes.length > 0 && isDraggingFromPalette && onDrop && (
-        <div
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent-400 dark:border-accent-500 bg-accent-50/70 dark:bg-accent-900/30"
+          className="absolute inset-0 z-[50] rounded-xl"
+          style={{
+            pointerEvents: dropZoneActive ? 'auto' : 'none',
+          }}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          aria-hidden
         >
-          <p className="text-sm font-medium text-accent-800 dark:text-accent-200 pointer-events-none">Solte aqui para adicionar etapa</p>
+          {dropZoneActive && nodes.length === 0 && (
+            <div className="flex flex-col items-center justify-center w-full h-full border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/90 dark:bg-gray-900/80 rounded-xl">
+              <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3 pointer-events-none">
+                <span className="text-lg text-gray-400 dark:text-gray-500">◇</span>
+              </div>
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 pointer-events-none">Solte aqui para adicionar etapa</p>
+              <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 pointer-events-none">Arraste um tipo da lista à esquerda e solte nesta área.</p>
+            </div>
+          )}
+          {dropZoneActive && nodes.length > 0 && (
+            <div className="flex flex-col items-center justify-center w-full h-full border-2 border-dashed border-accent-400 dark:border-accent-500 bg-accent-50/70 dark:bg-accent-900/30 rounded-xl">
+              <p className="text-sm font-medium text-accent-800 dark:text-accent-200 pointer-events-none">Solte aqui para adicionar etapa</p>
+            </div>
+          )}
         </div>
       )}
     </div>

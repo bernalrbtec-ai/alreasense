@@ -127,6 +127,12 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
 
     content = ""
     metadata = {"flow_node_id": str(node.id), "flow_id": str(node.flow_id)}
+    try:
+        flow = getattr(node, "flow", None) or Flow.objects.select_related("whatsapp_instance").filter(pk=node.flow_id).first()
+        if flow and getattr(flow, "whatsapp_instance_id", None) and getattr(flow, "whatsapp_instance", None):
+            metadata["flow_prefer_instance_name"] = (flow.whatsapp_instance.instance_name or "").strip()
+    except Exception:
+        pass
 
     if node.node_type == FlowNode.NODE_TYPE_MESSAGE:
         content = (node.body_text or "").strip()
