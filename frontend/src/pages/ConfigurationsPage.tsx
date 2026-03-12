@@ -308,6 +308,8 @@ export default function ConfigurationsPage() {
   const [showApiKeys, setShowApiKeys] = useState(false)
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
   const [testPhoneNumber, setTestPhoneNumber] = useState('')
+  const [isSendingTest, setIsSendingTest] = useState(false)
+  const [testPhoneError, setTestPhoneError] = useState('')
   const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
   const [isValidatingMetaId, setIsValidatingMetaId] = useState<string | null>(null)
   const [instanceFormError, setInstanceFormError] = useState<string | null>(null)
@@ -959,26 +961,28 @@ export default function ConfigurationsPage() {
   }
 
   const handleSendTestMessage = async () => {
-    if (!testInstance || !testPhoneNumber) return
-    
+    if (!testInstance || !testPhoneNumber.trim()) return
+    const normalizedPhone = testPhoneNumber.replace(/\D/g, '')
+    if (normalizedPhone.length < 10 || normalizedPhone.length > 15) {
+      setTestPhoneError('Informe um número válido (ex: 5511999999999). Mínimo 10 dígitos.')
+      return
+    }
+    setTestPhoneError('')
     const toastId = showLoadingToast('enviar', 'Mensagem de Teste')
-    
+    setIsSendingTest(true)
     try {
-      // Normalizar o número de telefone (remover caracteres não numéricos)
-      const normalizedPhone = testPhoneNumber.replace(/\D/g, '')
-      
-      // Enviar mensagem de teste
       await api.post(`/notifications/whatsapp-instances/${testInstance.id}/send_test/`, {
         phone: normalizedPhone,
         message: `🧪 Mensagem de teste enviada de ${testInstance.friendly_name}\n\nSe você recebeu esta mensagem, sua instância WhatsApp está funcionando corretamente! ✅`
       })
-      
       updateToastSuccess(toastId, 'enviar', 'Mensagem de Teste')
       setTestInstance(null)
       setTestPhoneNumber('')
     } catch (error: any) {
       console.error('Error sending test message:', error)
       updateToastError(toastId, 'enviar', 'Mensagem de Teste', error)
+    } finally {
+      setIsSendingTest(false)
     }
   }
 
@@ -3655,13 +3659,14 @@ export default function ConfigurationsPage() {
             <div className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity" onClick={() => {
               setTestInstance(null)
               setTestPhoneNumber('')
+              setTestPhoneError('')
             }} />
             
             <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
               <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <div className="flex items-center mb-4">
-                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <Send className="h-6 w-6 text-blue-600" />
+                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30 sm:mx-0 sm:h-10 sm:w-10">
+                    <Send className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                   </div>
                   <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
                     Enviar Mensagem de Teste
@@ -3674,39 +3679,53 @@ export default function ConfigurationsPage() {
                   </p>
                   
                   <div>
-                    <label htmlFor="test_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    <Label htmlFor="test_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Número do WhatsApp (com DDD)
-                    </label>
-                    <input
+                    </Label>
+                    <Input
                       type="text"
                       id="test_phone"
                       value={testPhoneNumber}
-                      onChange={(e) => setTestPhoneNumber(e.target.value)}
+                      onChange={(e) => {
+                        setTestPhoneNumber(e.target.value)
+                        setTestPhoneError('')
+                      }}
                       placeholder="5511999999999"
-                      className="block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      className="mt-1"
+                      disabled={isSendingTest}
                     />
-                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      Formato: Código do país + DDD + Número (ex: 5511999999999)
-                    </p>
+                    {testPhoneError ? (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{testPhoneError}</p>
+                    ) : (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Formato: Código do país + DDD + Número (ex: 5511999999999)
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
               
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+              <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2 border-t border-gray-200 dark:border-gray-600">
                 <Button 
                   onClick={handleSendTestMessage}
-                  disabled={!testPhoneNumber}
+                  disabled={!testPhoneNumber.trim() || isSendingTest}
                   className="w-full sm:w-auto"
                 >
-                  <Send className="h-4 w-4 mr-2" />
-                  Enviar Teste
+                  {isSendingTest ? (
+                    <LoadingSpinner size="sm" className="mr-2" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  {isSendingTest ? 'Enviando...' : 'Enviar Teste'}
                 </Button>
                 <Button 
                   variant="outline"
                   onClick={() => {
                     setTestInstance(null)
                     setTestPhoneNumber('')
+                    setTestPhoneError('')
                   }}
+                  disabled={isSendingTest}
                   className="w-full sm:w-auto mt-2 sm:mt-0"
                 >
                   Cancelar
