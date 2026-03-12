@@ -376,6 +376,52 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 )
             else:
                 content = '[interactive]'
+        elif msg_type == 'contacts':
+            # Mensagem de contato (vCard) recebida pela Meta Cloud.
+            contacts_payload = msg.get('contacts') or []
+            if isinstance(contacts_payload, dict):
+                contacts_payload = [contacts_payload]
+            parsed_contacts = []
+            for c in contacts_payload:
+                if not isinstance(c, dict):
+                    continue
+                name_obj = c.get('name') or {}
+                formatted_name = ''
+                if isinstance(name_obj, dict):
+                    formatted_name = (name_obj.get('formatted_name') or '').strip()
+                formatted_name = formatted_name or 'Contato'
+                phone_e164 = ''
+                phones = c.get('phones') or []
+                if isinstance(phones, list) and phones:
+                    first_phone = phones[0]
+                    if isinstance(first_phone, dict):
+                        raw_phone = first_phone.get('phone') or first_phone.get('wa_id') or ''
+                        phone_e164 = _normalize_phone(raw_phone) if raw_phone else ''
+                if not phone_e164 and c.get('wa_id'):
+                    phone_e164 = _normalize_phone(str(c.get('wa_id', '')))
+                parsed_contacts.append(
+                    {
+                        'display_name': formatted_name,
+                        'name': formatted_name,
+                        'phone': phone_e164,
+                    }
+                )
+            if parsed_contacts:
+                if len(parsed_contacts) == 1:
+                    cm = parsed_contacts[0]
+                    metadata_extra['contact_message'] = cm
+                    display_name = cm.get('display_name') or cm.get('phone') or 'Contato'
+                    content = f"📇 Compartilhou contato: {display_name}"
+                else:
+                    metadata_extra['contact_message'] = {'contacts': parsed_contacts}
+                    content = f"📇 Compartilhou {len(parsed_contacts)} contatos"
+            else:
+                content = "📇 Contato compartilhado"
+            logger.info(
+                "[META WEBHOOK] contacts processados conversation_id=%s n=%s (provider=meta)",
+                str(conversation.id),
+                len(parsed_contacts),
+            )
         elif msg_type in ('image', 'video', 'document', 'audio'):
             media = msg.get('image') or msg.get('video') or msg.get('document') or msg.get('audio') or {}
             media_id = media.get('id')

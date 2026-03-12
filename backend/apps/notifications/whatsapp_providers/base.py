@@ -89,3 +89,19 @@ class WhatsAppSenderBase(ABC):
         Meta Cloud API tem endpoint próprio; Evolution usa markMessageAsRead.
         """
         return False, {'error': 'mark_as_read não suportado neste provider', 'error_code': 'NOT_SUPPORTED'}
+
+    def send_contact(
+        self,
+        phone: str,
+        contacts: list,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem de contato (vCard). Evolution e Meta implementam.
+        contacts: lista de dicts com fullName, wuid, phoneNumber (já normalizados).
+        """
+        return False, {
+            'error': 'Envio de contato não suportado por esta instância.',
+            'error_code': 'NOT_SUPPORTED',
+        }
