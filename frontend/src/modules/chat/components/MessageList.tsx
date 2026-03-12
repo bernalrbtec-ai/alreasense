@@ -1184,7 +1184,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                     (cm != null && typeof cm === 'object') ||
                     (messageItem.content?.includes('📇') ?? false) ||
                     (messageItem.content?.includes('Compartilhou contato') ?? false) ||
-                    rawContent === '[contactsArrayMessage]';
+                    rawContent === '[contactsArrayMessage]' ||
+                    rawContent === '[contacts]';
                   if (!isContactMsg) return null;
                   // Formatos: { contacts: [...] } (múltiplos) | { name, phone, ... } (único) | array direto (legado)
                   let contactsList: { name?: string; phone?: string; display_name?: string }[];
@@ -1203,7 +1204,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   );
                   if (validContacts.length === 0) {
                     const fallbackText =
-                      rawContent === '[contactsArrayMessage]'
+                      rawContent === '[contactsArrayMessage]' || rawContent === '[contacts]'
                         ? '📇 Contato(s) compartilhado(s)'
                         : rawContent || '📇 Contato compartilhado';
                     return (
@@ -1261,10 +1262,12 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                 {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
                 {!messageItem.is_deleted && messageItem.content != null && (() => {
                  const contentStr = String(messageItem.content ?? '');
-                 return contentStr.trim() &&
-                 !/^\[(document|image|video|audio)\]$/i.test(contentStr.trim()) &&
-                 contentStr.trim() !== '[contactsArrayMessage]' &&
-                 contentStr.trim() !== '[listMessage]' &&
+                 const trimmed = contentStr.trim();
+                 return trimmed &&
+                 !/^\[(document|image|video|audio)\]$/i.test(trimmed) &&
+                 trimmed !== '[contactsArrayMessage]' &&
+                 trimmed !== '[contacts]' &&
+                 trimmed !== '[listMessage]' &&
                  !(messageItem.metadata?.contact_message || contentStr.includes('📇') || contentStr.includes('Compartilhou contato')) &&
                  !messageItem.metadata?.location_message &&
                  !messageItem.metadata?.interactive_list;
