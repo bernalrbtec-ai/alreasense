@@ -380,13 +380,10 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                           showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                           return;
                         }
-                        
                         // Arquivo existe, fazer download
                         const link = document.createElement('a');
                         link.href = fileUrl;
                         link.download = attachment.original_filename || 'image.jpg';
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
