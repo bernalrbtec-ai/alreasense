@@ -1482,6 +1482,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.info(f"📇 [CONTACT MESSAGE] Processados {len(parsed_contacts)} contato(s)")
             else:
                 content = "📇 Contato compartilhado"
+        elif 'contact' in str(message_type).lower():
+            # Debug: tipo de mensagem de contato não mapeado explicitamente
+            try:
+                msg_keys = list(message_info.keys()) if isinstance(message_info, dict) else []
+            except Exception:
+                msg_keys = []
+            logger.warning(
+                "📇 [CONTACT DEBUG] message_type não mapeado: %s keys=%s",
+                message_type,
+                msg_keys,
+            )
         elif message_type == 'locationMessage':
             # ✅ Suporte para localização (lat/lng, nome, endereço)
             loc_msg = message_info.get('locationMessage', {})

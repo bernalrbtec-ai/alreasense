@@ -430,6 +430,16 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
             if media_id:
                 metadata_extra['meta_media_id'] = media_id
         else:
+            # Debug: tipo de mensagem Meta não mapeado explicitamente
+            try:
+                msg_keys = list(msg.keys()) if isinstance(msg, dict) else []
+            except Exception:
+                msg_keys = []
+            logger.warning(
+                "[META WEBHOOK] Tipo de mensagem não mapeado type=%s keys=%s (provider=meta)",
+                msg_type,
+                msg_keys,
+            )
             content = f'[{msg_type}]'
 
         # Reply: Meta envia context.id (wamid da mensagem respondida); reply_to_message_id é usado ao enviar
