@@ -38,7 +38,8 @@ import {
   Sparkles,
   RefreshCw,
   ShieldCheck,
-  AlertTriangle
+  AlertTriangle,
+  Activity
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -56,6 +57,7 @@ import { NotificationSettings } from '../modules/notifications/components/Notifi
 import { RagMemoriesManager } from '../modules/ai/components/RagMemoriesManager'
 import BiaAdminPage from './BiaAdminPage'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { InstanceHealthModal } from '../components/instances/InstanceHealthModal'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -76,6 +78,13 @@ interface WhatsAppInstance {
   phone_number_id?: string
   access_token_set?: boolean
   business_account_id?: string
+  health_score?: number | null
+  msgs_sent_today?: number | null
+  msgs_delivered_today?: number | null
+  msgs_read_today?: number | null
+  msgs_failed_today?: number | null
+  consecutive_errors?: number | null
+  last_success_at?: string | null
 }
 
 interface Plan {
@@ -313,6 +322,7 @@ export default function ConfigurationsPage() {
   const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
   const [isValidatingMetaId, setIsValidatingMetaId] = useState<string | null>(null)
   const [instanceFormError, setInstanceFormError] = useState<string | null>(null)
+  const [healthModalInstance, setHealthModalInstance] = useState<WhatsAppInstance | null>(null)
   
   // Estados para SMTP
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
@@ -2149,6 +2159,15 @@ export default function ConfigurationsPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          onClick={() => setHealthModalInstance(instance)}
+                          title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver indicadores de saúde'}
+                          className="border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+                        >
+                          <Activity className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleEditInstance(instance)}
                           title="Editar Instância"
                           className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-900/30"
@@ -3651,6 +3670,13 @@ export default function ConfigurationsPage() {
           </div>
         </div>
       )}
+
+      {/* Modal Indicadores de Saúde da Instância */}
+      <InstanceHealthModal
+        open={!!healthModalInstance}
+        onClose={() => setHealthModalInstance(null)}
+        instance={healthModalInstance}
+      />
 
       {/* Modal de Teste de Mensagem */}
       {testInstance && (

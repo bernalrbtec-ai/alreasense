@@ -547,8 +547,6 @@ class CampaignSender:
             print(f"   - Contato: {contact.name} ({contact.phone})")
             print(f"   - Instância: {instance.friendly_name}")
             print(f"   - Erro: {error_msg}")
-            print(f"   - URL: {url}")
-            print(f"   - Payload: {payload}")
             
             # ✅ Classificar tipo de erro
             error_type = "unknown"
@@ -580,7 +578,6 @@ class CampaignSender:
                     'instance_name': instance.friendly_name,
                     'error_type': error_type,
                     'error_message': error_msg,
-                    'url': url,
                     'retry_count': campaign_contact.retry_count + 1
                 }
             )

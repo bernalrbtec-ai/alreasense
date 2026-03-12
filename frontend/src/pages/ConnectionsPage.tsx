@@ -11,7 +11,8 @@ import { useAuthStore } from '../stores/authStore'
 import { api } from '../lib/api'
 import { ApiErrorHandler } from '../lib/apiErrorHandler'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown, AlertTriangle } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown, AlertTriangle, Activity } from 'lucide-react'
+import { InstanceHealthModal } from '../components/instances/InstanceHealthModal'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -35,6 +36,13 @@ interface WhatsAppInstance {
   phone_number_id?: string
   access_token_set?: boolean
   business_account_id?: string
+  health_score?: number | null
+  msgs_sent_today?: number | null
+  msgs_delivered_today?: number | null
+  msgs_read_today?: number | null
+  msgs_failed_today?: number | null
+  consecutive_errors?: number | null
+  last_success_at?: string | null
 }
 
 export default function ConnectionsPage() {
@@ -60,6 +68,7 @@ export default function ConnectionsPage() {
   const [showImportTemplatesModal, setShowImportTemplatesModal] = useState(false)
   const [importTemplatesAfterSave, setImportTemplatesAfterSave] = useState(false)
   const [instanceSaveError, setInstanceSaveError] = useState<string | null>(null)
+  const [healthModalInstance, setHealthModalInstance] = useState<WhatsAppInstance | null>(null)
   
   // Função para formatar telefone
   const formatPhone = (phone: string) => {
@@ -758,6 +767,15 @@ export default function ConnectionsPage() {
                     </Button>
                   </>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setHealthModalInstance(instance)}
+                  className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
+                  title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver indicadores de saúde'}
+                >
+                  <Activity className="h-3 w-3" />
+                </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -1230,6 +1248,13 @@ export default function ConnectionsPage() {
         message={toast.message}
         type={toast.type}
         onClose={hideToast}
+      />
+
+      {/* Modal Indicadores de Saúde */}
+      <InstanceHealthModal
+        open={!!healthModalInstance}
+        onClose={() => setHealthModalInstance(null)}
+        instance={healthModalInstance}
       />
 
       {/* Confirm Dialog */}

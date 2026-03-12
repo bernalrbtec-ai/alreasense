@@ -596,9 +596,27 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 continue
             if message.status == new_status:
                 continue
+            old_status = message.status
             message.status = new_status
             message.evolution_status = meta_status
             message.save(update_fields=['status', 'evolution_status'])
+
+            # Sincronizar health da instância Meta com base nos status de entrega/leitura
+            try:
+                if new_status == 'delivered':
+                    wa_instance.record_message_delivered()
+                elif new_status == 'seen':
+                    # Meta às vezes envia só 'seen' sem 'delivered'; contar delivered também nesse caso
+                    if old_status not in ('delivered', 'seen'):
+                        wa_instance.record_message_delivered()
+                    wa_instance.record_message_read()
+            except Exception as e_health:
+                logger.exception(
+                    "[META WEBHOOK] Erro ao atualizar health da instância para wamid=%s: %s",
+                    wamid[:24] + "...",
+                    e_health,
+                )
+
             broadcast_message_status_update(message)
             logger.info(
                 "[META WEBHOOK] Status atualizado wamid=%s -> %s (provider=meta)",
