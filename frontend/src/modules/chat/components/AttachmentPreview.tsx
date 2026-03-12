@@ -351,44 +351,34 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                     className="absolute top-4 right-20 z-[10000] p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
                     onClick={async (e) => {
                       e.stopPropagation();
-                      
-                      // ✅ Verificar se arquivo existe antes de baixar
+
                       try {
-                        let response = await fetch(fileUrl, { method: 'HEAD' }).catch(() => null);
-                        
-                        if (!response || !response.ok) {
-                          response = await fetch(fileUrl, { 
-                            method: 'GET',
-                            headers: { 'Range': 'bytes=0-0' }
-                          }).catch(() => null);
-                        }
-                        
-                        if (!response || !response.ok) {
-                          try {
-                            const errorResponse = await fetch(fileUrl, { method: 'GET' });
-                            const contentType = errorResponse.headers.get('content-type');
-                            if (contentType?.includes('application/json')) {
-                              const errorData = await errorResponse.json();
-                              if (errorData.error === 'Arquivo indisponível') {
-                                showWarningToast('Anexo indisponível', errorData.message || 'O arquivo não está mais disponível no servidor');
-                                return;
-                              }
-                            }
-                          } catch {
-                            // Ignorar erro ao tentar ler JSON
-                          }
+                        // Fazer download via fetch + blob para evitar navegação para outra aba/página
+                        const response = await fetch(fileUrl);
+
+                        if (!response.ok) {
                           showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                           return;
                         }
-                        // Arquivo existe, fazer download
+
+                        const blob = await response.blob();
+                        if (!blob || blob.size === 0) {
+                          showWarningToast('Anexo indisponível', 'Arquivo vazio ou inválido');
+                          return;
+                        }
+
+                        const blobUrl = URL.createObjectURL(blob);
                         const link = document.createElement('a');
-                        link.href = fileUrl;
+                        link.href = blobUrl;
                         link.download = attachment.original_filename || 'image.jpg';
                         document.body.appendChild(link);
                         link.click();
                         document.body.removeChild(link);
+
+                        // Liberar o blob da memória após o download
+                        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                       } catch (error) {
-                        console.error('Erro ao verificar/download arquivo:', error);
+                        console.error('Erro ao baixar arquivo da imagem:', error);
                         showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                       }
                     }}
