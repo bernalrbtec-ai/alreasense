@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils'
 
 const MAX_LIST_HEIGHT = 320
 
+export type NotificationBellPlacement = 'top' | 'bottom'
+
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso)
@@ -35,7 +37,12 @@ function truncate(str: string, max: number): string {
   return str.length <= max ? str : str.slice(0, max) + '…'
 }
 
-export function NotificationBell() {
+interface NotificationBellProps {
+  /** Onde o dropdown abre: 'top' = acima do botão (sidebar), 'bottom' = abaixo (header do chat) */
+  placement?: NotificationBellPlacement
+}
+
+export function NotificationBell({ placement = 'top' }: NotificationBellProps) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -110,7 +117,10 @@ export function NotificationBell() {
 
       {open && (
         <div
-          className="absolute bottom-full right-0 z-50 mb-2 w-80 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800"
+          className={cn(
+            'absolute right-0 z-[100] w-80 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-800',
+            placement === 'top' ? 'bottom-full mb-2' : 'top-full mt-2'
+          )}
           role="dialog"
           aria-label="Lista de notificações"
         >

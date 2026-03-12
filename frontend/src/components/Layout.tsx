@@ -34,6 +34,7 @@ import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
 import { ThemeToggle } from './ThemeToggle'
 import { NotificationBell } from './NotificationBell'
+import { NotificationToggle } from '../modules/chat/components/NotificationToggle'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -309,6 +310,11 @@ export default function Layout() {
                   <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">{user?.tenant?.name}</p>
                 </div>
+                {showNotificationBell && (
+                  <div className="shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
+                    <NotificationToggle />
+                  </div>
+                )}
                 <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
               
@@ -443,6 +449,9 @@ export default function Layout() {
                   name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                   size="md" 
                 />
+                {showNotificationBell && (
+                  <NotificationToggle />
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -467,6 +476,11 @@ export default function Layout() {
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{user?.tenant?.name}</p>
                   </div>
+                  {showNotificationBell && (
+                    <div className="shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
+                      <NotificationToggle />
+                    </div>
+                  )}
                   <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 

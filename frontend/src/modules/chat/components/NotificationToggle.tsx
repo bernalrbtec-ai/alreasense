@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { Bell, BellOff } from 'lucide-react';
+import { BellRing, BellOff } from 'lucide-react';
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
 import { toast } from 'sonner';
 
@@ -44,10 +44,10 @@ export function NotificationToggle() {
           : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
         }
       `}
-      title={isEnabled ? 'Desativar notificações' : 'Ativar notificações'}
+      title={isEnabled ? 'Desativar notificações do navegador' : 'Ativar notificações do navegador'}
     >
       {isEnabled ? (
-        <Bell className="w-5 h-5" />
+        <BellRing className="w-5 h-5" />
       ) : (
         <BellOff className="w-5 h-5" />
       )}

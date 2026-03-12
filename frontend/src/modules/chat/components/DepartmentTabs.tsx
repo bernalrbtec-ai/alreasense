@@ -7,7 +7,7 @@ import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Department } from '../types';
 import { usePermissions } from '@/hooks/usePermissions';
-import { NotificationToggle } from './NotificationToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useAuthStore } from '@/stores/authStore';
 
 export function DepartmentTabs() {
@@ -279,7 +279,7 @@ export function DepartmentTabs() {
             <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-green-500" aria-hidden />
           )}
         </button>
-        <NotificationToggle />
+        <NotificationBell placement="bottom" />
       </div>
     </div>
   );
