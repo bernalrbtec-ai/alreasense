@@ -1663,7 +1663,10 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
             setContactToAdd(null);
           }}
           initialName={contactToAdd.name}
-          initialPhone={rawInputToE164(contactToAdd.phone) || contactToAdd.phone}
+          initialPhone={(() => {
+            const rawPhone = contactToAdd.phone || activeConversation?.contact_phone || '';
+            return rawInputToE164(rawPhone) || rawPhone;
+          })()}
           overlayClassName="z-[9999]"
           onSuccess={() => {
             setShowContactModal(false);
