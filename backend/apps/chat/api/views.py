@@ -3176,6 +3176,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
         created = 0
         updated = 0
+        all_synced_ids = []  # IDs de todos os grupos sincronizados nesta requisição (para limpeza final)
         for wa_instance in wa_instances:
             # Determinar base_url e api_key: preferir config da instância; usar EvolutionConnection apenas como fallback.
             base_url = (wa_instance.api_url or (evolution_server.base_url if evolution_server else '')).rstrip('/') if (wa_instance.api_url or (evolution_server and evolution_server.base_url)) else ''
@@ -3258,9 +3259,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
 
             # IDs de grupos que acabamos de sincronizar (para garantir limpeza de instance_removed no final)
             synced_ids_this_instance = []
+            created_this_instance = 0
+            updated_this_instance = 0
 
             for group in groups:
+                if not isinstance(group, dict):
+                    continue
+                # Evolution API: "id" (e.g. "120363295648424210@g.us"); fallbacks para outras versões
                 group_id_raw = group.get('id') or group.get('jid') or group.get('groupId')
+                if not group_id_raw and isinstance(group.get('group'), dict):
+                    g = group['group']
+                    group_id_raw = g.get('id') or g.get('jid') or g.get('groupId')
                 if not group_id_raw:
                     continue
                 group_jid = _normalize_group_jid(group_id_raw)
@@ -3312,6 +3321,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         department=None,
                     )
                     updated += 1
+                    updated_this_instance += 1
                     synced_ids_this_instance.append(conv.id)
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
                 else:
@@ -3322,11 +3332,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     )
                     if created_this:
                         created += 1
+                        created_this_instance += 1
                     else:
                         updated += 1
+                        updated_this_instance += 1
                     synced_ids_this_instance.append(conv.id)
                     # Evitar marcar como removido: este grupo (criado ou já existente) está na Evolution
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
+
+            # Debug: quando Evolution retornou grupos mas nenhum foi processado (formato inesperado?)
+            if groups and created_this_instance == 0 and updated_this_instance == 0:
+                first = groups[0] if isinstance(groups[0], dict) else {}
+                logger.warning(
+                    "[SYNC_GROUPS] instance_name=%s tenant_id=%s: len(groups)=%s mas 0 processados. Primeiro item keys=%s id/jid/groupId=%s",
+                    instance_name,
+                    getattr(tenant, 'id', None),
+                    len(groups),
+                    list(first.keys()) if first else None,
+                    (first.get('id'), first.get('jid'), first.get('groupId')) if first else None,
+                )
 
             # Garantir que todos os grupos presentes na Evolution tenham instance_removed limpo
             # Match por: JID exato, canonical ou dígitos do JID (fallback para formatos diferentes no BD)
@@ -3373,6 +3397,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # Garantir que todos os grupos sincronizados nesta instância não tenham instance_removed
             # (evita bug onde lista fica vazia após "X atualizado(s)" em multi-instância ou race)
             if synced_ids_this_instance:
+                all_synced_ids.extend(synced_ids_this_instance)
                 for c in Conversation.objects.filter(
                     id__in=synced_ids_this_instance,
                     tenant=tenant,
@@ -3382,6 +3407,40 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     if meta.pop('instance_removed', None) is not None or meta.pop('instance_removed_at', None) is not None:
                         c.group_metadata = meta
                         c.save(update_fields=['group_metadata'])
+
+        # Limpeza final: garantir que TODOS os grupos sincronizados nesta requisição não tenham instance_removed
+        # (evita lista vazia quando GET_QUERYSET exclui por group_metadata__contains)
+        if all_synced_ids:
+            cleared = 0
+            for c in Conversation.objects.filter(
+                id__in=all_synced_ids,
+                tenant=tenant,
+                conversation_type='group',
+            ).only('id', 'group_metadata'):
+                meta = dict(c.group_metadata or {})
+                if meta.pop('instance_removed', None) is not None or meta.pop('instance_removed_at', None) is not None:
+                    c.group_metadata = meta
+                    c.save(update_fields=['group_metadata'])
+                    cleared += 1
+            if cleared:
+                logger.info(
+                    "[SYNC_GROUPS] tenant_id=%s: limpeza final de instance_removed em %s conversa(s)",
+                    getattr(tenant, 'id', None),
+                    cleared,
+                )
+            # Log para debug: quantos grupos o tenant tem visíveis após o sync
+            visible_count = Conversation.objects.filter(
+                tenant=tenant,
+                conversation_type='group',
+            ).exclude(group_metadata__contains={'instance_removed': True}).count()
+            logger.info(
+                "[SYNC_GROUPS] tenant_id=%s tenant_name=%s: created=%s updated=%s → grupos visíveis na listagem=%s",
+                getattr(tenant, 'id', None),
+                getattr(tenant, 'name', ''),
+                created,
+                updated,
+                visible_count,
+            )
 
         return Response({
             'created': created,
