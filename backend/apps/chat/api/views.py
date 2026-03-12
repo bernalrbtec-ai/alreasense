@@ -3256,6 +3256,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             def _digits_of(j):
                 return ''.join(c for c in str(j or '') if c.isdigit())
 
+            # IDs de grupos que acabamos de sincronizar (para garantir limpeza de instance_removed no final)
+            synced_ids_this_instance = []
+
             for group in groups:
                 group_id_raw = group.get('id') or group.get('jid') or group.get('groupId')
                 if not group_id_raw:
@@ -3302,12 +3305,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     Conversation.objects.filter(pk=conv.id).update(
                         contact_phone=group_jid,
                         contact_name=subject,
+                        instance_name=instance_name,
                         instance_friendly_name=friendly,
                         group_metadata=meta,
                         status='open',
                         department=None,
                     )
                     updated += 1
+                    synced_ids_this_instance.append(conv.id)
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
                 else:
                     conv, created_this = Conversation.objects.update_or_create(
@@ -3319,6 +3324,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         created += 1
                     else:
                         updated += 1
+                    synced_ids_this_instance.append(conv.id)
                     # Evitar marcar como removido: este grupo (criado ou já existente) está na Evolution
                     existing_groups = [e for e in existing_groups if e.id != conv.id]
 
@@ -3363,6 +3369,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     instance_name,
                     removed_count,
                 )
+
+            # Garantir que todos os grupos sincronizados nesta instância não tenham instance_removed
+            # (evita bug onde lista fica vazia após "X atualizado(s)" em multi-instância ou race)
+            if synced_ids_this_instance:
+                for c in Conversation.objects.filter(
+                    id__in=synced_ids_this_instance,
+                    tenant=tenant,
+                    conversation_type='group',
+                ).only('id', 'group_metadata'):
+                    meta = dict(c.group_metadata or {})
+                    if meta.pop('instance_removed', None) is not None or meta.pop('instance_removed_at', None) is not None:
+                        c.group_metadata = meta
+                        c.save(update_fields=['group_metadata'])
 
         return Response({
             'created': created,

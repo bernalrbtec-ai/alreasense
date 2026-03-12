@@ -190,7 +190,11 @@ export function ConversationList() {
       const fetchGroups = async () => {
         try {
           setLoading(true);
-          const params: Record<string, string> = { ordering: '-last_message_at', conversation_type: 'group' };
+          const params: Record<string, string> = {
+            ordering: '-last_message_at',
+            conversation_type: 'group',
+            page_size: '100',
+          };
           const response = await api.get('/chat/conversations/', { params });
           const convs = response.data.results || response.data;
           const { clearUpdateCache } = await import('../store/conversationUpdater');
@@ -246,6 +250,7 @@ export function ConversationList() {
         const params: Record<string, string> = { ordering: '-last_message_at' };
         if (activeDepartment?.id === 'groups') {
           params.conversation_type = 'group';
+          params.page_size = '100';
         }
         const response = await api.get('/chat/conversations/', { params });
 
@@ -288,9 +293,12 @@ export function ConversationList() {
         if (!matchesSearch) return false;
       }
 
-      // Aba Grupos: só grupos não fechados (não aplicar regras de inbox/departamento)
+      // Aba Grupos: só grupos não fechados e não removidos da instância (igual ao backend; funciona para todos os tenants)
       if (activeDepartment?.id === 'groups') {
-        return conversationItem.conversation_type === 'group' && (conversationItem.status ?? 'open') !== 'closed';
+        const isGroup = conversationItem.conversation_type === 'group';
+        const notClosed = (conversationItem.status ?? 'open') !== 'closed';
+        const notRemoved = conversationItem.group_metadata?.instance_removed !== true;
+        return isGroup && notClosed && notRemoved;
       }
 
       // Demais abas (e quando activeDepartment for null): excluir grupos
@@ -519,6 +527,8 @@ export function ConversationList() {
                       const { data } = await api.post('/chat/conversations/sync-groups/');
                       toast.success(data?.message || `${data?.created ?? 0} grupo(s) adicionado(s).`);
                       setTabLoadError(null);
+                      // Pequeno delay para o backend persistir antes de refetch (evita lista vazia após "X atualizado(s)")
+                      await new Promise((r) => setTimeout(r, 300));
                       setRetryTrigger((r) => r + 1);
                     } catch (error) {
                       const msg = ApiErrorHandler.extractMessage(error);
