@@ -2051,7 +2051,7 @@ export default function ConfigurationsPage() {
                           {instance.integration_type === INTEGRATION_META_CLOUD && (
                             <span className="px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200">API Meta</span>
                           )}
-                          {(() => {
+                          {instance.integration_type === INTEGRATION_META_CLOUD && (() => {
                             const score = Math.min(100, Math.max(0, Number(instance.health_score ?? 100) || 0))
                             const ledGreen = score >= 80
                             const ledYellow = score >= 50 && score < 80
@@ -2176,7 +2176,7 @@ export default function ConfigurationsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => setHealthModalInstance(instance)}
-                          title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver indicadores de saúde'}
+                          title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver status da conexão (Evolution)'}
                           className="border-slate-300 dark:border-slate-500 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
                         >
                           <Activity className="h-4 w-4" />

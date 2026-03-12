@@ -617,11 +617,10 @@ export default function ConnectionsPage() {
                       API Meta
                     </span>
                   )}
-                  {(() => {
+                  {instance.integration_type === INTEGRATION_META_CLOUD && (() => {
                     const score = Math.min(100, Math.max(0, Number(instance.health_score ?? 100) || 0))
                     const ledGreen = score >= 80
                     const ledYellow = score >= 50 && score < 80
-                    const ledRed = score < 50
                     return (
                       <span className="inline-flex items-center gap-1.5">
                         <span
@@ -791,7 +790,7 @@ export default function ConnectionsPage() {
                   size="sm"
                   onClick={() => setHealthModalInstance(instance)}
                   className="text-slate-600 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-700"
-                  title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver indicadores de saúde'}
+                  title={instance.integration_type === INTEGRATION_META_CLOUD ? 'Ver indicadores de saúde (sincronizados com a Meta)' : 'Ver status da conexão (Evolution)'}
                 >
                   <Activity className="h-3 w-3" />
                 </Button>

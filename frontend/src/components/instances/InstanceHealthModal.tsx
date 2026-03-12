@@ -15,6 +15,7 @@ export interface InstanceHealthData {
   id: string
   friendly_name: string
   integration_type?: string
+  connection_state?: string
   health_score?: number | null
   msgs_sent_today?: number | null
   msgs_delivered_today?: number | null
@@ -60,6 +61,7 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
   if (!instance) return null
 
   const isMeta = instance.integration_type === INTEGRATION_META_CLOUD
+  const connectionState = (instance.connection_state || '').toLowerCase()
   const score = Math.min(100, Math.max(0, Number(instance.health_score ?? 100) || 0))
   const sent = Math.max(0, Number(instance.msgs_sent_today ?? 0) || 0)
   const delivered = Math.max(0, Number(instance.msgs_delivered_today ?? 0) || 0)
@@ -69,6 +71,9 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
   const lastSuccessFormatted = safeFormatDate(instance.last_success_at)
   const deliveryRate = sent > 0 ? Math.round((delivered / sent) * 100) : 100
   const readRate = delivered > 0 ? Math.round((read / delivered) * 100) : 0
+
+  const connectionLabel = connectionState === 'open' ? 'Conectado' : connectionState === 'connecting' ? 'Conectando' : 'Desconectado'
+  const connectionColor = connectionState === 'open' ? 'bg-emerald-500' : connectionState === 'connecting' ? 'bg-amber-500' : 'bg-red-500'
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
@@ -102,8 +107,8 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
         <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <span
-              className={`flex-shrink-0 w-3 h-3 rounded-full ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-              title={`Saúde ${score}%`}
+              className={`flex-shrink-0 w-3 h-3 rounded-full ${isMeta ? (score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500') : connectionColor}`}
+              title={isMeta ? `Saúde ${score}%` : connectionLabel}
             />
             <div className="min-w-0">
               <h2 id="instance-health-modal-title" className="text-lg font-semibold truncate">
@@ -134,101 +139,112 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
 
         <div className="p-4 space-y-4">
           {isMeta ? (
-            <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-900/20 p-3">
-              <p className="text-xs text-indigo-800 dark:text-indigo-200 leading-relaxed">
-                <strong>Sincronizado com a Meta.</strong> Entregas e leituras são atualizados em tempo real via webhook quando os destinatários recebem ou leem as mensagens.
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded-lg px-3 py-2">
-              Entregas e leituras são reportadas apenas para instâncias <strong>API Meta</strong>. Para Evolution são exibidos envios e falhas.
-            </p>
-          )}
-
-          {/* Health score */}
-          <div className="rounded-lg bg-gray-50 dark:bg-gray-700/30 p-3 border border-gray-200 dark:border-gray-600">
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Score de saúde</span>
-              <span className="flex items-center gap-2">
-                <span className={`text-lg font-bold tabular-nums ${healthScoreColor(score)}`}>{score}/100</span>
-                <span className={`text-xs font-medium ${healthScoreColor(score)}`}>({healthStatusLabel(score)})</span>
-              </span>
-            </div>
-            <div className="h-3 w-full rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-300 ${healthScoreBg(score)}`}
-                style={{ width: `${score}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Métricas hoje */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
-              <Send className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Enviadas hoje</div>
-                <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{sent}</div>
+            <>
+              <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-900/20 p-3">
+                <p className="text-xs text-indigo-800 dark:text-indigo-200 leading-relaxed">
+                  <strong>Sincronizado com a Meta.</strong> Entregas e leituras são atualizados em tempo real via webhook quando os destinatários recebem ou leem as mensagens.
+                </p>
               </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
-              <CheckCircle className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Entregues hoje</div>
-                {isMeta ? (
-                  <>
+
+              {/* Health score */}
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-700/30 p-3 border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Score de saúde</span>
+                  <span className="flex items-center gap-2">
+                    <span className={`text-lg font-bold tabular-nums ${healthScoreColor(score)}`}>{score}/100</span>
+                    <span className={`text-xs font-medium ${healthScoreColor(score)}`}>({healthStatusLabel(score)})</span>
+                  </span>
+                </div>
+                <div className="h-3 w-full rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${healthScoreBg(score)}`}
+                    style={{ width: `${score}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Métricas hoje - apenas API Meta */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+                  <Send className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Enviadas hoje</div>
+                    <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{sent}</div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+                  <CheckCircle className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Entregues hoje</div>
                     <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{delivered}</div>
                     {sent > 0 && (
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{deliveryRate}% taxa</div>
                     )}
-                  </>
-                ) : (
-                  <div className="text-base text-gray-400 dark:text-gray-500 font-medium">—</div>
-                )}
-              </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
-              <Eye className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Lidas hoje</div>
-                {isMeta ? (
-                  <>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+                  <Eye className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Lidas hoje</div>
                     <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{read}</div>
                     {delivered > 0 && (
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{readRate}% taxa</div>
                     )}
-                  </>
-                ) : (
-                  <div className="text-base text-gray-400 dark:text-gray-500 font-medium">—</div>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+                  <AlertCircle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${failed > 0 ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'}`} />
+                  <div className="min-w-0">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Falhas hoje</div>
+                    <div className={`text-xl font-semibold tabular-nums ${failed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                      {failed}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Erros consecutivos e última entrega */}
+              <div className="pt-2 border-t border-gray-200 dark:border-gray-600 flex flex-wrap gap-4 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-500 dark:text-gray-400">Erros consecutivos:</span>
+                  <span className={`font-semibold tabular-nums ${consecutiveErrors > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                    {consecutiveErrors}
+                  </span>
+                </div>
+                {lastSuccessFormatted && (
+                  <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
+                    <span>Último sucesso:</span>
+                    <span className="text-gray-700 dark:text-gray-300 font-medium">{lastSuccessFormatted}</span>
+                  </div>
                 )}
               </div>
-            </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
-              <AlertCircle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${failed > 0 ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'}`} />
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Falhas hoje</div>
-                <div className={`text-xl font-semibold tabular-nums ${failed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                  {failed}
+            </>
+          ) : (
+            /* Evolution: só status de conexão — contadores não existem na API */
+            <div className="space-y-4">
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 p-4">
+                <p className="text-sm text-amber-900 dark:text-amber-100 leading-relaxed">
+                  Para instâncias <strong>Evolution</strong> a API não fornece contagem de mensagens (enviadas/entregues/lidas). 
+                  O que temos é apenas o <strong>status de conexão</strong>, exibido no card da instância.
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-200 mt-2">
+                  Indicadores detalhados (score, enviadas, entregues, leituras) estão disponíveis apenas para instâncias <strong>API Meta</strong>, sincronizados via webhook.
+                </p>
+              </div>
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-700/30 p-3 border border-gray-200 dark:border-gray-600">
+                <div className="flex items-center gap-2">
+                  <span className={`w-3 h-3 rounded-full flex-shrink-0 ${connectionColor}`} />
+                  <span className="font-medium text-gray-900 dark:text-gray-100">Status atual</span>
+                  <span className={`ml-auto font-semibold ${
+                    connectionState === 'open' ? 'text-emerald-600 dark:text-emerald-400' :
+                    connectionState === 'connecting' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {connectionLabel}
+                  </span>
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* Erros consecutivos e última entrega */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-600 flex flex-wrap gap-4 text-sm">
-            <div className="flex items-center gap-1.5">
-              <span className="text-gray-500 dark:text-gray-400">Erros consecutivos:</span>
-              <span className={`font-semibold tabular-nums ${consecutiveErrors > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                {consecutiveErrors}
-              </span>
-            </div>
-            {lastSuccessFormatted && (
-              <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
-                <span>Último sucesso:</span>
-                <span className="text-gray-700 dark:text-gray-300 font-medium">{lastSuccessFormatted}</span>
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     </div>
