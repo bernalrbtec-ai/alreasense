@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { MessageInfoModal } from './MessageInfoModal';
+import { downloadAttachment } from '../utils/downloadAttachment';
 import type { Message } from '../types';
 
 interface MessageContextMenuProps {
@@ -185,32 +186,31 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
     onClose();
   };
 
-  // Baixar anexo
+  // Baixar anexo (fetch + blob para não abrir nova aba)
   const handleDownload = async () => {
     if (!hasAttachments) {
       toast.error('Mensagem sem anexos para baixar');
       return;
     }
 
-    try {
-      // Baixar todos os anexos
-      for (const attachment of message.attachments || []) {
-        if (attachment.file_url) {
-          const link = document.createElement('a');
-          link.href = attachment.file_url;
-          link.download = attachment.original_filename || `anexo-${attachment.id}`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        } else {
-          toast.warning(`Anexo ${attachment.original_filename} ainda não está disponível`);
-        }
+    const attachments = message.attachments || [];
+    let failed = 0;
+    for (const attachment of attachments) {
+      if (!attachment.file_url) {
+        toast.warning(`Anexo ${attachment.original_filename || attachment.id} ainda não está disponível`);
+        failed++;
+        continue;
       }
-      onClose();
-    } catch (error) {
-      console.error('❌ Erro ao baixar anexo:', error);
-      toast.error('Erro ao baixar anexo');
+      const ok = await downloadAttachment(
+        attachment.file_url,
+        attachment.original_filename || `anexo-${attachment.id}`
+      );
+      if (!ok) failed++;
+      // Pequena pausa entre downloads para o navegador não bloquear
+      if (attachments.length > 1) await new Promise((r) => setTimeout(r, 300));
     }
+    if (failed > 0) toast.error(failed === attachments.length ? 'Erro ao baixar anexos' : 'Alguns anexos não puderam ser baixados');
+    onClose();
   };
 
   // Encaminhar mensagem

@@ -14,6 +14,7 @@ import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maxim
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { showWarningToast, showSuccessToast, showErrorToast } from '@/lib/toastHelper';
 import { api } from '@/lib/api';
+import { downloadAttachment } from '../utils/downloadAttachment';
 // Removed unused imports: Image, Video, Music
 
 interface Attachment {
@@ -351,36 +352,8 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                     className="absolute top-4 right-20 z-[10000] p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
                     onClick={async (e) => {
                       e.stopPropagation();
-
-                      try {
-                        // Fazer download via fetch + blob para evitar navegação para outra aba/página
-                        const response = await fetch(fileUrl);
-
-                        if (!response.ok) {
-                          showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
-                          return;
-                        }
-
-                        const blob = await response.blob();
-                        if (!blob || blob.size === 0) {
-                          showWarningToast('Anexo indisponível', 'Arquivo vazio ou inválido');
-                          return;
-                        }
-
-                        const blobUrl = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = attachment.original_filename || 'image.jpg';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-
-                        // Liberar o blob da memória após o download
-                        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-                      } catch (error) {
-                        console.error('Erro ao baixar arquivo da imagem:', error);
-                        showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
-                      }
+                      const ok = await downloadAttachment(fileUrl, attachment.original_filename || 'image.jpg');
+                      if (!ok) showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                     }}
                     title="Baixar imagem"
                     aria-label="Baixar imagem"

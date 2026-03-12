@@ -23,6 +23,7 @@ import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { EditMessageModal } from './EditMessageModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
+import { downloadAttachment } from '../utils/downloadAttachment';
 import { EmojiPicker } from './EmojiPicker';
 import { parseMessageSignature } from '../utils/signatureParser';
 import { useTheme } from '@/hooks/useTheme';
@@ -874,14 +875,19 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
           </p>
         </div>
         {!isDownloading && (
-          <a
-            href={attachment.file_url}
-            download={attachment.original_filename}
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const ok = await downloadAttachment(attachment.file_url!, attachment.original_filename || 'arquivo');
+              if (!ok) toast.error('Não foi possível baixar o arquivo');
+            }}
             className="flex-shrink-0 p-2 hover:bg-white/50 dark:hover:bg-black/30 rounded-full transition-colors"
             title="Baixar arquivo"
           >
             <Download className="w-4 h-4" />
-          </a>
+          </button>
         )}
       </div>
     );
