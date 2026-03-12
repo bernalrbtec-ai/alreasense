@@ -193,10 +193,24 @@ class Tenant(models.Model):
             return User.objects.filter(tenant=self).count()
         return 0
     
+    def has_chat_for_instances(self):
+        """Verifica se o tenant tem acesso a Chat para criação de instâncias.
+        True se tem TenantProduct chat ativo OU se o plano atual inclui Chat (fallback quando tenant_products está desatualizado)."""
+        if self.has_product('chat'):
+            return True
+        if not self.current_plan:
+            return False
+        from apps.billing.models import PlanProduct
+        return PlanProduct.objects.filter(
+            plan=self.current_plan,
+            product__slug='chat',
+            is_included=True
+        ).exists()
+    
     def can_create_instance(self):
         """Verifica se pode criar nova instância WhatsApp.
         Chat é o produto 'pai': os limites (instâncias e usuários) vêm sempre do Chat. Flow é add-on (apenas campanhas)."""
-        if not self.has_product('chat'):
+        if not self.has_chat_for_instances():
             return False, 'Produto ALREA Chat não disponível no seu plano (instâncias WhatsApp)'
         product_slug = 'chat'
         limit = self.get_product_limit(product_slug, 'instances')
@@ -210,7 +224,7 @@ class Tenant(models.Model):
     def get_instance_limit_info(self):
         """Retorna informações sobre limite de instâncias.
         Os limites vêm do produto Chat (pai); Flow não define limite de instâncias."""
-        if not self.has_product('chat'):
+        if not self.has_chat_for_instances():
             return {
                 'has_access': False,
                 'current': 0,

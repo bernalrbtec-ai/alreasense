@@ -19,6 +19,10 @@ from .serializers import (
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.common.cache_manager import CacheManager
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -214,19 +218,31 @@ class PlanViewSet(viewsets.ModelViewSet):
         )
         return Response(data)
 
+    def _invalidate_plan_cache(self):
+        """Invalida cache de planos (pattern + chaves exatas para backends sem Redis)."""
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        for key in (
+            CacheManager.make_key(CacheManager.PREFIX_PLAN, 'all'),
+            CacheManager.make_key(CacheManager.PREFIX_PLAN, 'active'),
+        ):
+            try:
+                cache.delete(key)
+            except Exception as e:
+                logger.warning("Falha ao invalidar cache de planos (key=%s): %s", key, e)
+
     def perform_create(self, serializer):
         plan = serializer.save()
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        self._invalidate_plan_cache()
         return plan
 
     def perform_update(self, serializer):
         plan = serializer.save()
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        self._invalidate_plan_cache()
         return plan
 
     def perform_destroy(self, instance):
         instance.delete()
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        self._invalidate_plan_cache()
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
     def select(self, request, pk=None):

@@ -330,7 +330,8 @@ class TenantViewSet(viewsets.ModelViewSet):
         
         # Limites por produto (flow = apenas campanhas; instâncias = apenas chat)
         for product_slug in ['flow', 'chat', 'sense', 'api_public']:
-            if tenant.has_product(product_slug):
+            has_access = tenant.has_chat_for_instances() if product_slug == 'chat' else tenant.has_product(product_slug)
+            if has_access:
                 if product_slug == 'chat':
                     limits_info['products'][product_slug] = tenant.get_instance_limit_info()
                 elif product_slug == 'flow':

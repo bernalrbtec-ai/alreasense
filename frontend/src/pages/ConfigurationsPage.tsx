@@ -47,6 +47,7 @@ import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
+import { ApiErrorHandler } from '../lib/apiErrorHandler'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantLimits } from '../hooks/useTenantLimits'
 import { DepartmentsManager } from '../components/team/DepartmentsManager'
@@ -756,19 +757,9 @@ export default function ConfigurationsPage() {
       handleCloseInstanceModal()
     } catch (error: any) {
       console.error('Error creating instance:', error)
-      const backendError = error?.response?.status === 400 && error?.response?.data?.error
-        ? (Array.isArray(error.response.data.error) ? error.response.data.error[0] : error.response.data.error)
-        : null
-      if (backendError) {
-        setInstanceFormError(backendError)
-      }
-      const errPayload =
-        error?.response?.status === 500 &&
-        typeof error?.response?.data === 'string' &&
-        (error.response.data.includes('<!') || error.response.data.includes('<html'))
-          ? { message: 'Erro no servidor (500). Tente novamente ou contacte o suporte.' }
-          : error
-      updateToastError(toastId, 'criar', 'Instância', errPayload)
+      const message = ApiErrorHandler.extractMessage(error)
+      setInstanceFormError(message)
+      updateToastError(toastId, 'criar', 'Instância', error)
     }
   }
 

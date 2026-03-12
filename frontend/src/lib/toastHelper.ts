@@ -7,6 +7,7 @@
  */
 
 import { toast } from 'sonner'
+import { ApiErrorHandler } from './apiErrorHandler'
 
 type Action = 'criar' | 'atualizar' | 'excluir' | 'salvar' | 'carregar' | 'importar' | 'exportar' | 'conectar' | 'desconectar' | 'testar' | 'buscar' | 'iniciar' | 'pausar' | 'retomar' | 'cancelar' | 'duplicar' | 'validar'
 type Entity = string // 'Cliente', 'Produto', 'Contato', 'Instância', etc
@@ -38,90 +39,50 @@ export function showSuccessToast(action: Action, entity: Entity) {
   toast.success(messages[action] || `✅ ${action} realizado com sucesso!`)
 }
 
+const baseMessagesForError: Record<Action, string> = {
+  criar: 'Erro ao criar',
+  atualizar: 'Erro ao atualizar',
+  salvar: 'Erro ao salvar',
+  excluir: 'Erro ao excluir',
+  carregar: 'Erro ao carregar',
+  importar: 'Erro ao importar',
+  exportar: 'Erro ao exportar',
+  conectar: 'Erro ao conectar',
+  desconectar: 'Erro ao desconectar',
+  testar: 'Erro ao testar',
+  buscar: 'Erro ao buscar',
+  iniciar: 'Erro ao iniciar',
+  pausar: 'Erro ao pausar',
+  retomar: 'Erro ao retomar',
+  cancelar: 'Erro ao cancelar',
+  duplicar: 'Erro ao duplicar',
+  validar: 'Erro ao validar',
+}
+
 /**
- * Toast de erro padronizado com extração de mensagem do erro
+ * Toast de erro padronizado com extração de mensagem do erro.
+ * Suporta: showErrorToast(msg), showErrorToast(action, entity), showErrorToast(action, entity, error).
  */
-export function showErrorToast(action: Action, entity: Entity, error?: any) {
-  // Log detalhado para debug
-  console.log(`🚨 showErrorToast chamado:`, { action, entity, error })
-  
-  // Extrair mensagem do erro
-  let errorMessage = ''
-  
-  if (error?.response?.data) {
-    const data = error.response.data
-    console.log(`📋 Dados de resposta do erro:`, data)
-    
-    // Tentar extrair mensagens específicas
-    if (typeof data === 'string') {
-      errorMessage = data
-    } else if (data.detail) {
-      errorMessage = Array.isArray(data.detail) ? data.detail[0] : data.detail
-    } else if (data.message) {
-      errorMessage = Array.isArray(data.message) ? data.message[0] : data.message
-    } else if (data.error) {
-      errorMessage = Array.isArray(data.error) ? data.error[0] : data.error
-    } else if (data.phone) {
-      errorMessage = Array.isArray(data.phone) ? data.phone[0] : data.phone
-    } else if (data.email) {
-      errorMessage = Array.isArray(data.email) ? data.email[0] : data.email
-    } else if (data.name) {
-      errorMessage = Array.isArray(data.name) ? data.name[0] : data.name
-    } else if (data.non_field_errors) {
-      errorMessage = Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : data.non_field_errors
-    } else {
-      // Pegar primeiro erro encontrado
-      const firstKey = Object.keys(data)[0]
-      if (firstKey && data[firstKey]) {
-        const value = data[firstKey]
-        errorMessage = Array.isArray(value) ? value[0] : value
-      }
-    }
-  } else if (error?.message) {
-    errorMessage = error.message
-  } else if (error?.toString) {
-    errorMessage = error.toString()
+export function showErrorToast(action: Action, entity?: Entity, error?: any) {
+  // Chamada com uma única string (mensagem simples): showErrorToast('Erro ao carregar...')
+  if (arguments.length === 1 && typeof action === 'string') {
+    toast.error(`❌ ${action}`)
+    return
   }
-  
-  console.log(`📝 Mensagem extraída:`, errorMessage)
-
-  // Resposta 500 em HTML: não exibir o HTML no toast
-  if (typeof errorMessage === 'string' && (errorMessage.includes('<!') || errorMessage.includes('<html'))) {
-    errorMessage = 'Erro no servidor (500). Tente novamente ou contacte o suporte.'
+  // Chamada com (action, mensagem): showErrorToast('Erro ao buscar Templates', error.response?.data?.message)
+  if (arguments.length === 2 && typeof entity === 'string' && entity) {
+    const baseMsg = (baseMessagesForError as Record<string, string>)[action as string] ?? action
+    toast.error(`❌ ${baseMsg}: ${entity}`)
+    return
   }
-
-  // Fallback se ainda estiver vazio
-  // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
-  if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
-    errorMessage = 'Erro desconhecido'
-    console.warn(`⚠️ Usando fallback "Erro desconhecido" para:`, { action, entity, error })
-  } else {
-    errorMessage = String(errorMessage).trim()
-  }
-
-  const baseMessages: Record<Action, string> = {
-    criar: `Erro ao criar ${entity}`,
-    atualizar: `Erro ao atualizar ${entity}`,
-    salvar: `Erro ao salvar ${entity}`,
-    excluir: `Erro ao excluir ${entity}`,
-    carregar: `Erro ao carregar ${entity}`,
-    importar: `Erro ao importar ${entity}`,
-    exportar: `Erro ao exportar ${entity}`,
-    conectar: `Erro ao conectar ${entity}`,
-    desconectar: `Erro ao desconectar ${entity}`,
-    testar: `Erro ao testar ${entity}`,
-    buscar: `Erro ao buscar ${entity}`,
-    iniciar: `Erro ao iniciar ${entity}`,
-    pausar: `Erro ao pausar ${entity}`,
-    retomar: `Erro ao retomar ${entity}`,
-    cancelar: `Erro ao cancelar ${entity}`,
-    duplicar: `Erro ao duplicar ${entity}`,
-    validar: `Erro ao validar ${entity}`,
-  }
-
-  const baseMessage = baseMessages[action] || `Erro ao ${action} ${entity}`
+  let errorMessage =
+    error != null && (error?.response != null || error?.message != null || typeof error === 'string')
+      ? typeof error === 'string'
+        ? error
+        : ApiErrorHandler.extractMessage(error)
+      : ''
+  const baseMessage = (baseMessagesForError[action as Action] ?? `Erro ao ${action}`) + (entity ? ` ${entity}` : '')
   const fullMessage = errorMessage ? `❌ ${baseMessage}: ${errorMessage}` : `❌ ${baseMessage}`
-
   toast.error(fullMessage)
 }
 
@@ -181,78 +142,19 @@ export function updateToastSuccess(toastId: string | number, action: Action, ent
  * Atualizar toast de loading para erro
  */
 export function updateToastError(toastId: string | number, action: Action, entity: Entity, error?: any) {
-  // Extrair mensagem do erro (mesmo código de showErrorToast)
-  let errorMessage = ''
-  
-  if (error?.response?.data) {
-    const data = error.response.data
-    
-    // Tentar extrair mensagens específicas
-    if (typeof data === 'string') {
-      errorMessage = data
-    } else if (data.detail) {
-      errorMessage = Array.isArray(data.detail) ? data.detail[0] : data.detail
-    } else if (data.message) {
-      errorMessage = Array.isArray(data.message) ? data.message[0] : data.message
-    } else if (data.error) {
-      errorMessage = Array.isArray(data.error) ? data.error[0] : data.error
-    } else if (data.phone) {
-      errorMessage = Array.isArray(data.phone) ? data.phone[0] : data.phone
-    } else if (data.email) {
-      errorMessage = Array.isArray(data.email) ? data.email[0] : data.email
-    } else if (data.name) {
-      errorMessage = Array.isArray(data.name) ? data.name[0] : data.name
-    } else if (data.non_field_errors) {
-      errorMessage = Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : data.non_field_errors
-    } else {
-      // Pegar primeiro erro encontrado
-      const firstKey = Object.keys(data)[0]
-      if (firstKey && data[firstKey]) {
-        const value = data[firstKey]
-        errorMessage = Array.isArray(value) ? value[0] : value
-      }
-    }
-  } else if (error?.message) {
-    errorMessage = error.message
-  } else if (error?.toString) {
-    errorMessage = error.toString()
+  // Chamada com (toastId, action, mensagem) quando action não é um Action padrão: updateToastError(toastId, 'Erro ao criar Template', msg)
+  if (arguments.length === 3 && typeof entity === 'string' && entity !== undefined && !(action in baseMessagesForError)) {
+    toast.error(`❌ ${action}: ${entity}`, { id: toastId })
+    return
   }
-
-  // Resposta 500 em HTML: não exibir o HTML no toast
-  if (typeof errorMessage === 'string' && (errorMessage.includes('<!') || errorMessage.includes('<html'))) {
-    errorMessage = 'Erro no servidor (500). Tente novamente ou contacte o suporte.'
-  }
-
-  // Fallback se ainda estiver vazio
-  // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
-  if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
-    errorMessage = 'Erro desconhecido'
-  } else {
-    errorMessage = String(errorMessage).trim()
-  }
-
-  const baseMessages: Record<Action, string> = {
-    criar: `Erro ao criar ${entity}`,
-    atualizar: `Erro ao atualizar ${entity}`,
-    salvar: `Erro ao salvar ${entity}`,
-    excluir: `Erro ao excluir ${entity}`,
-    carregar: `Erro ao carregar ${entity}`,
-    importar: `Erro ao importar ${entity}`,
-    exportar: `Erro ao exportar ${entity}`,
-    conectar: `Erro ao conectar ${entity}`,
-    desconectar: `Erro ao desconectar ${entity}`,
-    testar: `Erro ao testar ${entity}`,
-    buscar: `Erro ao buscar ${entity}`,
-    iniciar: `Erro ao iniciar ${entity}`,
-    pausar: `Erro ao pausar ${entity}`,
-    retomar: `Erro ao retomar ${entity}`,
-    cancelar: `Erro ao cancelar ${entity}`,
-    duplicar: `Erro ao duplicar ${entity}`,
-  }
-
-  const baseMessage = baseMessages[action]
+  const errorMessage =
+    error != null && (error?.response != null || error?.message != null || typeof error === 'string')
+      ? typeof error === 'string'
+        ? error
+        : ApiErrorHandler.extractMessage(error)
+      : ''
+  const baseMessage = (baseMessagesForError[action as Action] ?? action) + (entity ? ` ${entity}` : '')
   const fullMessage = errorMessage ? `❌ ${baseMessage}: ${errorMessage}` : `❌ ${baseMessage}`
-
   toast.error(fullMessage, { id: toastId })
 }
 

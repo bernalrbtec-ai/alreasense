@@ -9,6 +9,7 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import { useAuthStore } from '../stores/authStore'
 import { api } from '../lib/api'
+import { ApiErrorHandler } from '../lib/apiErrorHandler'
 import { formatDate } from '../lib/utils'
 import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown, AlertTriangle } from 'lucide-react'
 
@@ -236,27 +237,9 @@ export default function ConnectionsPage() {
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar instância:', error)
-      const backendError = error?.response?.status === 400 && error?.response?.data?.error
-        ? (Array.isArray(error.response.data.error) ? error.response.data.error[0] : error.response.data.error)
-        : null
-      if (backendError) setInstanceSaveError(backendError)
-      if (error.response?.data) {
-        const errors = error.response.data
-        const errMsg = errors.error || (typeof errors.detail === 'string' ? errors.detail : '')
-        if (errMsg) {
-          showToast(`❌ ${errMsg}`, 'error')
-        } else {
-          let errorMessage = '❌ Erro ao salvar: '
-          Object.keys(errors).forEach(field => {
-            if (Array.isArray(errors[field])) {
-              errorMessage += `${field}: ${errors[field][0]} `
-            }
-          })
-          showToast(errorMessage, 'error')
-        }
-      } else {
-        showToast(`❌ Erro ao salvar: ${error.message}`, 'error')
-      }
+      const message = ApiErrorHandler.extractMessage(error)
+      setInstanceSaveError(message)
+      showToast(`❌ ${message}`, 'error')
     } finally {
       setIsSaving(false)
     }
