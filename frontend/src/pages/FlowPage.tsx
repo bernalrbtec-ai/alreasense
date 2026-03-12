@@ -569,6 +569,8 @@ export default function FlowPage() {
       if (firstRow?.id) suggestedOptionId = firstRow.id
     } else if (fromNode?.node_type === 'buttons' && fromNode.buttons?.length) {
       if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
+    } else if (fromNode?.node_type === 'message') {
+      suggestedOptionId = '1' // texto que o usuário deve digitar para avançar
     }
     if (!suggestedOptionId) suggestedOptionId = 'opcao1'
     setEditingEdge(null)
@@ -591,6 +593,8 @@ export default function FlowPage() {
         if (firstRow?.id) suggestedOptionId = firstRow.id
       } else if (fromNode?.node_type === 'buttons' && fromNode.buttons?.length) {
         if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
+      } else if (fromNode?.node_type === 'message') {
+        suggestedOptionId = '1'
       }
       setEditingEdge(null)
       setEdgeFromNodeId(fromNodeId)
@@ -661,6 +665,26 @@ export default function FlowPage() {
       toast.error('Selecione o departamento para ação "Transferir"')
       return
     }
+
+    // Validação extra: para listas/botões, a opção precisa existir no nó de origem
+    const fromNode = flowDetail?.nodes?.find((n) => n.id === edgeFromNodeId)
+    if (fromNode && edgeOptionId.trim()) {
+      const optionIdTrimmed = edgeOptionId.trim()
+      if (fromNode.node_type === 'list') {
+        const validIds = (fromNode.sections || []).flatMap((sec) => (sec.rows || []).map((r) => r.id))
+        if (validIds.length > 0 && !validIds.includes(optionIdTrimmed)) {
+          toast.error('Para listas, use um ID de linha existente (campo "id" da opção).')
+          return
+        }
+      } else if (fromNode.node_type === 'buttons') {
+        const validIds = (fromNode.buttons || []).map((b) => b.id)
+        if (validIds.length > 0 && !validIds.includes(optionIdTrimmed)) {
+          toast.error('Para botões, use um ID de botão existente (campo "id" do botão).')
+          return
+        }
+      }
+    }
+
     setSavingEdge(true)
     try {
       const payload = {
@@ -1254,9 +1278,25 @@ export default function FlowPage() {
                 </select>
               </div>
               <div>
-                <Label>Opção (id da linha ou do botão)</Label>
-                <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: opcao1, btn1" />
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Deve coincidir com o id de uma linha da lista ou de um botão na etapa de origem.</p>
+                <Label>
+                  {(flowDetail?.nodes?.find((n) => n.id === edgeFromNodeId) as FlowNode | undefined)?.node_type === 'message'
+                    ? 'Texto que o usuário deve digitar'
+                    : 'Opção (id da linha ou do botão)'}
+                </Label>
+                <Input
+                  value={edgeOptionId}
+                  onChange={(e) => setEdgeOptionId(e.target.value)}
+                  placeholder={
+                    (flowDetail?.nodes?.find((n) => n.id === edgeFromNodeId) as FlowNode | undefined)?.node_type === 'message'
+                      ? 'ex: 1, ok, próximo'
+                      : 'ex: opcao1, btn1'
+                  }
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {(flowDetail?.nodes?.find((n) => n.id === edgeFromNodeId) as FlowNode | undefined)?.node_type === 'message'
+                    ? 'Quando o usuário enviar essa mensagem de texto, o fluxo avança para o destino.'
+                    : 'Deve coincidir com o id de uma linha da lista ou de um botão na etapa de origem.'}
+                </p>
               </div>
               <div>
                 <Label>O que acontece quando o usuário escolhe esta opção?</Label>

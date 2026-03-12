@@ -192,7 +192,9 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
 
 def process_flow_reply(conversation: Conversation, message: Message) -> bool:
     """
-    Processa resposta a lista/botão quando a conversa está em um fluxo.
+    Processa resposta a lista/botão ou texto quando a conversa está em um fluxo.
+    - Lista/botão: option_id vem de list_reply/button_reply no metadata.
+    - Nó tipo mensagem: option_id é o texto enviado pelo usuário (comparado ao option_id da aresta).
     Transições: próximo nó (to_node), transferir para departamento, ou encerrar.
     Retorna True se processou (e não deve processar Welcome Menu); False caso contrário.
     Usa lock na mensagem para evitar processamento duplicado (race entre workers).
@@ -212,9 +214,6 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
     if not option_id and button_reply and isinstance(button_reply, dict):
         option_id = (button_reply.get("id") or "").strip()
 
-    if not option_id:
-        return False
-
     try:
         with transaction.atomic():
             # Lock da mensagem para evitar dois workers processarem a mesma resposta
@@ -232,6 +231,17 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
                 conversation_id=conversation.id
             ).first()
             if not state:
+                return False
+
+            # Nó tipo mensagem: usar texto da resposta do usuário como gatilho (option_id)
+            if not option_id and state.current_node_id:
+                current = state.current_node
+                if current and current.node_type == FlowNode.NODE_TYPE_MESSAGE:
+                    option_id = (getattr(message, "content", None) or "").strip()
+                if not option_id:
+                    return False
+
+            if not option_id:
                 return False
 
             option_id_norm = _normalize_option_id(option_id)
