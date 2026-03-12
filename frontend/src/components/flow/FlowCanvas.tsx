@@ -163,9 +163,11 @@ interface FlowCanvasProps {
   /** Altura do canvas em px (default 400). */
   height?: number
   className?: string
+  /** Quando true, mostra overlay para receber drop da paleta (evita React Flow capturar o evento). */
+  isDraggingFromPalette?: boolean
 }
 
-export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConnect, onDrop, height = 400, className = '' }: FlowCanvasProps) {
+export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConnect, onDrop, height = 400, className = '', isDraggingFromPalette = false }: FlowCanvasProps) {
   const reactFlowRef = useRef<{ screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number } } | null>(null)
   const positions = useMemo(() => getPositions(nodes), [nodes])
   const initialNodes = useMemo(() => flowNodesToReactFlow(nodes, positions), [nodes, positions])
@@ -222,13 +224,15 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     e.dataTransfer.dropEffect = 'copy'
   }, [])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
-      const nodeType = e.dataTransfer.getData(FLOW_DROP_TYPE) as 'message' | 'list' | 'buttons' | 'image' | 'file' | ''
+      e.stopPropagation()
+      const nodeType = (e.dataTransfer.getData(FLOW_DROP_TYPE) || e.dataTransfer.getData('text/plain')) as 'message' | 'list' | 'buttons' | 'image' | 'file' | ''
       const isStart = e.dataTransfer.getData(FLOW_DROP_START) === '1'
       if (!nodeType || !['message', 'list', 'buttons', 'image', 'file'].includes(nodeType)) return
       // ref pode ser null com canvas vazio no primeiro frame; fallback (0,0) abre o modal e o usuário pode ajustar
@@ -266,17 +270,28 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
         <Controls />
         <Background gap={12} size={1} />
       </ReactFlow>
+      {/* Overlay vazio: instrução quando não há etapas */}
       {nodes.length === 0 && (
         <div
-          className="absolute inset-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/50"
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/90 dark:bg-gray-900/80"
           onDragOver={onDrop ? handleDragOver : undefined}
           onDrop={onDrop ? handleDrop : undefined}
         >
           <div className="w-12 h-12 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mb-3 pointer-events-none">
             <span className="text-lg text-gray-400 dark:text-gray-500">◇</span>
           </div>
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400 pointer-events-none">Nenhuma etapa ainda</p>
-          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 pointer-events-none">Arraste uma etapa da barra lateral para o canvas para começar.</p>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 pointer-events-none">Solte aqui para adicionar etapa</p>
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5 pointer-events-none">Arraste um tipo da lista à esquerda (Início, Mensagem, Lista, etc.) e solte nesta área.</p>
+        </div>
+      )}
+      {/* Overlay durante arraste da paleta: garante que o drop seja recebido mesmo com nós no canvas */}
+      {nodes.length > 0 && isDraggingFromPalette && onDrop && (
+        <div
+          className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-accent-400 dark:border-accent-500 bg-accent-50/70 dark:bg-accent-900/30"
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          <p className="text-sm font-medium text-accent-800 dark:text-accent-200 pointer-events-none">Solte aqui para adicionar etapa</p>
         </div>
       )}
     </div>

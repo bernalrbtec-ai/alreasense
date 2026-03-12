@@ -182,6 +182,7 @@ export default function FlowPage() {
   const [nodeMediaUrl, setNodeMediaUrl] = useState('')
   const [savingNode, setSavingNode] = useState(false)
   const [pendingDropPosition, setPendingDropPosition] = useState<{ x: number; y: number } | null>(null)
+  const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false)
 
   // Edge form (add / edit)
   const [edgeFormOpen, setEdgeFormOpen] = useState(false)
@@ -404,6 +405,7 @@ export default function FlowPage() {
   /** Abre o modal "Adicionar etapa" após soltar um bloco da paleta no canvas; POST só ao salvar. */
   const openAddNodeFromDrop = useCallback(
     (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean) => {
+      setIsDraggingFromPalette(false)
       const nodes = flowDetail?.nodes ?? []
       const nextOrder = nodes.length === 0 ? 0 : Math.max(...nodes.map((n) => n.order), 0) + 1
       setPendingDropPosition(position)
@@ -905,10 +907,10 @@ export default function FlowPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Arraste etapas da barra lateral para o canvas. Clique para editar, arraste para reposicionar, conecte pelo handle.</p>
-                <div className="flex gap-3">
-                  <div className="flex flex-col gap-1.5 shrink-0 w-36 py-2">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Etapas</span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Arraste um tipo da lista à esquerda e solte na área cinza. Depois clique na etapa para editar ou conecte pelo handle.</p>
+                <div className="flex gap-4">
+                  <div className="flex flex-col gap-1.5 shrink-0 w-40 py-2">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Arraste para o canvas</span>
                     {PALETTE_ITEMS.map((item) => (
                       <div
                         key={item.id}
@@ -917,50 +919,54 @@ export default function FlowPage() {
                         onDragStart={(e) => {
                           e.dataTransfer.setData(FLOW_DROP_TYPE, item.nodeType)
                           e.dataTransfer.setData(FLOW_DROP_START, item.isStart ? '1' : '0')
+                          e.dataTransfer.setData('text/plain', item.nodeType)
                           e.dataTransfer.effectAllowed = 'copy'
+                          setIsDraggingFromPalette(true)
                         }}
-                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing hover:border-accent-300 dark:hover:border-accent-600 hover:bg-accent-50/50 dark:hover:bg-accent-900/20 transition-colors"
+                        onDragEnd={() => setIsDraggingFromPalette(false)}
+                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing select-none hover:border-accent-300 dark:hover:border-accent-600 hover:bg-accent-50/50 dark:hover:bg-accent-900/20 transition-colors"
                       >
                         <PaletteItemIcon nodeType={item.nodeType} />
                         <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.label}</span>
                       </div>
                     ))}
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 flex flex-col">
                     <FlowCanvas
                       nodes={flowDetail.nodes ?? []}
                       onNodeClick={handleCanvasNodeClick}
                       onNodeDragStop={handleCanvasNodeDragStop}
                       onConnect={handleCanvasConnect}
                       onDrop={openAddNodeFromDrop}
+                      height={520}
+                      isDraggingFromPalette={isDraggingFromPalette}
                     />
                   </div>
                 </div>
               </Card>
-              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">Preview (texto)</h3>
-                <pre className="text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg overflow-auto max-h-48 border border-gray-100 dark:border-gray-800">
-                  {previewLines.length ? previewLines.join('\n') : 'Nenhuma etapa ainda. Adicione uma etapa abaixo.'}
-                </pre>
-              </Card>
-              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100">Enviar passo inicial (teste)</h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  Use um número que já tenha conversa no sistema.
-                </p>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="5511999999999"
-                    value={testPhone}
-                    onChange={(e) => setTestPhone(e.target.value)}
-                    className="flex-1"
-                  />
-                  <Button onClick={handleSendTest} disabled={sendingTest}>
-                    {sendingTest ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4 mr-1" />}
-                    Enviar teste
-                  </Button>
-                </div>
-              </Card>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Preview (texto)</h3>
+                  <pre className="text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg overflow-auto max-h-32 border border-gray-100 dark:border-gray-800">
+                    {previewLines.length ? previewLines.join('\n') : 'Nenhuma etapa ainda.'}
+                  </pre>
+                </Card>
+                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Enviar passo inicial (teste)</h3>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="5511999999999"
+                      value={testPhone}
+                      onChange={(e) => setTestPhone(e.target.value)}
+                      className="flex-1 min-w-0"
+                    />
+                    <Button onClick={handleSendTest} disabled={sendingTest} size="sm">
+                      {sendingTest ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4 mr-1" />}
+                      Enviar teste
+                    </Button>
+                  </div>
+                </Card>
+              </div>
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-medium text-gray-900 dark:text-gray-100">Etapas ({flowDetail.nodes?.length || 0})</h3>
