@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Plus, Edit, Trash2, Check, X, Mail, Phone, Bell } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Input } from '../components/ui/Input'
+import { Select } from '../components/ui/select'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
@@ -19,6 +21,13 @@ interface Tenant {
   user_count?: number
   message_count?: number
   monthly_total?: number
+  admin_user?: {
+    id: string
+    first_name: string
+    last_name: string
+    email: string
+    phone: string
+  } | null
 }
 
 interface Plan {
@@ -50,6 +59,9 @@ export default function TenantsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [deletingTenant, setDeletingTenant] = useState<Tenant | null>(null)
   const [formData, setFormData] = useState<TenantFormData>({
     name: '',
     plan: '',
@@ -94,77 +106,72 @@ export default function TenantsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validações apenas para novo cliente
+    setFieldErrors({})
+
+    const errors: Record<string, string> = {}
+
     if (!editingTenant) {
-      // Validar senhas
       if (formData.admin_password !== formData.admin_password_confirm) {
-        showErrorToast('salvar', 'Cliente', { message: 'As senhas não coincidem' })
-        return
+        errors.admin_password_confirm = 'As senhas não coincidem'
       }
-      
       if (formData.admin_password.length < 6) {
-        showErrorToast('salvar', 'Cliente', { message: 'A senha deve ter pelo menos 6 caracteres' })
-        return
+        errors.admin_password = 'A senha deve ter pelo menos 6 caracteres'
       }
-      
-      // Validar email
       if (!formData.admin_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.admin_email)) {
-        showErrorToast('salvar', 'Cliente', { message: 'Email inválido' })
-        return
+        errors.admin_email = 'Email inválido'
       }
-      
-      // Validar se pelo menos uma forma de notificação está marcada
       if (!formData.notify_email && !formData.notify_whatsapp) {
         showErrorToast('salvar', 'Cliente', { message: 'Selecione pelo menos uma forma de receber notificações' })
         return
       }
     } else {
-      // Validações para edição
       if (formData.admin_password && formData.admin_password.length < 6) {
-        showErrorToast('atualizar', 'Cliente', { message: 'A senha deve ter pelo menos 6 caracteres' })
-        return
+        errors.admin_password = 'A senha deve ter pelo menos 6 caracteres'
       }
-      
       if (formData.admin_password !== formData.admin_password_confirm) {
-        showErrorToast('atualizar', 'Cliente', { message: 'As senhas não coincidem' })
-        return
+        errors.admin_password_confirm = 'As senhas não coincidem'
       }
-      
-      // Validar email se fornecido
       if (formData.admin_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.admin_email)) {
-        showErrorToast('atualizar', 'Cliente', { message: 'Email inválido' })
-        return
+        errors.admin_email = 'Email inválido'
       }
     }
-    
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+
     const toastId = showLoadingToast(editingTenant ? 'atualizar' : 'criar', 'Cliente')
-    
+    setIsSubmitting(true)
+
     try {
       if (editingTenant) {
-        // Edição - envia dados do tenant + dados do usuário (se fornecidos)
         const updateData: any = {
           name: formData.name,
           plan: formData.plan,
           status: formData.status,
         }
-        
-        // Adicionar dados do usuário apenas se fornecidos
-        if (formData.admin_first_name || formData.admin_last_name || formData.admin_email || 
-            formData.admin_phone || formData.admin_password) {
+        const hasAdminFields =
+          (formData.admin_first_name || '').trim() ||
+          (formData.admin_last_name || '').trim() ||
+          (formData.admin_email || '').trim() ||
+          (formData.admin_phone || '').trim() ||
+          (formData.admin_password || '').trim()
+        if (hasAdminFields) {
           updateData.admin_user = {}
-          
-          if (formData.admin_first_name) updateData.admin_user.first_name = formData.admin_first_name
-          if (formData.admin_last_name) updateData.admin_user.last_name = formData.admin_last_name
-          if (formData.admin_email) updateData.admin_user.email = formData.admin_email
-          if (formData.admin_phone) updateData.admin_user.phone = formData.admin_phone
+          const fn = (formData.admin_first_name || '').trim()
+          const ln = (formData.admin_last_name || '').trim()
+          const em = (formData.admin_email || '').trim()
+          const ph = (formData.admin_phone || '').trim()
+          if (fn) updateData.admin_user.first_name = fn
+          if (ln) updateData.admin_user.last_name = ln
+          if (em) updateData.admin_user.email = em
+          if (ph) updateData.admin_user.phone = ph
           if (formData.admin_password) updateData.admin_user.password = formData.admin_password
         }
-        
         await api.patch(`/tenants/tenants/${editingTenant.id}/`, updateData)
         updateToastSuccess(toastId, 'atualizar', 'Cliente')
       } else {
-        // Criação - envia tenant + usuário admin
         await api.post('/tenants/tenants/', formData)
         updateToastSuccess(toastId, 'criar', 'Cliente')
       }
@@ -173,17 +180,27 @@ export default function TenantsPage() {
     } catch (error: any) {
       console.error('Error saving tenant:', error)
       updateToastError(toastId, editingTenant ? 'atualizar' : 'salvar', 'Cliente', error)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este cliente?')) return
-    
+  const handleDeleteClick = (tenant: Tenant) => {
+    setDeletingTenant(tenant)
+  }
+
+  const handleCancelDelete = () => {
+    setDeletingTenant(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTenant) return
+    const id = deletingTenant.id
     const toastId = showLoadingToast('excluir', 'Cliente')
-    
     try {
       await api.delete(`/tenants/tenants/${id}/`)
       updateToastSuccess(toastId, 'excluir', 'Cliente')
+      setDeletingTenant(null)
       fetchData()
     } catch (error: any) {
       console.error('Error deleting tenant:', error)
@@ -193,15 +210,15 @@ export default function TenantsPage() {
 
   const handleEdit = (tenant: Tenant) => {
     setEditingTenant(tenant)
+    setFieldErrors({})
     setFormData({
       name: tenant.name,
       plan: tenant.current_plan?.slug || 'starter',
       status: tenant.status,
-      // Carregar dados do admin_user se disponíveis
-      admin_first_name: (tenant as any).admin_user?.first_name || '',
-      admin_last_name: (tenant as any).admin_user?.last_name || '',
-      admin_email: (tenant as any).admin_user?.email || '',
-      admin_phone: (tenant as any).admin_user?.phone || '',
+      admin_first_name: tenant.admin_user?.first_name || '',
+      admin_last_name: tenant.admin_user?.last_name || '',
+      admin_email: tenant.admin_user?.email || '',
+      admin_phone: tenant.admin_user?.phone || '',
       admin_password: '',
       admin_password_confirm: '',
       notify_email: true,
@@ -213,6 +230,7 @@ export default function TenantsPage() {
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingTenant(null)
+    setFieldErrors({})
     setFormData({
       name: '',
       plan: plans.length > 0 ? plans[0].slug : '',
@@ -271,7 +289,7 @@ export default function TenantsPage() {
             Gerencie os clientes (tenants) da plataforma
           </p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>
+        <Button onClick={() => { setFieldErrors({}); setIsModalOpen(true) }}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Cliente
         </Button>
@@ -315,7 +333,7 @@ export default function TenantsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => handleDelete(tenant.id)}
+                  onClick={() => handleDeleteClick(tenant)}
                   className="text-red-600 hover:text-red-700"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -338,231 +356,278 @@ export default function TenantsPage() {
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <div className="fixed inset-0 bg-gray-500 dark:bg-black/50 bg-opacity-75 transition-opacity" onClick={handleCloseModal} />
             
-            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-              <form onSubmit={handleSubmit}>
-                <div className="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl flex flex-col max-h-[90vh]">
+              <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
+                <div className="flex-none px-4 pt-5 sm:p-6 pb-2 border-b border-gray-200 dark:border-gray-600">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
                     {editingTenant ? 'Editar Cliente' : 'Novo Cliente'}
                   </h3>
+                </div>
+                
+                <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 sm:px-6 space-y-4">
+                  {/* Dados do Cliente */}
+                  <div className="pb-4 border-b border-gray-200 dark:border-gray-600">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Dados do Cliente</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Nome da Empresa *
+                        </label>
+                        <Input
+                          type="text"
+                          id="name"
+                          required
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="plan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Plano *
+                        </label>
+                        <Select
+                          id="plan"
+                          required
+                          value={formData.plan}
+                          onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
+                          className="mt-1"
+                        >
+                          {plans.map((plan) => (
+                            <option key={plan.id} value={plan.slug}>
+                              {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Status *
+                        </label>
+                        <Select
+                          id="status"
+                          required
+                          value={formData.status}
+                          onChange={(e) => setFormData({ ...formData, status: e.target.value as 'active' | 'suspended' | 'trial' })}
+                          className="mt-1"
+                        >
+                          <option value="active">Ativo</option>
+                          <option value="trial">Trial</option>
+                          <option value="suspended">Suspenso</option>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
                   
-                  <div className="space-y-4">
-                    {/* Dados do Cliente */}
-                    <div className="pb-4 border-b">
-                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Dados do Cliente</h4>
-                      
-                      <div className="space-y-3">
+                  {/* Dados do Usuário Principal */}
+                  <div className="pt-2">
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
+                      {editingTenant ? 'Usuário Principal (Admin) - Edição' : 'Usuário Principal (Admin)'}
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Nome da Empresa *
+                          <label htmlFor="admin_first_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Nome {!editingTenant && '*'}
                           </label>
-                          <input
+                          <Input
                             type="text"
-                            id="name"
-                            required
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            id="admin_first_name"
+                            required={!editingTenant}
+                            value={formData.admin_first_name}
+                            onChange={(e) => {
+                              setFormData({ ...formData, admin_first_name: e.target.value })
+                              setFieldErrors((prev) => ({ ...prev, admin_email: undefined, admin_password: undefined, admin_password_confirm: undefined }))
+                            }}
+                            className="mt-1"
+                            placeholder={editingTenant ? 'Manter vazio para não alterar' : ''}
                           />
                         </div>
-
                         <div>
-                          <label htmlFor="plan" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Plano *
+                          <label htmlFor="admin_last_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Sobrenome {!editingTenant && '*'}
                           </label>
-                          <select
-                            id="plan"
-                            required
-                            value={formData.plan}
-                            onChange={(e) => setFormData({ ...formData, plan: e.target.value })}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          >
-                            {plans.map((plan) => (
-                              <option key={plan.id} value={plan.slug}>
-                                {plan.name} - R$ {Number(plan.price).toFixed(2)}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label htmlFor="status" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Status *
-                          </label>
-                          <select
-                            id="status"
-                            required
-                            value={formData.status}
-                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          >
-                            <option value="active">Ativo</option>
-                            <option value="trial">Trial</option>
-                            <option value="suspended">Suspenso</option>
-                          </select>
+                          <Input
+                            type="text"
+                            id="admin_last_name"
+                            required={!editingTenant}
+                            value={formData.admin_last_name}
+                            onChange={(e) => {
+                              setFormData({ ...formData, admin_last_name: e.target.value })
+                              setFieldErrors((prev) => ({ ...prev, admin_email: undefined, admin_password: undefined, admin_password_confirm: undefined }))
+                            }}
+                            className="mt-1"
+                            placeholder={editingTenant ? 'Manter vazio para não alterar' : ''}
+                          />
                         </div>
                       </div>
-                    </div>
-                    
-                    {/* Dados do Usuário Principal */}
-                    <div className="pt-2">
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">
-                          {editingTenant ? 'Usuário Principal (Admin) - Edição' : 'Usuário Principal (Admin)'}
-                        </h4>
-                        
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label htmlFor="admin_first_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Nome *
-                              </label>
-                              <input
-                                type="text"
-                                id="admin_first_name"
-                                required
-                                value={formData.admin_first_name}
-                                onChange={(e) => setFormData({ ...formData, admin_first_name: e.target.value })}
-                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                placeholder={editingTenant ? "Manter vazio para não alterar" : ""}
-                              />
-                            </div>
-                            
-                            <div>
-                              <label htmlFor="admin_last_name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                Sobrenome *
-                              </label>
-                              <input
-                                type="text"
-                                id="admin_last_name"
-                                required
-                                value={formData.admin_last_name}
-                                onChange={(e) => setFormData({ ...formData, admin_last_name: e.target.value })}
-                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                                placeholder={editingTenant ? "Manter vazio para não alterar" : ""}
-                              />
-                            </div>
-                          </div>
-                          
-                          <div>
-                            <label htmlFor="admin_email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                              <Mail className="inline h-4 w-4 mr-1" />
-                              Email *
-                            </label>
-                            <input
-                              type="email"
-                              id="admin_email"
-                              required
-                              value={formData.admin_email}
-                              onChange={(e) => setFormData({ ...formData, admin_email: e.target.value })}
-                              placeholder={editingTenant ? "Novo email (opcional)" : "usuario@exemplo.com"}
-                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            />
-                          </div>
-                          
-                          <div>
-                            <label htmlFor="admin_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                              <Phone className="inline h-4 w-4 mr-1" />
-                              Telefone
-                            </label>
-                            <input
-                              type="tel"
-                              id="admin_phone"
-                              value={formData.admin_phone}
-                              onChange={(e) => setFormData({ ...formData, admin_phone: e.target.value })}
-                              placeholder={editingTenant ? "Novo telefone (opcional)" : "(11) 99999-9999"}
-                              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            />
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label htmlFor="admin_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {editingTenant ? "Nova Senha (opcional)" : "Senha *"}
-                              </label>
-                              <input
-                                type="password"
-                                id="admin_password"
-                                required={!editingTenant}
-                                value={formData.admin_password}
-                                onChange={(e) => setFormData({ ...formData, admin_password: e.target.value })}
-                                placeholder={editingTenant ? "Deixe vazio para manter a senha atual" : "Mínimo 6 caracteres"}
-                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                              />
-                            </div>
-                            
-                            <div>
-                              <label htmlFor="admin_password_confirm" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {editingTenant ? "Confirmar Nova Senha" : "Confirmar Senha *"}
-                              </label>
-                              <input
-                                type="password"
-                                id="admin_password_confirm"
-                                required={!editingTenant}
-                                value={formData.admin_password_confirm}
-                                onChange={(e) => setFormData({ ...formData, admin_password_confirm: e.target.value })}
-                                placeholder={editingTenant ? "Deixe vazio se não alterar a senha" : "Digite novamente"}
-                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                              />
-                            </div>
-                          </div>
-                          
-                          {!editingTenant && (
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                <Bell className="inline h-4 w-4 mr-1" />
-                                Receber Notificações Por: *
-                              </label>
-                              <div className="space-y-2">
-                                <label className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.notify_email}
-                                    onChange={(e) => setFormData({ ...formData, notify_email: e.target.checked })}
-                                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Email</span>
-                                </label>
-                                
-                                <label className="flex items-center">
-                                  <input
-                                    type="checkbox"
-                                    checked={formData.notify_whatsapp}
-                                    onChange={(e) => setFormData({ ...formData, notify_whatsapp: e.target.checked })}
-                                    className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                  />
-                                  <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">WhatsApp</span>
-                                </label>
-                              </div>
-                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                Selecione pelo menos uma opção
-                              </p>
-                            </div>
+                      <div>
+                        <label htmlFor="admin_email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          <Mail className="inline h-4 w-4 mr-1" />
+                          Email {!editingTenant && '*'}
+                        </label>
+                        <Input
+                          type="email"
+                          id="admin_email"
+                          required={!editingTenant}
+                          value={formData.admin_email}
+                          onChange={(e) => {
+                            setFormData({ ...formData, admin_email: e.target.value })
+                            setFieldErrors((prev) => ({ ...prev, admin_email: undefined }))
+                          }}
+                          className="mt-1"
+                          placeholder={editingTenant ? 'Novo email (opcional)' : 'usuario@exemplo.com'}
+                        />
+                        {fieldErrors.admin_email && (
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.admin_email}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label htmlFor="admin_phone" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                          <Phone className="inline h-4 w-4 mr-1" />
+                          Telefone
+                        </label>
+                        <Input
+                          type="tel"
+                          id="admin_phone"
+                          value={formData.admin_phone}
+                          onChange={(e) => setFormData({ ...formData, admin_phone: e.target.value })}
+                          className="mt-1"
+                          placeholder={editingTenant ? 'Novo telefone (opcional)' : '(11) 99999-9999'}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label htmlFor="admin_password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {editingTenant ? 'Nova Senha (opcional)' : 'Senha *'}
+                          </label>
+                          <Input
+                            type="password"
+                            id="admin_password"
+                            required={!editingTenant}
+                            value={formData.admin_password}
+                            onChange={(e) => {
+                              setFormData({ ...formData, admin_password: e.target.value })
+                              setFieldErrors((prev) => ({ ...prev, admin_password: undefined, admin_password_confirm: undefined }))
+                            }}
+                            className="mt-1"
+                            placeholder={editingTenant ? 'Deixe vazio para manter a senha atual' : 'Mínimo 6 caracteres'}
+                          />
+                          {fieldErrors.admin_password && (
+                            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.admin_password}</p>
                           )}
-                          
-                          {editingTenant && (
-                            <div className="bg-blue-50 p-3 rounded-lg">
-                              <p className="text-sm text-blue-700">
-                                💡 <strong>Dica:</strong> Deixe os campos vazios para manter as informações atuais. 
-                                Para alterar apenas o email ou senha, preencha apenas os campos desejados.
-                              </p>
-                            </div>
+                        </div>
+                        <div>
+                          <label htmlFor="admin_password_confirm" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {editingTenant ? 'Confirmar Nova Senha' : 'Confirmar Senha *'}
+                          </label>
+                          <Input
+                            type="password"
+                            id="admin_password_confirm"
+                            required={!editingTenant}
+                            value={formData.admin_password_confirm}
+                            onChange={(e) => {
+                              setFormData({ ...formData, admin_password_confirm: e.target.value })
+                              setFieldErrors((prev) => ({ ...prev, admin_password_confirm: undefined }))
+                            }}
+                            className="mt-1"
+                            placeholder={editingTenant ? 'Deixe vazio se não alterar a senha' : 'Digite novamente'}
+                          />
+                          {fieldErrors.admin_password_confirm && (
+                            <p className="mt-1 text-sm text-red-600 dark:text-red-400">{fieldErrors.admin_password_confirm}</p>
                           )}
                         </div>
                       </div>
+                      {!editingTenant && (
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            <Bell className="inline h-4 w-4 mr-1" />
+                            Receber Notificações Por: *
+                          </label>
+                          <div className="space-y-2">
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={formData.notify_email}
+                                onChange={(e) => setFormData({ ...formData, notify_email: e.target.checked })}
+                                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              />
+                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Email</span>
+                            </label>
+                            <label className="flex items-center">
+                              <input
+                                type="checkbox"
+                                checked={formData.notify_whatsapp}
+                                onChange={(e) => setFormData({ ...formData, notify_whatsapp: e.target.checked })}
+                                className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                              />
+                              <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">WhatsApp</span>
+                            </label>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Selecione pelo menos uma opção
+                          </p>
+                        </div>
+                      )}
+                      {editingTenant && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                          <p className="text-sm text-blue-700 dark:text-blue-200">
+                            💡 <strong>Dica:</strong> Deixe os campos vazios para manter as informações atuais.
+                            Para alterar apenas o email ou senha, preencha apenas os campos desejados.
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    
                   </div>
+                </div>
 
-                <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
-                  <Button type="submit">
-                    <Check className="h-4 w-4 mr-2" />
+                <div className="flex-none bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2 border-t border-gray-200 dark:border-gray-600">
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <LoadingSpinner size="sm" className="mr-2" />
+                    ) : (
+                      <Check className="h-4 w-4 mr-2" />
+                    )}
                     Salvar
                   </Button>
-                  <Button type="button" variant="outline" onClick={handleCloseModal}>
+                  <Button type="button" variant="outline" onClick={handleCloseModal} disabled={isSubmitting}>
                     <X className="h-4 w-4 mr-2" />
                     Cancelar
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmação de exclusão */}
+      {deletingTenant && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 dark:bg-black/50 bg-opacity-75 transition-opacity" onClick={handleCancelDelete} />
+            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-md">
+              <div className="bg-white dark:bg-gray-800 px-4 pb-4 pt-5 sm:p-6">
+                <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100">
+                  Excluir cliente?
+                </h3>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                  Tem certeza que deseja excluir <strong>{deletingTenant.name}</strong>? Esta ação não pode ser desfeita.
+                </p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <Button
+                  type="button"
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={handleConfirmDelete}
+                >
+                  Excluir
+                </Button>
+                <Button type="button" variant="outline" onClick={handleCancelDelete}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </div>
         </div>
