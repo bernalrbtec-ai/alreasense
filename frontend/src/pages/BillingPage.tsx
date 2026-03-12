@@ -234,7 +234,7 @@ export default function BillingPage() {
                                 <>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />
-                                    <span className="text-gray-700 dark:text-gray-300">Análise de sentimento</span>
+                                    <span className="text-gray-700 dark:text-gray-300">Chat com IA</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-sm">
                                     <Check className="h-4 w-4 text-green-600" />

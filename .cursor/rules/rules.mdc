@@ -668,7 +668,7 @@ Esse arquivo serve como guia técnico, estilo de código e política de arquitet
 # 🚦 EVO SENSE — RULES OF DEVELOPMENT
 
 ## 🧭 Visão Geral
-EvoSense é uma plataforma **SaaS multi-tenant** para análise de sentimento e satisfação de clientes em conversas do WhatsApp (Evolution API).  
+EvoSense é uma plataforma **SaaS multi-tenant** para chat e atendimento de clientes em conversas do WhatsApp (Evolution API).  
 Stack principal:
 - **Backend:** Django 5 + DRF + Channels + Celery
 - **Frontend:** React + TypeScript + Vite + Tailwind + shadcn/ui

@@ -32,7 +32,7 @@ class Command(BaseCommand):
             slug='sense',
             defaults={
                 'name': 'Sense',
-                'description': 'Análise de sentimento e satisfação com IA para insights em conversas WhatsApp',
+                'description': 'Chat com IA para conversas WhatsApp',
                 'is_active': True,
                 'requires_ui_access': True,
                 'addon_price': 29.90,  # Pode ser addon
@@ -115,7 +115,7 @@ class Command(BaseCommand):
             slug='sense-basic',
             defaults={
                 'name': 'Sense Basic',
-                'description': 'Análise básica de sentimento - até 1.000 mensagens/mês',
+                'description': 'Chat básico - até 1.000 mensagens/mês',
                 'price': 29.90,
                 'is_active': True,
                 'color': '#8B5CF6',

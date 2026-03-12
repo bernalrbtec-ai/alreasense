@@ -77,7 +77,7 @@ Responda apenas com um JSON válido no formato:
     "tone": "cordial",
     "summary": "Cliente satisfeito com o atendimento"
 }}''',
-                'description': 'Template padrão para análise de sentimento',
+                'description': 'Template padrão para chat/resumo com IA',
                 'is_active': True,
                 'created_by': 'system'
             }

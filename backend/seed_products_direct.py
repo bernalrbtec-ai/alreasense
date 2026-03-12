@@ -41,7 +41,7 @@ def seed_products_direct():
                 'id': str(uuid.uuid4()),
                 'slug': 'sense',
                 'name': 'ALREA Sense',
-                'description': 'Análise de sentimento e inteligência artificial para conversas',
+                'description': 'Chat e inteligência artificial para conversas WhatsApp',
                 'is_active': True,
                 'is_addon_available': True,
                 'addon_price': 149.00,

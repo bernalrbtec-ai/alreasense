@@ -552,7 +552,7 @@ class MessageAttachment(models.Model):
             ('negative', 'Negativo'),
         ],
         verbose_name='Sentimento',
-        help_text='Análise de sentimento pela IA'
+        help_text='Classificação de sentimento pela IA (positivo/neutro/negativo)'
     )
     ai_metadata = models.JSONField(
         null=True,

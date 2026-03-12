@@ -16,7 +16,7 @@ class Product(models.Model):
     """
     Produtos da plataforma ALREA
     - ALREA Flow (Campanhas WhatsApp)
-    - ALREA Sense (Análise de Sentimento)
+    - ALREA Sense (Chat)
     - ALREA API Pública (Integração Externa)
     """
     

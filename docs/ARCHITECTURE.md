@@ -2,7 +2,7 @@
 
 ## Visão Geral
 
-O EvoSense é uma plataforma SaaS multi-tenant para análise de sentimento e satisfação de clientes em conversas do WhatsApp, construída com Django + React + PostgreSQL + pgvector.
+O EvoSense é uma plataforma SaaS multi-tenant para chat e atendimento de clientes em conversas do WhatsApp, construída com Django + React + PostgreSQL + pgvector.
 
 ## Arquitetura do Sistema
 

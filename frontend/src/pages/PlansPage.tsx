@@ -561,7 +561,7 @@ export default function PlansPage() {
                                       />
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                      Número máximo de análises de sentimento por mês
+                                      Número máximo de mensagens no chat por mês
                                     </p>
                                   </div>
                                 )}

@@ -6,7 +6,7 @@
 [![React](https://img.shields.io/badge/react-18.2+-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.2+-blue.svg)](https://www.typescriptlang.org/)
 
-Plataforma SaaS multi-tenant para análise de sentimento e satisfação de clientes em conversas do WhatsApp.
+Plataforma SaaS multi-tenant para chat e atendimento de clientes em conversas do WhatsApp.
 
 <!-- deploy trigger 2026-02-09 -->
 

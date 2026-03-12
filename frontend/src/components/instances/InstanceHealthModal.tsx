@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Send, CheckCircle, Eye, AlertCircle } from 'lucide-react'
 import { formatDate } from '../../lib/utils'
 
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -99,19 +99,25 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
         className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl shadow-xl w-full max-w-md overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center gap-2 min-w-0">
-            <h2 id="instance-health-modal-title" className="text-lg font-semibold truncate">
-              Indicadores de saúde
-            </h2>
-            {instance.friendly_name && (
-              <span className="text-sm text-gray-500 dark:text-gray-400 truncate" title={instance.friendly_name}>
-                — {instance.friendly_name}
-              </span>
-            )}
+        <div className="flex items-center justify-between gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span
+              className={`flex-shrink-0 w-3 h-3 rounded-full ${score >= 80 ? 'bg-emerald-500' : score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+              title={`Saúde ${score}%`}
+            />
+            <div className="min-w-0">
+              <h2 id="instance-health-modal-title" className="text-lg font-semibold truncate">
+                Indicadores de saúde
+              </h2>
+              {instance.friendly_name && (
+                <p className="text-sm text-gray-500 dark:text-gray-400 truncate" title={instance.friendly_name}>
+                  {instance.friendly_name}
+                </p>
+              )}
+            </div>
           </div>
           {isMeta && (
-            <span className="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200">
+            <span className="flex-shrink-0 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
               API Meta
             </span>
           )}
@@ -127,69 +133,99 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
         </div>
 
         <div className="p-4 space-y-4">
-          {isMeta && (
-            <p className="text-xs text-gray-500 dark:text-gray-400 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-3">
-              Indicadores sincronizados com a Meta: entregas e leituras são atualizados via webhook quando os destinatários recebem ou leem as mensagens.
+          {isMeta ? (
+            <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-900/20 p-3">
+              <p className="text-xs text-indigo-800 dark:text-indigo-200 leading-relaxed">
+                <strong>Sincronizado com a Meta.</strong> Entregas e leituras são atualizados em tempo real via webhook quando os destinatários recebem ou leem as mensagens.
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700/50 rounded-lg px-3 py-2">
+              Entregas e leituras são reportadas apenas para instâncias <strong>API Meta</strong>. Para Evolution são exibidos envios e falhas.
             </p>
           )}
 
           {/* Health score */}
-          <div>
-            <div className="flex items-center justify-between text-sm mb-1.5">
+          <div className="rounded-lg bg-gray-50 dark:bg-gray-700/30 p-3 border border-gray-200 dark:border-gray-600">
+            <div className="flex items-center justify-between text-sm mb-2">
               <span className="font-medium text-gray-700 dark:text-gray-300">Score de saúde</span>
               <span className="flex items-center gap-2">
-                <span className={`font-semibold ${healthScoreColor(score)}`}>{score}/100</span>
+                <span className={`text-lg font-bold tabular-nums ${healthScoreColor(score)}`}>{score}/100</span>
                 <span className={`text-xs font-medium ${healthScoreColor(score)}`}>({healthStatusLabel(score)})</span>
               </span>
             </div>
-            <div className="h-2.5 w-full rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+            <div className="h-3 w-full rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${healthScoreBg(score)}`}
+                className={`h-full rounded-full transition-all duration-300 ${healthScoreBg(score)}`}
                 style={{ width: `${score}%` }}
               />
             </div>
           </div>
 
-          {/* Hoje */}
+          {/* Métricas hoje */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30">
-              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">Enviadas hoje</div>
-              <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{sent}</div>
+            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+              <Send className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Enviadas hoje</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{sent}</div>
+              </div>
             </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30">
-              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">Entregues hoje</div>
-              <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{delivered}</div>
-              {sent > 0 && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{deliveryRate}% taxa de entrega</div>
-              )}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+              <CheckCircle className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Entregues hoje</div>
+                {isMeta ? (
+                  <>
+                    <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{delivered}</div>
+                    {sent > 0 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{deliveryRate}% taxa</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-base text-gray-400 dark:text-gray-500 font-medium">—</div>
+                )}
+              </div>
             </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30">
-              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">Lidas hoje</div>
-              <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">{read}</div>
-              {delivered > 0 && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{readRate}% taxa de leitura</div>
-              )}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+              <Eye className="h-5 w-5 text-gray-400 dark:text-gray-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Lidas hoje</div>
+                {isMeta ? (
+                  <>
+                    <div className="text-xl font-semibold text-gray-900 dark:text-gray-100 tabular-nums">{read}</div>
+                    {delivered > 0 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{readRate}% taxa</div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-base text-gray-400 dark:text-gray-500 font-medium">—</div>
+                )}
+              </div>
             </div>
-            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30">
-              <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-0.5">Falhas hoje</div>
-              <div className={`text-xl font-semibold ${failed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
-                {failed}
+            <div className="rounded-lg border border-gray-200 dark:border-gray-600 p-3 bg-gray-50/50 dark:bg-gray-700/30 flex gap-2">
+              <AlertCircle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${failed > 0 ? 'text-amber-500' : 'text-gray-400 dark:text-gray-500'}`} />
+              <div className="min-w-0">
+                <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Falhas hoje</div>
+                <div className={`text-xl font-semibold tabular-nums ${failed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                  {failed}
+                </div>
               </div>
             </div>
           </div>
 
           {/* Erros consecutivos e última entrega */}
-          <div className="flex flex-wrap gap-3 text-sm">
+          <div className="pt-2 border-t border-gray-200 dark:border-gray-600 flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-1.5">
               <span className="text-gray-500 dark:text-gray-400">Erros consecutivos:</span>
-              <span className={consecutiveErrors > 0 ? 'font-medium text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}>
+              <span className={`font-semibold tabular-nums ${consecutiveErrors > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-gray-100'}`}>
                 {consecutiveErrors}
               </span>
             </div>
             {lastSuccessFormatted && (
               <div className="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
                 <span>Último sucesso:</span>
-                <span className="text-gray-700 dark:text-gray-300">{lastSuccessFormatted}</span>
+                <span className="text-gray-700 dark:text-gray-300 font-medium">{lastSuccessFormatted}</span>
               </div>
             )}
           </div>
