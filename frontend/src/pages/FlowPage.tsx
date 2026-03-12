@@ -562,9 +562,18 @@ export default function FlowPage() {
   }
 
   const openAddEdge = (fromNodeId: string) => {
+    const fromNode = flowDetail?.nodes?.find((n) => n.id === fromNodeId)
+    let suggestedOptionId = ''
+    if (fromNode?.node_type === 'list' && fromNode.sections?.length) {
+      const firstRow = fromNode.sections[0]?.rows?.[0]
+      if (firstRow?.id) suggestedOptionId = firstRow.id
+    } else if (fromNode?.node_type === 'buttons' && fromNode.buttons?.length) {
+      if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
+    }
+    if (!suggestedOptionId) suggestedOptionId = 'opcao1'
     setEditingEdge(null)
     setEdgeFromNodeId(fromNodeId)
-    setEdgeOptionId('')
+    setEdgeOptionId(suggestedOptionId)
     setEdgeToNodeId(null)
     setEdgeTargetDepartmentId(null)
     setEdgeTargetAction('next')
@@ -636,8 +645,12 @@ export default function FlowPage() {
 
   const handleSaveEdge = async () => {
     if (savingEdge) return
-    if (!edgeFromNodeId || !edgeOptionId.trim()) {
-      toast.error('Etapa de origem e opção são obrigatórios')
+    if (!edgeFromNodeId) {
+      toast.error('Selecione a etapa de origem')
+      return
+    }
+    if (!edgeOptionId.trim()) {
+      toast.error('Informe a opção (ex.: id da linha da lista ou do botão)')
       return
     }
     if (edgeTargetAction === 'next' && !edgeToNodeId) {
@@ -1241,8 +1254,9 @@ export default function FlowPage() {
                 </select>
               </div>
               <div>
-                <Label>Para onde leva esta opção?</Label>
-                <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: opcao1" />
+                <Label>Opção (id da linha ou do botão)</Label>
+                <Input value={edgeOptionId} onChange={(e) => setEdgeOptionId(e.target.value)} placeholder="ex: opcao1, btn1" />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Deve coincidir com o id de uma linha da lista ou de um botão na etapa de origem.</p>
               </div>
               <div>
                 <Label>O que acontece quando o usuário escolhe esta opção?</Label>

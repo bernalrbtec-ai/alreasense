@@ -4368,46 +4368,63 @@ export default function ConfigurationsPage() {
 
       {/* Modal Template META (criar/editar) */}
       {isMetaTemplateModalOpen && (
-        <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="meta-template-form-title">
+          <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
             <div className="p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {editingMetaTemplate ? 'Editar Template WhatsApp (Meta)' : 'Novo Template WhatsApp (Meta)'}
-              </h3>
-              <p className="text-sm text-gray-500 mb-4">
-                Crie e submeta o template no Meta Business Manager para aprovação antes de cadastrar aqui. Só templates aprovados podem ser usados para primeira mensagem ou fora da janela de 24h.
-              </p>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="meta_template_name">Nome (exibição)</Label>
-                  <Input
-                    id="meta_template_name"
-                    value={metaTemplateFormData.name}
-                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, name: e.target.value })}
-                    placeholder="Ex: Saudação inicial"
-                  />
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div className="min-w-0">
+                  <h3 id="meta-template-form-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                    {editingMetaTemplate ? 'Editar Template WhatsApp (Meta)' : 'Novo Template WhatsApp (Meta)'}
+                  </h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    Cadastre só templates já aprovados no Meta Business. Usados para primeira mensagem ou fora da janela de 24h.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeMetaTemplateModal}
+                  className="shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 dark:hover:text-gray-200 transition-colors"
+                  aria-label="Fechar"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="meta_template_name">Nome (exibição)</Label>
+                    <Input
+                      id="meta_template_name"
+                      value={metaTemplateFormData.name}
+                      onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, name: e.target.value })}
+                      placeholder="Ex: Saudação inicial"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="meta_template_id">ID na Meta</Label>
+                    <Input
+                      id="meta_template_id"
+                      value={metaTemplateFormData.template_id}
+                      onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, template_id: e.target.value })}
+                      placeholder="Ex: hello_world"
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Mesmo nome do template no Meta Business</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="meta_template_lang">Idioma</Label>
+                    <Input
+                      id="meta_template_lang"
+                      value={metaTemplateFormData.language_code}
+                      onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, language_code: e.target.value })}
+                      placeholder="pt_BR"
+                      className="mt-1"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <Label htmlFor="meta_template_id">ID do template na Meta</Label>
-                  <Input
-                    id="meta_template_id"
-                    value={metaTemplateFormData.template_id}
-                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, template_id: e.target.value })}
-                    placeholder="Ex: hello_world"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Igual ao nome do template no Meta Business (ex.: hello_world)</p>
-                </div>
-                <div>
-                  <Label htmlFor="meta_template_lang">Código do idioma</Label>
-                  <Input
-                    id="meta_template_lang"
-                    value={metaTemplateFormData.language_code}
-                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, language_code: e.target.value })}
-                    placeholder="pt_BR"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="meta_template_params">Parâmetros padrão do body (JSON array, opcional)</Label>
+                  <Label htmlFor="meta_template_params">Parâmetros padrão do body (opcional)</Label>
                   <Input
                     id="meta_template_params"
                     value={JSON.stringify(metaTemplateFormData.body_parameters_default || [])}
@@ -4421,33 +4438,37 @@ export default function ConfigurationsPage() {
                       }
                     }}
                     placeholder='["Olá", "João"]'
+                    className="mt-1 font-mono text-sm"
                   />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">JSON array. Ex: [] ou [&quot;valor1&quot;, &quot;valor2&quot;]</p>
                 </div>
-                <div>
-                  <Label htmlFor="meta_template_instance">Instância WhatsApp (opcional)</Label>
-                  <select
-                    id="meta_template_instance"
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                    value={metaTemplateFormData.wa_instance || ''}
-                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, wa_instance: e.target.value || null })}
-                  >
-                    <option value="">Qualquer instância Meta</option>
-                    {metaInstances.map((inst: WhatsAppInstance) => (
-                      <option key={inst.id} value={inst.id}>{inst.friendly_name}</option>
-                    ))}
-                  </select>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-6">
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="meta_template_instance">Instância WhatsApp</Label>
+                    <select
+                      id="meta_template_instance"
+                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+                      value={metaTemplateFormData.wa_instance || ''}
+                      onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, wa_instance: e.target.value || null })}
+                    >
+                      <option value="">Qualquer instância</option>
+                      {metaInstances.map((inst: WhatsAppInstance) => (
+                        <option key={inst.id} value={inst.id}>{inst.friendly_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer pt-2 sm:pt-8">
+                    <input
+                      type="checkbox"
+                      checked={metaTemplateFormData.is_active}
+                      onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, is_active: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-accent-600 focus:ring-accent-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Ativo</span>
+                  </label>
                 </div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={metaTemplateFormData.is_active}
-                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, is_active: e.target.checked })}
-                    className="w-4 h-4 rounded border-gray-300"
-                  />
-                  <span className="text-sm">Ativo</span>
-                </label>
               </div>
-              <div className="flex justify-end gap-2 mt-6">
+              <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" onClick={closeMetaTemplateModal}>Cancelar</Button>
                 <Button onClick={saveMetaTemplate}>
                   <Save className="h-4 w-4 mr-2" />
