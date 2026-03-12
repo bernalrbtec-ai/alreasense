@@ -155,10 +155,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             event_type = data.get('type')
             
-            # ✅ LOG CRÍTICO: Logar TODAS as mensagens recebidas
-            logger.info(f"📨 [CHAT WS V2] Mensagem recebida do cliente:")
-            logger.info(f"   Event type: {event_type}")
-            logger.info(f"   Data completo: {data}")
+            # Log resumido (evita payload completo no log)
+            logger.info(f"📨 [CHAT WS V2] Mensagem recebida: type=%s keys=%s", event_type, list(data.keys()) if isinstance(data, dict) else [])
             
             if event_type == 'subscribe':
                 await self.handle_subscribe(data)
@@ -251,20 +249,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         # ✅ CORREÇÃO CRÍTICA: conversation_id é OBRIGATÓRIO - NUNCA usar fallback
         conversation_id = data.get('conversation_id')
         
-        # ✅ LOG CRÍTICO: Verificar se conversation_id foi fornecido
-        logger.critical(f"📥 [CHAT WS V2] ====== RECEBENDO send_message ======")
-        logger.critical(f"   conversation_id recebido: {conversation_id}")
-        logger.critical(f"   conversation_id tipo: {type(conversation_id)}")
-        logger.critical(f"   conversation_id existe? {bool(conversation_id)}")
-        logger.critical(f"   subscribed_conversations: {list(self.subscribed_conversations)}")
-        logger.critical(f"   Data completo: {json.dumps(data, indent=2, default=str)}")
+        logger.critical("📥 [CHAT WS V2] RECEBENDO send_message: conversation_id=%s (exists=%s) subscribed=%s data_keys=%s",
+                        conversation_id, bool(conversation_id), list(self.subscribed_conversations), list(data.keys()) if isinstance(data, dict) else [])
         
         # ✅ VALIDAÇÃO CRÍTICA: conversation_id é OBRIGATÓRIO
         if not conversation_id:
             error_msg = '❌ [SEGURANÇA] conversation_id é OBRIGATÓRIO! Mensagem rejeitada para prevenir envio para destinatário errado.'
             logger.critical(error_msg)
-            logger.critical(f"   subscribed_conversations disponíveis: {list(self.subscribed_conversations)}")
-            logger.critical(f"   Data recebido: {json.dumps(data, indent=2, default=str)}")
+            logger.critical("   subscribed_conversations disponíveis: %s data_keys=%s", list(self.subscribed_conversations), list(data.keys()) if isinstance(data, dict) else [])
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'conversation_id é obrigatório',
@@ -297,6 +289,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         template_body_parameters = data.get('template_body_parameters', data.get('body_parameters', []))
         interactive_reply_buttons = data.get('interactive_reply_buttons')  # ✅ Meta 24h: botões (só Meta)
         interactive_list = data.get('interactive_list')  # ✅ Meta 24h: lista interativa (só Meta)
+        contact_message = data.get('contact_message')  # ✅ Envio de contato (vCard)
 
         # ✅ Conflito: não permitir template e interativo no mesmo payload
         if wa_template_id and interactive_reply_buttons:
@@ -322,6 +315,13 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }))
             logger.info("interactive_list rejeitado: anexos presentes (conversation_id=%s)", conversation_id)
             return
+        if contact_message and (wa_template_id or interactive_reply_buttons or interactive_list or attachment_urls):
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'Mensagem de contato não pode ser combinada com template, botões, lista ou anexos.',
+                'error_code': 'CONTACT_AND_OTHER',
+            }))
+            return
 
         # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
         logger.critical(f"✅ [CHAT WS V2] conversation_id validado: {conversation_id}")
@@ -333,9 +333,9 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         if interactive_reply_buttons:
             logger.critical(f"   interactive_reply_buttons: presente (Meta 24h)")
 
-        # Mensagem válida se tiver conteúdo, anexos, template ou interativo (botões ou lista)
+        # Mensagem válida se tiver conteúdo, anexos, template, interativo (botões ou lista) ou contato
         if not content and not attachment_urls and not wa_template_id:
-            if not interactive_reply_buttons and not interactive_list:
+            if not interactive_reply_buttons and not interactive_list and not contact_message:
                 await self.send(text_data=json.dumps({
                     'type': 'error',
                     'message': 'Mensagem vazia'
@@ -459,6 +459,34 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                     }))
                     return
 
+        if contact_message:
+            from apps.chat.utils.contact_message import extract_contacts_list
+            from apps.notifications.services import normalize_phone
+            contacts_raw = extract_contacts_list(contact_message)
+            valid_contacts = []
+            for c in contacts_raw:
+                phone_raw = c.get('phone') or c.get('phoneNumber')
+                if phone_raw is not None and not isinstance(phone_raw, str):
+                    phone_raw = str(phone_raw).strip()
+                if not phone_raw:
+                    continue
+                normalized_phone = normalize_phone(phone_raw)
+                if normalized_phone:
+                    name = (c.get('display_name') or c.get('name') or c.get('fullName') or '').strip()
+                    valid_contacts.append({'display_name': name or 'Contato', 'phone': normalized_phone})
+            if not valid_contacts:
+                await self.send(text_data=json.dumps({
+                    'type': 'error',
+                    'message': 'Pelo menos um contato válido é necessário (nome e telefone).',
+                    'error_code': 'INVALID_CONTACT_MESSAGE',
+                }))
+                return
+            if len(valid_contacts) == 1:
+                content = f"📇 Compartilhou contato: {valid_contacts[0].get('display_name') or valid_contacts[0].get('phone') or 'Contato'}"
+            else:
+                content = f"📇 Compartilhou {len(valid_contacts)} contatos"
+            contact_message = {'contacts': valid_contacts}
+
         if interactive_reply_buttons:
             body_text = (interactive_reply_buttons.get('body_text') or '').strip().replace('\x00', '')[:1024]
             raw_buttons = interactive_reply_buttons.get('buttons') or []
@@ -571,6 +599,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 template_body_parameters=template_body_parameters,
                 interactive_reply_buttons=interactive_reply_buttons,
                 interactive_list=interactive_list,
+                contact_message=contact_message if (contact_message and isinstance(contact_message, dict) and contact_message.get('contacts')) else None,
             )
         except Exception as e:
             logger.error(f"❌ [CHAT WS V2] Erro ao criar mensagem: {e}", exc_info=True)
@@ -1034,13 +1063,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None, interactive_list=None):
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None, interactive_reply_buttons=None, interactive_list=None, contact_message=None):
         """
         Cria mensagem no banco.
 
         ✅ SEGURANÇA CRÍTICA: Valida que conversation existe e pertence ao tenant do usuário
         ✅ Meta 24h: wa_template_id e template_body_parameters vão no metadata para envio por template.
         ✅ Meta 24h: interactive_reply_buttons (body_text + buttons) para envio interativo dentro da 24h.
+        ✅ contact_message: { contacts: [ { display_name, phone }, ... ] } para envio de contato (vCard).
         """
         from apps.chat.models import Message, Conversation
         
@@ -1268,6 +1298,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                         'footer_text': (il.get('footer_text') or '').strip()[:60],
                         'sections': sections_out,
                     }
+
+            # Envio de contato (vCard): mesmo formato de exibição do webhook (MessageList/SharedContactCard)
+            if contact_message and isinstance(contact_message, dict):
+                contacts_list = contact_message.get('contacts') or []
+                if contacts_list and len(contacts_list) == 1:
+                    metadata['contact_message'] = dict(contacts_list[0])
+                elif contacts_list:
+                    metadata['contact_message'] = {'contacts': [dict(c) for c in contacts_list if isinstance(c, dict)]}
 
             message = Message.objects.create(
                 conversation=conversation,

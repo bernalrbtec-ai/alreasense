@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool, Reply, X, FileText, LayoutList, ListOrdered } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X, FileText, LayoutList, ListOrdered, UserPlus } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
@@ -34,13 +34,14 @@ interface MessageInputProps {
     footerText?: string,
     replyTo?: string,
   ) => boolean;
+  sendMessageWithContacts?: (conversationId: string, contacts: Array<{ display_name: string; phone: string }>, replyTo?: string) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
   conversationId?: string;
   conversationType?: 'individual' | 'group' | 'broadcast';
 }
 
-export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendMessageWithContacts, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
   const { user } = useAuthStore();
   const allowMetaInteractiveButtons = user?.allow_meta_interactive_buttons !== false;
@@ -62,6 +63,15 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
   const [listButtonText, setListButtonText] = useState('');
   const [listHeaderText, setListHeaderText] = useState('');
   const [listFooterText, setListFooterText] = useState('');
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactModalTab, setContactModalTab] = useState<'agenda' | 'manual'>('agenda');
+  const [contactAgendaSearch, setContactAgendaSearch] = useState('');
+  const [contactAgendaList, setContactAgendaList] = useState<Array<{ id: string; name: string; phone: string }>>([]);
+  const [contactAgendaLoading, setContactAgendaLoading] = useState(false);
+  const [contactSelected, setContactSelected] = useState<{ display_name: string; phone: string } | null>(null);
+  const [contactManualName, setContactManualName] = useState('');
+  const [contactManualPhone, setContactManualPhone] = useState('');
+  const [contactSending, setContactSending] = useState(false);
   const [listSections, setListSections] = useState<Array<{ title: string; rows: Array<{ id: string; title: string; description: string }> }>>([
     { title: 'Opções', rows: [{ id: 'opt1', title: '', description: '' }] },
   ]);
@@ -84,6 +94,36 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     messageRef.current = message;
     mentionsRef.current = mentions;
   }, [message, mentions]);
+
+  // Fechar modal de contato ao trocar de conversa
+  const prevConversationIdRef = useRef<string | undefined>(conversationId);
+  useEffect(() => {
+    if (prevConversationIdRef.current !== conversationId) {
+      prevConversationIdRef.current = conversationId;
+      setShowContactModal(false);
+    }
+  }, [conversationId]);
+
+  // Buscar contatos da agenda quando modal está aberto na aba agenda
+  useEffect(() => {
+    if (!showContactModal || contactModalTab !== 'agenda') return;
+    setContactAgendaLoading(true);
+    const search = contactAgendaSearch.trim();
+    const params = search ? { search } : {};
+    api.get('/contacts/contacts/', { params })
+      .then(res => {
+        const results = res.data?.results ?? res.data ?? [];
+        setContactAgendaList(
+          (Array.isArray(results) ? results : []).map((c: { id: string; name?: string; phone?: string }) => ({
+            id: String(c.id),
+            name: (c.name || '').trim() || 'Sem nome',
+            phone: (c.phone || '').trim(),
+          }))
+        );
+      })
+      .catch(() => setContactAgendaList([]))
+      .finally(() => setContactAgendaLoading(false));
+  }, [showContactModal, contactModalTab, contactAgendaSearch]);
 
   // ✅ NOVO: Salvar e restaurar texto quando conversa muda
   useEffect(() => {
@@ -664,6 +704,26 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         </button>
       )}
 
+      {/* Botão Compartilhar contato (individual e grupo) */}
+      {sendMessageWithContacts && (
+        <button
+          type="button"
+          onClick={() => {
+            setShowContactModal(true);
+            setContactModalTab('agenda');
+            setContactSelected(null);
+            setContactManualName('');
+            setContactManualPhone('');
+            setContactAgendaSearch('');
+          }}
+          className="p-2 rounded-full flex-shrink-0 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 dark:text-amber-400"
+          title="Compartilhar contato"
+          disabled={sending || !isConnected || isGroupInputBlocked}
+        >
+          <UserPlus className="w-5 h-5" />
+        </button>
+      )}
+
       {/* File Uploader */}
       <div className="relative">
         <FileUploader
@@ -1026,6 +1086,126 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
               className="px-3 py-1.5 rounded-lg bg-violet-600 text-white disabled:opacity-50"
             >
               Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal Compartilhar contato */}
+    {showContactModal && conversationId && sendMessageWithContacts && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => !contactSending && setShowContactModal(false)}>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Compartilhar contato</h3>
+            <button type="button" onClick={() => !contactSending && setShowContactModal(false)} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600" disabled={contactSending}>
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex gap-2 mb-3 border-b border-gray-200 dark:border-gray-600">
+            <button
+              type="button"
+              onClick={() => setContactModalTab('agenda')}
+              className={`px-3 py-1.5 text-sm rounded-t ${contactModalTab === 'agenda' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 font-medium' : 'text-gray-600 dark:text-gray-400'}`}
+            >
+              Contatos da agenda
+            </button>
+            <button
+              type="button"
+              onClick={() => setContactModalTab('manual')}
+              className={`px-3 py-1.5 text-sm rounded-t ${contactModalTab === 'manual' ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 font-medium' : 'text-gray-600 dark:text-gray-400'}`}
+            >
+              Digitar manualmente
+            </button>
+          </div>
+          {contactModalTab === 'agenda' && (
+            <>
+              <input
+                type="text"
+                value={contactAgendaSearch}
+                onChange={e => setContactAgendaSearch(e.target.value)}
+                placeholder="Buscar contato..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 mb-2 text-sm"
+              />
+              <div className="max-h-48 overflow-y-auto border border-gray-200 dark:border-gray-600 rounded-lg mb-3">
+                {contactAgendaLoading && <p className="p-2 text-sm text-gray-500">Carregando...</p>}
+                {!contactAgendaLoading && contactAgendaList.length === 0 && <p className="p-2 text-sm text-gray-500">Nenhum contato encontrado.</p>}
+                {!contactAgendaLoading && contactAgendaList.map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setContactSelected({ display_name: c.name, phone: c.phone || '' })}
+                    className={`w-full text-left px-3 py-2 text-sm border-b border-gray-100 dark:border-gray-700 last:border-0 ${contactSelected?.phone === c.phone ? 'bg-amber-50 dark:bg-amber-900/30' : 'hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                  >
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{c.name}</span>
+                    {c.phone && <span className="block text-xs text-gray-500">{c.phone}</span>}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {contactModalTab === 'manual' && (
+            <div className="space-y-2 mb-3">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Nome (máx. 255)</label>
+              <input
+                type="text"
+                value={contactManualName}
+                onChange={e => setContactManualName(e.target.value.slice(0, 255))}
+                placeholder="Nome do contato"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Telefone (mín. 10 dígitos)</label>
+              <input
+                type="tel"
+                value={contactManualPhone}
+                onChange={e => setContactManualPhone(e.target.value)}
+                placeholder="Ex: 11999999999"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => !contactSending && setShowContactModal(false)} className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600" disabled={contactSending}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={contactSending || (contactModalTab === 'agenda' ? !contactSelected : contactManualPhone.replace(/\D/g, '').length < 10)}
+              className="px-3 py-1.5 rounded-lg bg-amber-600 text-white disabled:opacity-50"
+              aria-busy={contactSending}
+              onClick={async () => {
+                const replyToId = replyToMessage?.id ? String(replyToMessage.id) : undefined;
+                let toSend: { display_name: string; phone: string } | null = null;
+                if (contactModalTab === 'agenda' && contactSelected) {
+                  toSend = contactSelected;
+                } else if (contactModalTab === 'manual') {
+                  const digits = contactManualPhone.replace(/\D/g, '');
+                  if (digits.length < 10) {
+                    toast.error('Telefone deve ter pelo menos 10 dígitos.');
+                    return;
+                  }
+                  toSend = { display_name: contactManualName.trim() || 'Contato', phone: digits };
+                }
+                if (!toSend || !conversationId) return;
+                setContactSending(true);
+                try {
+                  const ok = sendMessageWithContacts(conversationId, [toSend], replyToId);
+                  if (ok) {
+                    setShowContactModal(false);
+                    setContactSelected(null);
+                    setContactManualName('');
+                    setContactManualPhone('');
+                    clearReply();
+                    toast.success('Contato enviado.');
+                  } else {
+                    toast.error('Não foi possível enviar. Verifique a conexão.');
+                  }
+                } finally {
+                  setContactSending(false);
+                }
+              }}
+            >
+              {contactSending ? 'Enviando...' : 'Enviar'}
             </button>
           </div>
         </div>

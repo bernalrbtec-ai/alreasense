@@ -47,7 +47,16 @@ class MetaCloudProvider(WhatsAppSenderBase):
         }
         try:
             r = requests.post(url, json=payload, headers=headers, timeout=30)
-            data = r.json() if r.text else {}
+            try:
+                data = r.json() if r.text else {}
+            except Exception:
+                data = {}
+                if r.status_code in (200, 201):
+                    return False, {
+                        'error': (r.text or '')[:500],
+                        'status_code': r.status_code,
+                        'error_code': 'INVALID_RESPONSE',
+                    }
             if r.status_code in (200, 201):
                 logger.info(
                     "Meta Cloud API envio OK (provider=meta instance_id=%s)",
@@ -206,6 +215,91 @@ class MetaCloudProvider(WhatsAppSenderBase):
                 'name': (name or 'Localização')[:255],
                 'address': (address or '')[:500],
             },
+        }
+        if quoted_message_id:
+            payload['context'] = {'message_id': quoted_message_id}
+        return self._request(payload)
+
+    def send_contact(
+        self,
+        phone: str,
+        contacts: list,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem de contato (vCard) via Meta Cloud API.
+
+        contacts: lista de dicts com fullName, wuid, phoneNumber (ou raw; normalizados internamente).
+        v1: envia apenas o primeiro contato.
+
+        Payload segue o schema oficial de contacts messages:
+        - type: \"contacts\"
+        - contacts[0].name.formatted_name
+        - contacts[0].phones[0].{ phone, type, wa_id }
+        - opcionais: emails, urls, org (company)
+        """
+        from apps.chat.utils.contact_message import normalize_contact_for_provider
+
+        to = self._to_phone(phone)
+        if not to:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        if not contacts or not isinstance(contacts, list):
+            return False, {'error': 'lista de contatos vazia', 'error_code': 'INVALID_CONTACTS'}
+        normalized = []
+        for c in contacts:
+            if isinstance(c, dict) and (c.get('fullName') is not None and c.get('wuid')):
+                full_name = (c.get('fullName') or '').strip() or 'Contato'
+                wuid = str(c.get('wuid', '')).strip()
+                if wuid:
+                    normalized.append({'fullName': full_name[:255], 'wuid': wuid})
+            else:
+                one = normalize_contact_for_provider(c)
+                if one:
+                    normalized.append(one)
+        if not normalized:
+            return False, {'error': 'nenhum contato válido', 'error_code': 'INVALID_CONTACTS'}
+        first = normalized[0]
+        formatted_name = (first.get('fullName') or 'Contato').strip() or 'Contato'
+        wa_id = first.get('wuid', '').lstrip('+').replace(' ', '')
+        phone_e164 = (first.get('phoneNumber') or '').strip()
+        if not phone_e164 and wa_id:
+            phone_e164 = f'+{wa_id}'
+
+        # Monta payload completo, mas mínimo compatível se faltar dados opcionais
+        contact_obj: Dict[str, Any] = {
+            'name': {'formatted_name': formatted_name},
+        }
+        phones: list = []
+        if phone_e164 or wa_id:
+            phone_entry: Dict[str, Any] = {}
+            if phone_e164:
+                phone_entry['phone'] = phone_e164
+            if wa_id:
+                phone_entry['wa_id'] = wa_id
+            # Tipo genérico; pode ser ajustado depois se necessário
+            phone_entry['type'] = 'CELL'
+            phones.append(phone_entry)
+        if phones:
+            contact_obj['phones'] = phones
+
+        # Enriquecimento opcional a partir do helper
+        org = first.get('organization')
+        if isinstance(org, str) and org.strip():
+            contact_obj['org'] = {'company': org.strip()[:255]}
+        email = first.get('email')
+        if isinstance(email, str) and email.strip():
+            contact_obj['emails'] = [{'email': email.strip()[:255], 'type': 'WORK'}]
+        url = first.get('url')
+        if isinstance(url, str) and url.strip():
+            contact_obj['urls'] = [{'url': url.strip()[:500], 'type': 'WORK'}]
+
+        payload = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'contacts',
+            'contacts': [contact_obj],
         }
         if quoted_message_id:
             payload['context'] = {'message_id': quoted_message_id}

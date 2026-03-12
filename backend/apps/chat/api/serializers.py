@@ -295,11 +295,12 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text='Lista de números de telefone mencionados (ex: ["5517999999999"])'
     )
-    
+    metadata = serializers.JSONField(required=False, write_only=True, help_text='Metadata (ex.: contact_message para enviar contato)')
+
     class Meta:
         model = Message
         fields = [
-            'conversation', 'content', 'is_internal', 'attachment_urls', 'mentions'
+            'conversation', 'content', 'is_internal', 'attachment_urls', 'mentions', 'metadata'
         ]
     
     def __init__(self, *args, **kwargs):
@@ -319,12 +320,36 @@ class MessageCreateSerializer(serializers.ModelSerializer):
             self.fields['conversation'].queryset = Conversation.objects.none()
     
     def validate(self, attrs):
-        """Valida que há conteúdo ou anexos."""
-        if not attrs.get('content') and not attrs.get('attachment_urls'):
+        """Valida que há conteúdo, anexos ou mensagem de contato válida."""
+        metadata = attrs.get('metadata') or {}
+        contact_message = metadata.get('contact_message') if isinstance(metadata, dict) else None
+        from apps.chat.utils.contact_message import extract_contacts_list
+        from apps.notifications.services import normalize_phone
+        contacts_raw = extract_contacts_list(contact_message) if contact_message else []
+        has_valid_contact = False
+        for c in contacts_raw:
+            phone_raw = c.get('phone') or c.get('phoneNumber')
+            if phone_raw is not None and not isinstance(phone_raw, str):
+                phone_raw = str(phone_raw).strip()
+            if phone_raw and normalize_phone(phone_raw):
+                has_valid_contact = True
+                break
+        if has_valid_contact:
+            # Sempre definir content de exibição no backend (ignorar content do cliente)
+            first_name = 'Contato'
+            if len(contacts_raw) > 1:
+                attrs['content'] = f"📇 Compartilhou {len(contacts_raw)} contatos"
+            elif contacts_raw:
+                first = contacts_raw[0]
+                first_name = (first.get('display_name') or first.get('name') or first.get('fullName') or '').strip() or 'Contato'
+                attrs['content'] = f"📇 Compartilhou contato: {first_name}"
+            else:
+                attrs['content'] = "📇 Compartilhou contato"
+        elif not attrs.get('content') and not attrs.get('attachment_urls'):
             raise serializers.ValidationError(
                 "Mensagem deve ter conteúdo de texto ou anexos."
             )
-        
+
         request = self.context.get('request')
         conversation = attrs.get('conversation')
         if request and conversation:
@@ -407,6 +432,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         
         attachment_urls = validated_data.pop('attachment_urls', [])
         mentions = validated_data.pop('mentions', [])
+        request_metadata = validated_data.pop('metadata', None) or {}
         validated_data['direction'] = 'outgoing'
         validated_data['sender'] = self.context['request'].user
         validated_data['status'] = 'pending'
@@ -441,6 +467,8 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         metadata = {}
         if attachment_urls:
             metadata['attachment_urls'] = attachment_urls
+        if isinstance(request_metadata, dict) and request_metadata.get('contact_message'):
+            metadata['contact_message'] = request_metadata['contact_message']
         
         if mentions:
             # Validar que é grupo (menções só funcionam em grupos)

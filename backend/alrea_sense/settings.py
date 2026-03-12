@@ -105,11 +105,10 @@ DATABASES = {
     )
 }
 
-# ✅ IMPROVEMENT: Database connection pooling and performance
-# ✅ FIX: Reduzir CONN_MAX_AGE para ASGI (Daphne) - conexões persistentes causam "too many clients"
-# Em ASGI, cada thread mantém sua própria conexão, então precisamos fechar mais rapidamente.
-# Em produção (Railway): definir DB_CONN_MAX_AGE=0 ou 10 via env para reduzir risco de "too many clients".
-DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=60, cast=int)  # 1 minuto (reduzido de 10min)
+# ✅ FIX "too many clients": CONN_MAX_AGE=0 fecha a conexão após cada request/query.
+# Com valor > 0, cada worker/thread segura uma conexão; muitos workers = esgota max_connections do Postgres (ex.: Railway).
+# Em produção (Railway): use DB_CONN_MAX_AGE=0 (ou não defina, default é 0). Opcional: 10-30 só se tiver poucos workers.
+DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=0, cast=int)
 DATABASES['default']['OPTIONS'] = {
     'connect_timeout': 10,
     'options': '-c statement_timeout=30000'  # 30 seconds query timeout

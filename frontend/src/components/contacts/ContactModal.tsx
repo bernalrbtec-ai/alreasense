@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { PhoneInputWithDDD } from '../PhoneInputWithDDD'
-import { isValidE164 } from '../../lib/phoneDDD'
+import { isValidE164, rawInputToE164 } from '../../lib/phoneDDD'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 
@@ -108,10 +108,11 @@ export default function ContactModal({
           tag_ids: contact.tags ? contact.tags.map(t => typeof t === 'string' ? t : t.id) : []
         })
       } else {
-        // Novo contato - usar dados iniciais se fornecidos
+        // Novo contato - usar dados iniciais; normalizar telefone para E.164 para o dropdown país/DDD preencher
+        const phoneE164 = initialPhone ? (rawInputToE164(initialPhone) || (initialPhone.startsWith('+') ? initialPhone : `+${initialPhone.replace(/\D/g, '')}`)) : ''
         setFormData({
           name: initialName || '',
-          phone: initialPhone || '',
+          phone: phoneE164 || initialPhone || '',
           email: '',
           birth_date: '',
           gender: '',

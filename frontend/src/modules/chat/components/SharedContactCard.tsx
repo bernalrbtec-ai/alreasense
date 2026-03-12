@@ -50,23 +50,41 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
     name = 'Contato';
   }
   
-  // Formatar telefone para exibição
+  // Formatar telefone para exibição (país + DDD quando possível)
   const formatPhone = (phone: string) => {
     if (!phone) return '';
-    let clean = phone.replace(/[^\d+]/g, '');
-    
-    if (clean.startsWith('+55')) {
-      clean = clean.substring(3);
-    } else if (clean.startsWith('55') && clean.length >= 12) {
-      clean = clean.substring(2);
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return phone;
+
+    let country = '';
+    let rest = digits;
+
+    // Se vier com DDI Brasil (55...) e tamanho compatível, separar país + DDD
+    if (rest.startsWith('55') && rest.length >= 12) {
+      country = '55';
+      rest = rest.substring(2);
     }
-    
-    if (clean.length === 11) {
-      return `(${clean.substring(0, 2)}) ${clean.substring(2, 7)}-${clean.substring(7)}`;
-    } else if (clean.length === 10) {
-      return `(${clean.substring(0, 2)}) ${clean.substring(2, 6)}-${clean.substring(6)}`;
+
+    // Tentar extrair DDD + número (padrão Brasil)
+    if (rest.length === 11) {
+      const ddd = rest.substring(0, 2);
+      const part1 = rest.substring(2, 7);
+      const part2 = rest.substring(7);
+      const prefix = country ? `+${country} ` : '';
+      return `${prefix}(${ddd}) ${part1}-${part2}`;
     }
-    
+    if (rest.length === 10) {
+      const ddd = rest.substring(0, 2);
+      const part1 = rest.substring(2, 6);
+      const part2 = rest.substring(6);
+      const prefix = country ? `+${country} ` : '';
+      return `${prefix}(${ddd}) ${part1}-${part2}`;
+    }
+
+    // Fallback: mostrar com +DD se existir, senão string original
+    if (country) {
+      return `+${country} ${rest}`;
+    }
     return phone;
   };
   

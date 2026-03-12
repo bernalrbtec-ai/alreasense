@@ -262,6 +262,86 @@ class EvolutionProvider(WhatsAppSenderBase):
             logger.exception("Evolution send_location error: %s", e)
             return False, {'error': str(e), 'error_code': 'EXCEPTION'}
 
+    def send_contact(
+        self,
+        phone: str,
+        contacts: list,
+        quoted_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mensagem de contato (vCard) via Evolution sendContact.
+        contacts: lista de dicts com fullName, wuid, phoneNumber (ou raw: display_name/name, phone).
+
+        IMPORTANTE: request usa chave `contact` (array); `contactMessage`
+        aparece apenas na resposta da Evolution.
+        v1: envia apenas o primeiro contato.
+        """
+        from apps.chat.utils.contact_message import normalize_contact_for_provider
+
+        number = self._phone_clean(phone)
+        if not number:
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        if not contacts or not isinstance(contacts, list):
+            return False, {'error': 'lista de contatos vazia', 'error_code': 'INVALID_CONTACTS'}
+        normalized = []
+        for c in contacts:
+            if isinstance(c, dict) and (c.get('fullName') and c.get('wuid') and c.get('phoneNumber')):
+                full_name = (c.get('fullName') or '').strip() or 'Contato'
+                 # Evolution espera wuid como JID (<digits>@s.whatsapp.net)
+                wuid = str(c.get('wuid', '')).strip()
+                if wuid and '@' not in wuid:
+                    wuid = f'{wuid}@s.whatsapp.net'
+                normalized.append({
+                    'fullName': full_name[:255],
+                    'wuid': wuid,
+                    'phoneNumber': str(c.get('phoneNumber', '')).strip(),
+                })
+            else:
+                one = normalize_contact_for_provider(c)
+                if one:
+                    # Helper retorna wuid como dígitos; Evolution quer JID.
+                    wuid = str(one.get('wuid', '')).strip()
+                    if wuid and '@' not in wuid:
+                        one['wuid'] = f'{wuid}@s.whatsapp.net'
+                    normalized.append(one)
+        if not normalized:
+            return False, {'error': 'nenhum contato válido', 'error_code': 'INVALID_CONTACTS'}
+        contact_message = [normalized[0]]
+        payload = {
+            'number': number,
+            # Evolution v2: request usa `contact` (array de contatos)
+            'contact': contact_message,
+        }
+        if quoted_message_id and kwargs.get('quoted_remote_jid'):
+            payload['quoted'] = {
+                'key': {
+                    'id': quoted_message_id,
+                    'remoteJid': kwargs.get('quoted_remote_jid'),
+                },
+            }
+        endpoint = f"{self._base_url}/message/sendContact/{self._instance_name}"
+        logger.info(
+            "Enviando contato via Evolution (provider=evolution instance_id=%s)",
+            str(self.instance.id),
+        )
+        try:
+            r = requests.post(endpoint, json=payload, headers=self._headers(), timeout=15)
+            if r.status_code in (200, 201):
+                try:
+                    data = r.json() if r.text else {}
+                except Exception:
+                    return False, {
+                        'error': (r.text or '')[:500],
+                        'status_code': r.status_code,
+                        'error_code': 'INVALID_RESPONSE',
+                    }
+                return True, data
+            return False, {'error': (r.text or '')[:500], 'status_code': r.status_code, 'response': r.text}
+        except Exception as e:
+            logger.exception("Evolution send_contact error: %s", e)
+            return False, {'error': str(e), 'error_code': 'EXCEPTION'}
+
     def send_interactive_reply_buttons(
         self,
         phone: str,

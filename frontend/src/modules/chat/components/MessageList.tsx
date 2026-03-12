@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
 import ContactModal from '@/components/contacts/ContactModal';
+import { rawInputToE164 } from '@/lib/phoneDDD';
 import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
 import { LocationCard } from './LocationCard';
@@ -1662,7 +1663,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
             setContactToAdd(null);
           }}
           initialName={contactToAdd.name}
-          initialPhone={contactToAdd.phone}
+          initialPhone={rawInputToE164(contactToAdd.phone) || contactToAdd.phone}
           overlayClassName="z-[9999]"
           onSuccess={() => {
             setShowContactModal(false);

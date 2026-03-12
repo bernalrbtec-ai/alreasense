@@ -1268,8 +1268,75 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                         if not last_ok:
                             break
                 else:
-                    # Texto puro (sem anexo nem localização) ou mídia de fluxo (flow_media_url)
+                    # Texto puro (sem anexo nem localização), contato, mídia de fluxo (flow_media_url) ou interativo
                     meta = message.metadata or {}
+                    contact_message = meta.get('contact_message')
+                    if contact_message:
+                        from apps.chat.utils.contact_message import extract_contacts_list, normalize_contact_for_provider
+                        contacts_raw = extract_contacts_list(contact_message)
+                        contacts_normalized = []
+                        for c in contacts_raw:
+                            one = normalize_contact_for_provider(c)
+                            if one:
+                                contacts_normalized.append(one)
+                        if contacts_normalized:
+                            send_contact_fn = getattr(sender, 'send_contact', None)
+                            if callable(send_contact_fn):
+                                last_ok, last_data = await asyncio.to_thread(
+                                    send_contact_fn,
+                                    recipient_value,
+                                    [contacts_normalized[0]],
+                                    quoted_message_id,
+                                    quoted_remote_jid=quoted_remote_jid,
+                                    quoted_message_content=quoted_content,
+                                    quoted_from_me=bool(original_message and original_message.direction == 'outgoing'),
+                                    quoted_participant=quoted_participant,
+                                )
+                                if last_ok:
+                                    evo_id = _extract_provider_message_id(last_data, provider_kind)
+                                    if evo_id is not None:
+                                        close_old_connections()
+                                        await database_sync_to_async(
+                                            Message.objects.filter(id=message.id).update
+                                        )(message_id=evo_id)
+                                    close_old_connections()
+                                    await database_sync_to_async(
+                                        Message.objects.filter(id=message.id).update
+                                    )(status='sent', evolution_status='sent')
+                                    from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                                    msg_obj = await database_sync_to_async(
+                                        Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                                    )(id=message.id)
+                                    await database_sync_to_async(broadcast_message_received)(msg_obj)
+                                    await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                                    log.info("✅ [CHAT ENVIO] Contato enviado (provider=%s)", provider_kind)
+                                    return
+                                err_code = last_data.get('error_code')
+                                if err_code == 'NOT_SUPPORTED':
+                                    err_msg = 'Envio de contato não suportado por esta instância.'
+                                else:
+                                    err_msg = last_data.get('error', '') or str(last_data)
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message=(err_msg or 'Erro ao enviar contato')[:500])
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
+                                return
+                            else:
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message='Envio de contato não suportado por esta instância.')
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
+                                return
+                        else:
+                            log.warning("[CHAT ENVIO] contact_message presente mas nenhum contato válido após normalizar (message_id=%s)", message.id)
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(status='failed', error_message='Nenhum contato válido.')
+                            await database_sync_to_async(_broadcast_message_failed)(message.id)
+                            return
                     flow_url = (meta.get('flow_media_url') or '').strip()[:1024]
                     flow_type = (meta.get('flow_media_type') or '').strip().lower()
                     if flow_url and flow_type in ('image', 'document'):

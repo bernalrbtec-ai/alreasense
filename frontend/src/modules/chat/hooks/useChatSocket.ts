@@ -456,11 +456,20 @@ export function useChatSocket(conversationId?: string) {
     return chatWebSocketManager.sendChatMessageWithList(conversationId, bodyText, buttonText, sections, headerText, footerText, replyTo);
   }, [isConnected]);
 
+  const sendMessageWithContacts = useCallback(
+    (conversationId: string, contacts: Array<{ display_name: string; phone: string }>, replyTo?: string): boolean => {
+      if (!isConnected) return false;
+      return chatWebSocketManager.sendChatMessageWithContacts(conversationId, contacts, replyTo);
+    },
+    [isConnected],
+  );
+
   return {
     sendMessage,
     sendMessageAsTemplate,
     sendMessageWithButtons,
     sendMessageWithList,
+    sendMessageWithContacts,
     sendTyping,
     markAsSeen,
     isConnected,

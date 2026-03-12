@@ -66,6 +66,8 @@ EVO_BASE_URL=https://your-evolution-api.com
 EVO_API_KEY=your-evolution-api-key
 CORS_ALLOWED_ORIGINS=https://your-frontend.railway.app
 CSRF_TRUSTED_ORIGINS=https://your-frontend.railway.app
+# Evitar "too many clients" no Postgres (deixe 0 ou não defina; o default é 0)
+# DB_CONN_MAX_AGE=0
 ```
 
 #### Frontend Service

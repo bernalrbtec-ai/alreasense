@@ -846,7 +846,11 @@ class EvolutionWebhookView(APIView):
             logger.info(f"📥 [CONNECTIONS WEBHOOK] ====== PROCESSANDO MENSAGEM ======")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance do webhook: {instance_name}")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Message data keys: {list(message_data.keys()) if isinstance(message_data, dict) else 'not dict'}")
-            logger.info(f"📥 [CONNECTIONS WEBHOOK] Data completo: {data}")
+            # Log resumido (evita imprimir payload gigante com documentMessage/etc.)
+            _msg_inner = message_data.get('message', {}) if isinstance(message_data, dict) else {}
+            _msg_keys = list(_msg_inner.keys()) if isinstance(_msg_inner, dict) else []
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Payload resumo: event=%s instance=%s data_keys=%s message_keys=%s",
+                        data.get('event'), data.get('instance'), list(data.keys()), _msg_keys)
             
             # ✅ FIX: Se data é um objeto (não lista), processar diretamente
             # Se for lista (formato antigo), processar primeiro item

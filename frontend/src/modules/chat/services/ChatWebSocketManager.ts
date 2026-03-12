@@ -485,6 +485,36 @@ class ChatWebSocketManager {
   }
 
   /**
+   * Envia mensagem de contato (vCard) — destinatário pode salvar na agenda do WhatsApp.
+   */
+  public sendChatMessageWithContacts(
+    conversationId: string,
+    contacts: Array<{ display_name: string; phone: string }>,
+    replyTo?: string,
+  ): boolean {
+    if (!conversationId) {
+      console.error('❌ [MANAGER] conversationId é obrigatório');
+      return false;
+    }
+    if (!contacts || contacts.length === 0) {
+      console.error('❌ [MANAGER] Lista de contatos vazia');
+      return false;
+    }
+    const payload: Record<string, unknown> = {
+      type: 'send_message',
+      conversation_id: conversationId,
+      content: '',
+      include_signature: false,
+      is_internal: false,
+      contact_message: { contacts },
+    };
+    if (replyTo) {
+      payload.reply_to = replyTo;
+    }
+    return this.sendMessage(payload);
+  }
+
+  /**
    * Envia evento de digitação
    */
   public sendTyping(isTyping: boolean): void {

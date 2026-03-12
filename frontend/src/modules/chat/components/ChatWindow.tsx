@@ -54,7 +54,7 @@ export function ChatWindow() {
   const activeConversationId = activeConversation?.id;
   
   // 🔌 Conectar WebSocket para esta conversa (usa manager global) - DEPOIS de inicializar estados
-  const { isConnected, sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendTyping } = useChatSocket(activeConversationId);
+  const { isConnected, sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendMessageWithContacts, sendTyping } = useChatSocket(activeConversationId);
   // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
   usePollingFallback(activeConversationId);
 
@@ -1032,6 +1032,7 @@ export function ChatWindow() {
           sendMessageAsTemplate={sendMessageAsTemplate}
           sendMessageWithButtons={sendMessageWithButtons}
           sendMessageWithList={sendMessageWithList}
+          sendMessageWithContacts={sendMessageWithContacts}
           sendTyping={openInSpyMode ? noopTyping : sendTyping}
           isConnected={isConnected}
             conversationId={conversationId}
