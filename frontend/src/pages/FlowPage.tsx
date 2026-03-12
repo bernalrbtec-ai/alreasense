@@ -17,6 +17,7 @@ import {
   Zap,
   Image as ImageIcon,
   FileText,
+  Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
@@ -61,7 +62,7 @@ interface Flow {
 interface FlowNode {
   id: string
   flow: string
-  node_type: 'list' | 'buttons' | 'message' | 'image' | 'file'
+  node_type: 'list' | 'buttons' | 'message' | 'image' | 'file' | 'delay'
   name: string
   order: number
   is_start: boolean
@@ -74,6 +75,7 @@ interface FlowNode {
   media_url?: string
   position_x?: number | null
   position_y?: number | null
+  delay_seconds?: number | null
   edges_out?: FlowEdge[]
 }
 
@@ -100,21 +102,23 @@ type ButtonForm = { id: string; title: string }
 const defaultSections: SectionForm[] = [{ title: 'Opções', rows: [{ id: 'op1', title: 'Opção 1', description: '' }, { id: 'op2', title: 'Opção 2', description: '' }] }]
 const defaultButtons: ButtonForm[] = [{ id: 'btn1', title: 'Botão 1' }, { id: 'btn2', title: 'Botão 2' }]
 
-const PALETTE_ITEMS: { id: string; label: string; nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file'; isStart: boolean }[] = [
+const PALETTE_ITEMS: { id: string; label: string; nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay'; isStart: boolean }[] = [
   { id: 'start', label: 'Início', nodeType: 'message', isStart: true },
   { id: 'message', label: 'Mensagem', nodeType: 'message', isStart: false },
   { id: 'list', label: 'Lista', nodeType: 'list', isStart: false },
   { id: 'buttons', label: 'Botões', nodeType: 'buttons', isStart: false },
   { id: 'image', label: 'Imagem', nodeType: 'image', isStart: false },
   { id: 'file', label: 'Arquivo', nodeType: 'file', isStart: false },
+  { id: 'delay', label: 'Timer', nodeType: 'delay', isStart: false },
 ]
 
-function PaletteItemIcon({ nodeType }: { nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' }) {
+function PaletteItemIcon({ nodeType }: { nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay' }) {
   const iconClass = 'h-4 w-4 shrink-0'
   if (nodeType === 'list') return <List className={`${iconClass} text-accent-600 dark:text-accent-400`} />
   if (nodeType === 'buttons') return <MessageSquare className={`${iconClass} text-accent-600 dark:text-accent-400`} />
   if (nodeType === 'image') return <ImageIcon className={`${iconClass} text-gray-500 dark:text-gray-400`} />
   if (nodeType === 'file') return <FileText className={`${iconClass} text-gray-500 dark:text-gray-400`} />
+  if (nodeType === 'delay') return <Clock className={`${iconClass} text-amber-600 dark:text-amber-400`} />
   return <MessageSquare className={`${iconClass} text-gray-500 dark:text-gray-400`} />
 }
 
@@ -170,7 +174,7 @@ export default function FlowPage() {
   const [nodeFormOpen, setNodeFormOpen] = useState(false)
   const [editingNode, setEditingNode] = useState<FlowNode | null>(null)
   const [nodeName, setNodeName] = useState('')
-  const [nodeType, setNodeType] = useState<'list' | 'buttons'>('list')
+  const [nodeType, setNodeType] = useState<'list' | 'buttons' | 'message' | 'image' | 'file' | 'delay'>('list')
   const [nodeOrder, setNodeOrder] = useState(0)
   const [nodeIsStart, setNodeIsStart] = useState(false)
   const [nodeBodyText, setNodeBodyText] = useState('')
@@ -180,6 +184,7 @@ export default function FlowPage() {
   const [nodeSections, setNodeSections] = useState<SectionForm[]>(defaultSections)
   const [nodeButtons, setNodeButtons] = useState<ButtonForm[]>(defaultButtons)
   const [nodeMediaUrl, setNodeMediaUrl] = useState('')
+  const [nodeDelaySeconds, setNodeDelaySeconds] = useState(5)
   const [savingNode, setSavingNode] = useState(false)
   const [pendingDropPosition, setPendingDropPosition] = useState<{ x: number; y: number } | null>(null)
   const [isDraggingFromPalette, setIsDraggingFromPalette] = useState(false)
@@ -367,9 +372,9 @@ export default function FlowPage() {
 
   /** Sugere nome único para nova etapa (ex: mensagem_1, lista_1, etapa_2). */
   const suggestNodeName = useCallback(
-    (nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean): string => {
+    (nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay', isStart: boolean): string => {
       const nodes = flowDetail?.nodes ?? []
-      const prefix = isStart ? 'inicio' : { message: 'mensagem', list: 'lista', buttons: 'botoes', image: 'imagem', file: 'arquivo' }[nodeType]
+      const prefix = isStart ? 'inicio' : { message: 'mensagem', list: 'lista', buttons: 'botoes', image: 'imagem', file: 'arquivo', delay: 'timer' }[nodeType]
       const existing = new Set(nodes.map((n) => n.name))
       for (let i = 1; i <= (nodes.length + 5); i++) {
         const name = `${prefix}_${i}`
@@ -399,12 +404,13 @@ export default function FlowPage() {
     setNodeSections(defaultSections)
     setNodeButtons(defaultButtons)
     setNodeMediaUrl('')
+    setNodeDelaySeconds(5)
     setNodeFormOpen(true)
   }
 
   /** Abre o modal "Adicionar etapa" após soltar um bloco da paleta no canvas; POST só ao salvar. */
   const openAddNodeFromDrop = useCallback(
-    (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean) => {
+    (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay', isStart: boolean) => {
       setIsDraggingFromPalette(false)
       const nodes = flowDetail?.nodes ?? []
       const nextOrder = nodes.length === 0 ? 0 : Math.max(...nodes.map((n) => n.order), 0) + 1
@@ -440,6 +446,7 @@ export default function FlowPage() {
     setNodeSections(parseSectionsSafe(n.sections))
     setNodeButtons(parseButtonsSafe(n.buttons))
     setNodeMediaUrl(n.media_url || '')
+    setNodeDelaySeconds(typeof n.delay_seconds === 'number' ? n.delay_seconds : 5)
     setNodeFormOpen(true)
   }
 
@@ -508,6 +515,13 @@ export default function FlowPage() {
       toast.error('URL da mídia é obrigatória para este tipo')
       return
     }
+    if (nodeType === 'delay') {
+      const sec = parseInt(String(nodeDelaySeconds), 10)
+      if (Number.isNaN(sec) || sec < 1 || sec > 86400) {
+        toast.error('Timer: informe entre 1 e 86400 segundos (máx. 24h)')
+        return
+      }
+    }
     setSavingNode(true)
     try {
       const payload: Record<string, unknown> = {
@@ -524,6 +538,7 @@ export default function FlowPage() {
         buttons: nodeType === 'buttons' ? buttons : [],
       }
       if (nodeType === 'image' || nodeType === 'file') payload.media_url = nodeMediaUrl.trim()
+      if (nodeType === 'delay') payload.delay_seconds = Math.min(86400, Math.max(1, parseInt(String(nodeDelaySeconds), 10) || 5))
       if (pendingDropPosition) {
         payload.position_x = pendingDropPosition.x
         payload.position_y = pendingDropPosition.y
@@ -571,6 +586,8 @@ export default function FlowPage() {
       if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
     } else if (fromNode?.node_type === 'message') {
       suggestedOptionId = '1' // texto que o usuário deve digitar para avançar
+    } else if (fromNode?.node_type === 'delay') {
+      suggestedOptionId = 'next' // timer tem uma única saída
     }
     if (!suggestedOptionId) suggestedOptionId = 'opcao1'
     setEditingEdge(null)
@@ -595,6 +612,8 @@ export default function FlowPage() {
         if (fromNode.buttons[0]?.id) suggestedOptionId = fromNode.buttons[0].id
       } else if (fromNode?.node_type === 'message') {
         suggestedOptionId = '1'
+      } else if (fromNode?.node_type === 'delay') {
+        suggestedOptionId = 'next'
       }
       setEditingEdge(null)
       setEdgeFromNodeId(fromNodeId)
@@ -1018,7 +1037,8 @@ export default function FlowPage() {
                         <span className="flex items-center gap-2">
                           {n.node_type === 'list' && <List className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
                           {n.node_type === 'buttons' && <MessageSquare className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
-                          {(n.node_type === 'message' || !['list', 'buttons', 'image', 'file'].includes(n.node_type)) && <MessageSquare className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
+                          {n.node_type === 'delay' && <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />}
+                          {(n.node_type === 'message' || !['list', 'buttons', 'image', 'file', 'delay'].includes(n.node_type)) && <MessageSquare className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
                           {n.node_type === 'image' && <ImageIcon className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
                           {n.node_type === 'file' && <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
                           <span className="font-medium text-gray-900 dark:text-gray-100">{n.name}</span>
@@ -1125,15 +1145,30 @@ export default function FlowPage() {
                 <select
                   className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
                   value={nodeType}
-                  onChange={(e) => setNodeType(e.target.value as 'list' | 'buttons' | 'message' | 'image' | 'file')}
+                  onChange={(e) => setNodeType(e.target.value as 'list' | 'buttons' | 'message' | 'image' | 'file' | 'delay')}
                 >
                   <option value="message">Mensagem (texto)</option>
                   <option value="list">Lista</option>
                   <option value="buttons">Botões</option>
                   <option value="image">Imagem</option>
                   <option value="file">Arquivo</option>
+                  <option value="delay">Timer (espera em segundos)</option>
                 </select>
               </div>
+              {nodeType === 'delay' && (
+                <div>
+                  <Label>Espera (segundos)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={86400}
+                    value={nodeDelaySeconds}
+                    onChange={(e) => setNodeDelaySeconds(parseInt(e.target.value, 10) || 1)}
+                    placeholder="5"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">O fluxo aguarda esse tempo e segue para a próxima etapa (1 a 86400 s = máx. 24h).</p>
+                </div>
+              )}
               <div className="flex gap-4">
                 <div>
                   <Label>Ordem</Label>

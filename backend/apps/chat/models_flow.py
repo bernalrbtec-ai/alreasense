@@ -62,12 +62,14 @@ class FlowNode(models.Model):
     NODE_TYPE_FILE = "file"
     NODE_TYPE_LIST = "list"
     NODE_TYPE_BUTTONS = "buttons"
+    NODE_TYPE_DELAY = "delay"
     NODE_TYPE_CHOICES = [
         (NODE_TYPE_MESSAGE, "Mensagem (texto)"),
         (NODE_TYPE_IMAGE, "Imagem"),
         (NODE_TYPE_FILE, "Arquivo"),
         (NODE_TYPE_LIST, "Lista"),
         (NODE_TYPE_BUTTONS, "Botões"),
+        (NODE_TYPE_DELAY, "Timer (espera em segundos)"),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -131,6 +133,14 @@ class FlowNode(models.Model):
     # Posição no canvas (arrastar e soltar); null = usar layout por order
     position_x = models.FloatField(null=True, blank=True, verbose_name="Posição X")
     position_y = models.FloatField(null=True, blank=True, verbose_name="Posição Y")
+
+    # Timer (só para node_type=delay): esperar N segundos antes de ir para o próximo nó
+    delay_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Espera (segundos)",
+        help_text="Para tipo timer: quantos segundos esperar antes da próxima etapa.",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

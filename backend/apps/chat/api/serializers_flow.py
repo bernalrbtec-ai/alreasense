@@ -55,6 +55,7 @@ class FlowNodeSerializer(serializers.ModelSerializer):
             "media_url",
             "position_x",
             "position_y",
+            "delay_seconds",
             "edges_out",
             "created_at",
             "updated_at",
@@ -83,6 +84,7 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             "media_url",
             "position_x",
             "position_y",
+            "delay_seconds",
             "created_at",
             "updated_at",
         ]
@@ -168,8 +170,16 @@ class FlowNodeWriteSerializer(serializers.ModelSerializer):
             for i, b in enumerate(buttons):
                 if not isinstance(b, dict) or not b.get("id") or not b.get("title"):
                     raise serializers.ValidationError({"buttons": f"Botão {i + 1}: use id e title."})
+        elif node_type == FlowNode.NODE_TYPE_DELAY:
+            sec = attrs.get("delay_seconds") if "delay_seconds" in attrs else getattr(self.instance, "delay_seconds", None)
+            if sec is None:
+                raise serializers.ValidationError({"delay_seconds": "Timer exige espera em segundos (1 a 86400)."})
+            sec = int(sec)
+            if sec < 1 or sec > 86400:
+                raise serializers.ValidationError({"delay_seconds": "Use entre 1 e 86400 segundos (máx. 24h)."})
+            attrs["delay_seconds"] = sec
         else:
-            valid_types = [FlowNode.NODE_TYPE_MESSAGE, FlowNode.NODE_TYPE_IMAGE, FlowNode.NODE_TYPE_FILE, FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS]
+            valid_types = [FlowNode.NODE_TYPE_MESSAGE, FlowNode.NODE_TYPE_IMAGE, FlowNode.NODE_TYPE_FILE, FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS, FlowNode.NODE_TYPE_DELAY]
             if not node_type:
                 raise serializers.ValidationError({"node_type": "Tipo do nó é obrigatório."})
             if node_type not in valid_types:

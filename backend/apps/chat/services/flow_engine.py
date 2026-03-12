@@ -4,6 +4,8 @@ Fluxo por Inbox ou departamento; coexistência com Welcome Menu.
 """
 import logging
 import re
+import threading
+import time
 from typing import Optional, Dict, Any
 
 from django.db import transaction
@@ -190,6 +192,95 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
         return None
 
 
+def _get_single_next_edge(node: FlowNode):
+    """Se o nó tiver exatamente uma aresta 'próxima etapa' com to_node, retorna essa aresta; senão None."""
+    if not node or not node.pk:
+        return None
+    edges = list(
+        FlowEdge.objects.filter(
+            from_node_id=node.pk,
+            target_action=FlowEdge.TARGET_ACTION_NEXT,
+        ).exclude(to_node_id__isnull=True).select_related("to_node")[:2]
+    )
+    return edges[0] if len(edges) == 1 else None
+
+
+def _run_delay_advance(conversation_id: str, delay_node_id: str, delay_seconds: int) -> None:
+    """
+    Executado após delay_seconds (em thread): avança do nó timer para o próximo e envia.
+    Usa conversation_id para recarregar do DB (thread pode rodar depois do request).
+    """
+    time.sleep(max(1, min(delay_seconds, 86400)))  # entre 1s e 24h
+    try:
+        conversation = Conversation.objects.filter(pk=conversation_id).first()
+        if not conversation:
+            return
+        state = (
+            ConversationFlowState.objects.filter(conversation_id=conversation_id)
+            .select_related("flow", "current_node")
+            .first()
+        )
+        if not state or str(state.current_node_id) != str(delay_node_id):
+            return
+        current = state.current_node
+        if not current or current.node_type != FlowNode.NODE_TYPE_DELAY:
+            return
+        edge = _get_single_next_edge(current)
+        if not edge or not edge.to_node_id:
+            return
+        next_node = edge.to_node
+        state.current_node_id = edge.to_node_id
+        state.save(update_fields=["current_node_id"])
+        sent = send_flow_node(conversation, next_node)
+        if sent:
+            logger.info("[FLOW] Timer concluído, avançou para nó %s conversation=%s", next_node.name, conversation_id)
+            _auto_advance_message_chain(conversation, state)
+    except Exception as e:
+        logger.exception("[FLOW] Erro ao avançar após timer: %s", e)
+
+
+def _auto_advance_message_chain(conversation: Conversation, state: ConversationFlowState, max_steps: int = 20) -> None:
+    """
+    Se o nó atual for mensagem e tiver exatamente uma aresta para próxima etapa, avança e envia
+    esse nó (sem exigir resposta do usuário). Se o próximo for nó timer, agenda espera e retorna.
+    Repete até encontrar nó que não seja mensagem/timer ou que tenha 0 ou mais de uma aresta.
+    """
+    for _ in range(max_steps):
+        state.refresh_from_db()
+        current = (
+            FlowNode.objects.filter(pk=state.current_node_id)
+            .select_related("flow")
+            .first()
+        )
+        if not current:
+            break
+        if current.node_type != FlowNode.NODE_TYPE_MESSAGE:
+            break
+        edge = _get_single_next_edge(current)
+        if not edge or not edge.to_node_id:
+            break
+        next_node = edge.to_node
+        state.current_node_id = edge.to_node_id
+        state.save(update_fields=["current_node_id"])
+
+        if next_node.node_type == FlowNode.NODE_TYPE_DELAY:
+            sec = (getattr(next_node, "delay_seconds", None) or 0)
+            if sec < 1:
+                sec = 1
+            logger.info("[FLOW] Timer de %s s agendado, nó %s conversation=%s", sec, next_node.name, conversation.id)
+            t = threading.Thread(
+                target=_run_delay_advance,
+                args=(str(conversation.id), str(next_node.id), sec),
+                daemon=True,
+            )
+            t.start()
+            return
+        sent = send_flow_node(conversation, next_node)
+        if not sent:
+            break
+        logger.info("[FLOW] Auto-advance (mensagem) para nó %s conversation=%s", next_node.name, conversation.id)
+
+
 def process_flow_reply(conversation: Conversation, message: Message) -> bool:
     """
     Processa resposta a lista/botão ou texto quando a conversa está em um fluxo.
@@ -273,6 +364,7 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
                     state.current_node_id = edge.to_node_id
                     state.save(update_fields=["current_node_id"])
                     logger.info("[FLOW] Avançou para nó %s conversation=%s", edge.to_node.name, conversation.id)
+                    _auto_advance_message_chain(conversation, state)
                     return True
                 return False
 
@@ -346,6 +438,19 @@ def try_send_flow_start(conversation: Conversation) -> bool:
     if not created:
         return False  # Já estava em fluxo (outro request criou o estado)
 
+    if start_node.node_type == FlowNode.NODE_TYPE_DELAY:
+        sec = getattr(start_node, "delay_seconds", None) or 0
+        if sec < 1:
+            sec = 1
+        logger.info("[FLOW] Fluxo iniciado com timer de %s s conversation=%s flow=%s", sec, conversation.id, flow.name)
+        t = threading.Thread(
+            target=_run_delay_advance,
+            args=(str(conversation.id), str(start_node.id), sec),
+            daemon=True,
+        )
+        t.start()
+        return True
+
     message = send_flow_node(conversation, start_node)
     if not message:
         try:
@@ -355,5 +460,6 @@ def try_send_flow_start(conversation: Conversation) -> bool:
         logger.warning("[FLOW] Falha ao enfileirar nó inicial; estado removido conversation=%s", conversation.id)
         return False
 
+    _auto_advance_message_chain(conversation, state)
     logger.info("[FLOW] Fluxo iniciado conversation=%s flow=%s", conversation.id, flow.name)
     return True

@@ -73,6 +73,11 @@ class FlowViewSet(viewsets.ModelViewSet):
         start_node = get_start_node(flow)
         if not start_node:
             return Response({"detail": "Fluxo sem nó inicial"}, status=status.HTTP_400_BAD_REQUEST)
+        if start_node.node_type == FlowNode.NODE_TYPE_DELAY:
+            return Response(
+                {"detail": "O fluxo começa com uma etapa timer. Para teste, use um nó inicial do tipo mensagem, lista ou botões."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         from apps.chat.models import Conversation
         from apps.notifications.models import WhatsAppInstance
         instance = WhatsAppInstance.objects.filter(tenant=request.user.tenant, is_active=True).first()

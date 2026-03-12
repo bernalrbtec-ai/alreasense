@@ -159,7 +159,7 @@ interface FlowCanvasProps {
   onNodeClick?: (nodeId: string) => void
   onNodeDragStop?: (nodeId: string, position: { x: number; y: number }) => void
   onConnect?: (params: { source: string; target: string }) => void
-  onDrop?: (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file', isStart: boolean) => void
+  onDrop?: (position: { x: number; y: number }, nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay', isStart: boolean) => void
   /** Altura do canvas em px (default 400). */
   height?: number
   className?: string
@@ -232,9 +232,9 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
     (e: React.DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
-      const nodeType = (e.dataTransfer.getData(FLOW_DROP_TYPE) || e.dataTransfer.getData('text/plain')) as 'message' | 'list' | 'buttons' | 'image' | 'file' | ''
+      const nodeType = (e.dataTransfer.getData(FLOW_DROP_TYPE) || e.dataTransfer.getData('text/plain')) as 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay' | ''
       const isStart = e.dataTransfer.getData(FLOW_DROP_START) === '1'
-      if (!nodeType || !['message', 'list', 'buttons', 'image', 'file'].includes(nodeType)) return
+      if (!nodeType || !['message', 'list', 'buttons', 'image', 'file', 'delay'].includes(nodeType)) return
       // ref pode ser null com canvas vazio no primeiro frame; fallback (0,0) abre o modal e o usuário pode ajustar
       const position = reactFlowRef.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY }) ?? { x: 0, y: 0 }
       onDrop?.(position, nodeType, isStart)
