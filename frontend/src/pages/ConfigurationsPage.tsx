@@ -2954,21 +2954,27 @@ export default function ConfigurationsPage() {
       )}
 
       {isModelsGatewayModalOpen && aiSettings && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="gateways-webhooks-modal-title">
           <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
             <div
               className="fixed inset-0 bg-black/50 dark:bg-black/60 transition-opacity"
               onClick={() => setIsModelsGatewayModalOpen(false)}
+              aria-hidden
             />
 
-            <div className="relative transform overflow-hidden rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
-              <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                <h3 className="text-lg font-medium leading-6 text-gray-900 dark:text-gray-100 mb-4">
-                  Gateways e Webhooks
-                </h3>
+            <div className="relative transform overflow-hidden rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg border border-gray-200 dark:border-gray-600">
+              <div className="px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                    <Server className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <h3 id="gateways-webhooks-modal-title" className="text-lg font-semibold leading-6 text-gray-900 dark:text-gray-100">
+                    Gateways e Webhooks
+                  </h3>
+                </div>
                 <div className="space-y-5">
                   <div>
-                    <Label htmlFor="n8n_models_webhook_url">Webhook de modelos</Label>
+                    <Label htmlFor="n8n_models_webhook_url" className="text-gray-700 dark:text-gray-300">Webhook de modelos</Label>
                     <Input
                       id="n8n_models_webhook_url"
                       type="text"
@@ -2979,6 +2985,7 @@ export default function ConfigurationsPage() {
                         setModelsGatewayTestError(null)
                       }}
                       placeholder="https://integrador.alrea.ao/webhook/models"
+                      className="mt-1"
                     />
                     <div className="flex items-center justify-between mt-3">
                       <Button
@@ -2987,26 +2994,33 @@ export default function ConfigurationsPage() {
                         onClick={handleTestModelsGateway}
                         disabled={aiModelsLoading}
                       >
-                        {aiModelsLoading ? 'Testando...' : 'Testar'}
+                        {aiModelsLoading ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Testando…
+                          </>
+                        ) : (
+                          'Testar'
+                        )}
                       </Button>
                       {modelsGatewayTested && !modelsGatewayTestError ? (
-                        <span className="text-xs text-green-600">Consulta realizada.</span>
+                        <span className="text-xs text-green-600 dark:text-green-400">Consulta realizada.</span>
                       ) : null}
                     </div>
                     {modelsGatewayTestError ? (
-                      <p className="text-xs text-red-600 mt-2">{modelsGatewayTestError}</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-2">{modelsGatewayTestError}</p>
                     ) : null}
                   </div>
 
                   <div>
-                    <Label htmlFor="n8n_audio_webhook_url">Webhook de transcrição</Label>
+                    <Label htmlFor="n8n_audio_webhook_url" className="text-gray-700 dark:text-gray-300">Webhook de transcrição</Label>
                     <div className="flex gap-2 mt-1">
                       <Input
                         id="n8n_audio_webhook_url"
                         type="text"
                         value={aiSettings.n8n_audio_webhook_url}
                         onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
-                        className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
+                        className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500 dark:border-red-400' : ''}
                         placeholder="https://integrador.alrea.ao/webhook/transcribe"
                       />
                       <Button
@@ -3023,19 +3037,19 @@ export default function ConfigurationsPage() {
                       </Button>
                     </div>
                     {aiSettingsErrors.n8n_audio_webhook_url && (
-                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
                     )}
                   </div>
 
                   <div>
-                    <Label htmlFor="n8n_ai_webhook_url">Webhook do Gateway IA</Label>
+                    <Label htmlFor="n8n_ai_webhook_url" className="text-gray-700 dark:text-gray-300">Webhook do Gateway IA</Label>
                     <div className="flex gap-2 mt-1">
                       <Input
                         id="n8n_ai_webhook_url"
                         type="text"
                         value={aiSettings.n8n_ai_webhook_url}
                         onChange={(e) => setAiSettings({ ...aiSettings, n8n_ai_webhook_url: e.target.value })}
-                        className={aiSettingsErrors.n8n_ai_webhook_url ? 'border-red-500' : ''}
+                        className={aiSettingsErrors.n8n_ai_webhook_url ? 'border-red-500 dark:border-red-400' : ''}
                         placeholder="https://integrador.alrea.ao/webhook/gateway-ia"
                       />
                       <Button
@@ -3043,25 +3057,33 @@ export default function ConfigurationsPage() {
                         onClick={() => handleTestWebhook('ai')}
                         disabled={webhookTesting.ai || !aiSettings.n8n_ai_webhook_url}
                       >
-                        {webhookTesting.ai ? 'Testando...' : 'Testar'}
+                        {webhookTesting.ai ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Testando…
+                          </>
+                        ) : (
+                          'Testar'
+                        )}
                       </Button>
                     </div>
                     {aiSettingsErrors.n8n_ai_webhook_url && (
-                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_ai_webhook_url}</p>
+                      <p className="text-xs text-red-600 dark:text-red-400 mt-1">{aiSettingsErrors.n8n_ai_webhook_url}</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+              <div className="bg-gray-50 dark:bg-gray-700/50 px-4 py-3 sm:flex sm:flex-row-reverse sm:gap-2 sm:px-6 border-t border-gray-200 dark:border-gray-600">
                 <Button
                   onClick={() => {
                     setIsModelsGatewayModalOpen(false)
                     handleSaveAiSettings()
                   }}
                   disabled={!modelsGatewayTested || aiSettingsSaving || aiModelsLoading}
-                  className="w-full sm:w-auto sm:ml-3"
+                  className="w-full sm:w-auto"
                 >
+                  {aiSettingsSaving ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : null}
                   Salvar
                 </Button>
                 <Button

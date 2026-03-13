@@ -2488,16 +2488,31 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             update_fields_list.append('instance_friendly_name')
             needs_update = True
         
+        # ✅ Não tirar conversa do Inbox quando a BIA (secretária) está ativa: ela responde no Inbox
         if not created and default_department and not conversation.department and not from_me:
-            logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name} (mensagem incoming)")
-            conversation.department = default_department
-            update_fields_list.append('department')
-            needs_update = True
-            
-            # Mudar status de 'pending' para 'open' ao atribuir departamento
-            if conversation.status == 'pending':
-                conversation.status = 'open'
-                update_fields_list.append('status')
+            inbox_has_secretary = False
+            try:
+                from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
+                inbox_has_secretary = (
+                    TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                )
+            except Exception as _e:
+                logger.debug(
+                    "📋 [ROUTING] Verificação secretária Inbox falhou (aplicando default_department): %s",
+                    _e,
+                )
+            if inbox_has_secretary:
+                logger.info(f"📋 [ROUTING] Inbox com secretária ativa: mantendo conversa no Inbox (não aplicar default_department)")
+            else:
+                logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name} (mensagem incoming)")
+                conversation.department = default_department
+                update_fields_list.append('department')
+                needs_update = True
+                # Mudar status de 'pending' para 'open' ao atribuir departamento
+                if conversation.status == 'pending':
+                    conversation.status = 'open'
+                    update_fields_list.append('status')
         
         # ✅ FIX: Se conversa foi criada COM departamento, garantir status (não para individual Inbox)
         if created and default_department and not use_inbox_for_new:
