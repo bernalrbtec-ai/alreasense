@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2, Edit } from 'lucide-react'
+import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2, Edit, FileText } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Label } from '../components/ui/Label'
@@ -488,7 +488,7 @@ export default function BiaAdminPage() {
         id="secretary-test-model"
         value={effectiveModel}
         onChange={(e) => setTestSelectedModel(e.target.value)}
-        className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800"
+        className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800"
         disabled={aiModelsLoading}
       >
         {aiModelOptions.length === 0 ? (
@@ -501,7 +501,7 @@ export default function BiaAdminPage() {
       </select>
       {aiModelsLoading && <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Carregando modelos...</p>}
       {!aiModelsLoading && aiModelOptions.length === 0 && aiSettings?.n8n_ai_webhook_url && (
-        <p className="text-xs text-amber-600 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
+        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Configure o webhook de modelos em Configurações &gt; IA.</p>
       )}
     </div>
   )
@@ -514,7 +514,7 @@ export default function BiaAdminPage() {
           value={testMessageConfig}
           onChange={(e) => setTestMessageConfig(e.target.value)}
           rows={2}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           placeholder="Digite uma mensagem para testar..."
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -523,11 +523,11 @@ export default function BiaAdminPage() {
             }
           }}
         />
-        <Button onClick={() => handleSendTest('config')} disabled={testLoadingConfig || !testMessageConfig.trim()}>
+        <Button onClick={() => handleSendTest('config')} disabled={testLoadingConfig || !testMessageConfig.trim()} className="flex-shrink-0" title="Enviar">
           {testLoadingConfig ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
-      {testErrorConfig && <p className="text-sm text-red-600">{testErrorConfig}</p>}
+      {testErrorConfig && <p className="text-sm text-red-600 dark:text-red-400">{testErrorConfig}</p>}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-gray-500 dark:text-gray-400">Histórico do teste</span>
         {testMessagesConfig.length > 0 && (
@@ -574,7 +574,7 @@ export default function BiaAdminPage() {
           value={testMessageHomolog}
           onChange={(e) => setTestMessageHomolog(e.target.value)}
           rows={2}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           placeholder="Digite uma mensagem para testar..."
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -583,11 +583,11 @@ export default function BiaAdminPage() {
             }
           }}
         />
-        <Button onClick={() => handleSendTest('homolog')} disabled={testLoadingHomolog || !testMessageHomolog.trim()}>
+        <Button onClick={() => handleSendTest('homolog')} disabled={testLoadingHomolog || !testMessageHomolog.trim()} className="flex-shrink-0" title="Enviar">
           {testLoadingHomolog ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
-      {testErrorHomolog && <p className="text-sm text-red-600">{testErrorHomolog}</p>}
+      {testErrorHomolog && <p className="text-sm text-red-600 dark:text-red-400">{testErrorHomolog}</p>}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-gray-500 dark:text-gray-400">Histórico do teste</span>
         {testMessagesHomolog.length > 0 && (
@@ -647,7 +647,7 @@ export default function BiaAdminPage() {
           value={testSystemPrompt}
           onChange={(e) => setTestSystemPrompt(e.target.value)}
           rows={2}
-          className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+          className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           placeholder="Deixe vazio para usar o prompt da Configuração"
         />
       </div>
@@ -851,14 +851,22 @@ export default function BiaAdminPage() {
 
           {/* Prompt da Secretária e área de teste abaixo */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card className="p-6">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Prompt da Secretária</h2>
+            <Card className="p-6 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Prompt da Secretária</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Instruções do sistema</p>
+                </div>
+              </div>
               {secretaryLoading || aiSettingsLoading ? (
                 <LoadingSpinner />
               ) : (
                 <div className="space-y-4">
                   <div>
-                    <Label htmlFor="secretary-prompt">Instruções do sistema</Label>
+                    <Label htmlFor="secretary-prompt" className="text-gray-700 dark:text-gray-300">Conteúdo do prompt</Label>
                     <textarea
                       id="secretary-prompt"
                       value={promptDraft}
@@ -867,7 +875,7 @@ export default function BiaAdminPage() {
                         if (saveError) setSaveError(null)
                       }}
                       rows={12}
-                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm bg-white dark:bg-gray-800 focus:border-blue-500 focus:ring-blue-500"
+                      className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:ring-blue-500"
                       placeholder="Instruções do sistema para a Secretária..."
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
@@ -877,16 +885,23 @@ export default function BiaAdminPage() {
                       {secretarySaving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
                       Salvar prompt
                     </Button>
-                    {saveError && <p className="text-sm text-red-600 mt-2">{saveError}</p>}
+                    {saveError && <p className="text-sm text-red-600 dark:text-red-400 mt-2">{saveError}</p>}
                   </div>
                 </div>
               )}
             </Card>
-            <Card className="p-6">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">AREA DE TESTE DO MODELO</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                O teste usa o webhook definido em Configurações &gt; IA.
-              </p>
+            <Card className="p-6 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+                  <FlaskConical className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Área de teste do modelo</h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    O teste usa o webhook definido em Configurações &gt; IA.
+                  </p>
+                </div>
+              </div>
               {aiSettingsLoading ? (
                 <LoadingSpinner />
               ) : (
@@ -936,7 +951,7 @@ export default function BiaAdminPage() {
                 </p>
               )}
               {!selectedConversationId && !conversationsLoading && (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                <p className="text-xs text-amber-700 dark:text-amber-200 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
                   Nenhuma conversa selecionada. O teste usará só o prompt de sistema.
                 </p>
               )}

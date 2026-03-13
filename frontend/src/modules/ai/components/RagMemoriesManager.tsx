@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
-import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers, Expand, Star } from 'lucide-react'
+import { Check, X, Edit, RefreshCw, Search, FileText, ChevronDown, ChevronRight, Save, Layers, Expand, Star, ClipboardList } from 'lucide-react'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
@@ -700,22 +700,28 @@ export function RagMemoriesManager() {
         )}
       </Card>
 
-      <Card className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Contexto</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Resumos de conversas para revisão. Aprove para enviar ao repositório de memória (Secretária). Reprovar remove da memória se já estava aprovado.
-            </p>
+      <Card className="p-6 border border-gray-200 dark:border-gray-600">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-5">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+              <ClipboardList className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Revisão de resumos</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-xl">
+                Resumos de conversas para revisão. <strong>Aprove</strong> para enviar ao repositório de memória (Secretária). <strong>Reprovar</strong> remove da memória se já estava aprovado.
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-1 ml-4 shrink-0">
-            <div className="flex gap-2">
+          <div className="flex flex-col gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setConsolidateByContactModalOpen(true)}
                 disabled={!contactPhone.trim()}
                 title={!contactPhone.trim() ? 'Informe o telefone do contato no filtro' : 'Consolidar todos os aprovados deste contato'}
+                className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300"
               >
                 <Layers className="h-4 w-4 mr-1" />
                 Consolidar este contato
@@ -725,11 +731,12 @@ export function RagMemoriesManager() {
                 size="sm"
                 onClick={() => setConsolidateAllModalOpen(true)}
                 title="Consolidar todos os contatos com 2+ aprovados"
+                className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300"
               >
                 <Layers className="h-4 w-4 mr-1" />
                 Consolidar todos
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId}>
+              <Button variant="outline" size="sm" onClick={() => setReprocessModalOpen(true)} disabled={!!reprocessJobId} className="border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-300">
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Reprocessar
               </Button>
@@ -739,74 +746,87 @@ export function RagMemoriesManager() {
               </Button>
             </div>
             {reprocessJobId && reprocessJobData?.status === 'running' && reprocessProgressDismissed && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
+              <p className="text-xs text-amber-600 dark:text-amber-400">
                 Reprocessando em background ({reprocessJobData.processed} de {reprocessJobData.total})…
               </p>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
-          <div>
-            <Label className="text-xs">Status</Label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as '' | 'pending' | 'approved' | 'rejected')}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value || 'all'} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <Label className="text-xs">Telefone</Label>
-            <Input
-              value={contactPhone}
-              onChange={(e) => setContactPhone(e.target.value)}
-              placeholder="Filtrar por telefone"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Nome contato</Label>
-            <Input
-              value={contactName}
-              onChange={(e) => setContactName(e.target.value)}
-              placeholder="Filtrar por nome"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">De (data)</Label>
-            <Input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs">Até (data)</Label>
-            <Input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="mt-1"
-            />
+        <div className="mb-4">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Filtros</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400">Status</Label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as '' | 'pending' | 'approved' | 'rejected')}
+                className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value || 'all'} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400">Telefone</Label>
+              <Input
+                value={contactPhone}
+                onChange={(e) => setContactPhone(e.target.value)}
+                placeholder="Filtrar por telefone"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400">Nome contato</Label>
+              <Input
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                placeholder="Filtrar por nome"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400">De (data)</Label>
+              <Input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-600 dark:text-gray-400">Até (data)</Label>
+              <Input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
           </div>
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex justify-center py-12">
             <LoadingSpinner />
           </div>
         ) : items.length === 0 ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400 py-6">Nenhum resumo encontrado.</p>
+          <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 py-12 px-6 text-center">
+            <FileText className="h-12 w-12 text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Nenhum resumo encontrado</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
+              Ajuste os filtros (status, telefone, nome ou período) ou aguarde novos resumos de conversas.
+            </p>
+          </div>
         ) : (
           <>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">Total: {count}</p>
-            <div className="overflow-x-auto border border-gray-200 dark:border-gray-600 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="inline-flex items-center px-2.5 py-1 rounded-md text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                {count} {count === 1 ? 'resumo' : 'resumos'}
+              </span>
+            </div>
+            <div className="overflow-x-auto border border-gray-200 dark:border-gray-600 rounded-lg shadow-sm">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
                 {(() => {
                   const groups = groupSummariesByContact(items)
@@ -1133,24 +1153,36 @@ export function RagMemoriesManager() {
 
       {/* Modal Consolidar */}
       {consolidateModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="consolidate-modal-title">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateSubmitting && setConsolidateModalOpen(false)} aria-hidden />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar memória</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Os {selectedSummaryIds.length} resumos selecionados serão unidos em uma única memória RAG para o contato.
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60" onClick={() => !consolidateSubmitting && setConsolidateModalOpen(false)} aria-hidden />
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <h3 id="consolidate-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Consolidar memória</h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Os {selectedSummaryIds.length} resumos selecionados serão unidos em uma única memória na Secretária (RAG) para o contato.
                 Apenas resumos <strong>aprovados do mesmo contato</strong> podem ser consolidados.
               </p>
-              <p className="text-sm text-gray-500 mb-6">
-                Os resumos individuais serão removidos do RAG e substituídos por um único documento com todos os atendimentos (mais recente no topo).
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Os resumos individuais serão removidos e substituídos por um único documento com todos os atendimentos (mais recente no topo).
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => !consolidateSubmitting && setConsolidateModalOpen(false)} disabled={consolidateSubmitting}>
                   Cancelar
                 </Button>
                 <Button onClick={handleConsolidateConfirm} disabled={consolidateSubmitting}>
-                  {consolidateSubmitting ? 'Consolidando…' : 'Consolidar'}
+                  {consolidateSubmitting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Consolidando…
+                    </>
+                  ) : (
+                    'Consolidar'
+                  )}
                 </Button>
               </div>
             </div>
@@ -1160,23 +1192,35 @@ export function RagMemoriesManager() {
 
       {/* Modal Consolidar este contato */}
       {consolidateByContactModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="consolidate-by-contact-modal-title">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateByContactSubmitting && setConsolidateByContactModalOpen(false)} aria-hidden />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar este contato</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Todos os resumos <strong>aprovados</strong> do contato com telefone &quot;{contactPhone.trim()}&quot; serão unidos em uma única memória RAG.
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60" onClick={() => !consolidateByContactSubmitting && setConsolidateByContactModalOpen(false)} aria-hidden />
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <h3 id="consolidate-by-contact-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Consolidar este contato</h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Todos os resumos <strong>aprovados</strong> do contato com telefone &quot;{contactPhone.trim()}&quot; serão unidos em uma única memória na Secretária (RAG).
               </p>
-              <p className="text-sm text-gray-500 mb-6">
-                É necessário pelo menos 2 resumos aprovados para este contato. Os resumos individuais serão removidos do RAG e substituídos por um único documento (mais recente no topo).
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                É necessário pelo menos 2 resumos aprovados para este contato. Os resumos individuais serão removidos e substituídos por um único documento (mais recente no topo).
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => !consolidateByContactSubmitting && setConsolidateByContactModalOpen(false)} disabled={consolidateByContactSubmitting}>
                   Cancelar
                 </Button>
                 <Button onClick={handleConsolidateByContactConfirm} disabled={consolidateByContactSubmitting}>
-                  {consolidateByContactSubmitting ? 'Consolidando…' : 'Consolidar'}
+                  {consolidateByContactSubmitting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Consolidando…
+                    </>
+                  ) : (
+                    'Consolidar'
+                  )}
                 </Button>
               </div>
             </div>
@@ -1186,23 +1230,41 @@ export function RagMemoriesManager() {
 
       {/* Modal Consolidar todos */}
       {consolidateAllModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="consolidate-all-modal-title">
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="fixed inset-0 bg-black/50" onClick={() => !consolidateAllSubmitting && setConsolidateAllModalOpen(false)} aria-hidden />
-            <div className="relative bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-3">Consolidar todos</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Serão consolidados <strong>todos os contatos</strong> que tiverem 2 ou mais resumos aprovados. Cada contato terá uma única memória RAG.
+            <div className="fixed inset-0 bg-black/50 dark:bg-black/60" onClick={() => !consolidateAllSubmitting && setConsolidateAllModalOpen(false)} aria-hidden />
+            <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <h3 id="consolidate-all-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Consolidar todos</h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Serão consolidados <strong>todos os contatos</strong> que tiverem 2 ou mais resumos aprovados. Cada contato terá uma única memória na Secretária (RAG).
               </p>
-              <p className="text-sm text-gray-500 mb-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
                 A operação pode levar alguns segundos se houver muitos contatos. Contatos com 0 ou 1 aprovado serão ignorados.
               </p>
+              {consolidateAllSubmitting && (
+                <div className="flex items-center gap-2 mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+                  <RefreshCw className="h-4 w-4 animate-spin flex-shrink-0" />
+                  <span>Processando em background. Você pode fechar este modal.</span>
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => !consolidateAllSubmitting && setConsolidateAllModalOpen(false)} disabled={consolidateAllSubmitting}>
                   Cancelar
                 </Button>
                 <Button onClick={handleConsolidateAllConfirm} disabled={consolidateAllSubmitting}>
-                  {consolidateAllSubmitting ? 'Consolidando…' : 'Consolidar todos'}
+                  {consolidateAllSubmitting ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Consolidando…
+                    </>
+                  ) : (
+                    'Consolidar todos'
+                  )}
                 </Button>
               </div>
             </div>
