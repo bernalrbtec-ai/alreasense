@@ -1,7 +1,7 @@
 /**
  * Canvas de fluxo com React Flow: exibe etapas e conexões; clique para editar; arraste para reposicionar; conecte pelo Handle.
  */
-import { useCallback, useMemo, useEffect, useRef } from 'react'
+import { useCallback, useMemo, useEffect, useRef, useState } from 'react'
 import {
   ReactFlow,
   Controls,
@@ -167,8 +167,11 @@ interface FlowCanvasProps {
   isDraggingFromPalette?: boolean
 }
 
+const VALID_NODE_TYPES = ['message', 'list', 'buttons', 'image', 'file', 'delay'] as const
+
 export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConnect, onDrop, height = 400, className = '', isDraggingFromPalette = false }: FlowCanvasProps) {
   const reactFlowRef = useRef<{ screenToFlowPosition: (p: { x: number; y: number }) => { x: number; y: number } } | null>(null)
+  const [isDragOverCanvas, setIsDragOverCanvas] = useState(false)
   const positions = useMemo(() => getPositions(nodes), [nodes])
   const initialNodes = useMemo(() => flowNodesToReactFlow(nodes, positions), [nodes, positions])
   const initialEdges = useMemo(() => flowEdgesToReactFlow(nodes), [nodes])
@@ -232,22 +235,30 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
     (e: React.DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
-      const nodeType = (e.dataTransfer.getData(FLOW_DROP_TYPE) || e.dataTransfer.getData('text/plain')) as 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay' | ''
+      setIsDragOverCanvas(false)
+      const nodeType = (e.dataTransfer.getData('text/plain') || e.dataTransfer.getData(FLOW_DROP_TYPE)) as string
       const isStart = e.dataTransfer.getData(FLOW_DROP_START) === '1'
-      if (!nodeType || !['message', 'list', 'buttons', 'image', 'file', 'delay'].includes(nodeType)) return
-      // ref pode ser null com canvas vazio no primeiro frame; fallback (0,0) abre o modal e o usuário pode ajustar
+      if (!nodeType || !VALID_NODE_TYPES.includes(nodeType as typeof VALID_NODE_TYPES[number])) return
       const position = reactFlowRef.current?.screenToFlowPosition({ x: e.clientX, y: e.clientY }) ?? { x: 0, y: 0 }
-      onDrop?.(position, nodeType, isStart)
+      onDrop?.(position, nodeType as typeof VALID_NODE_TYPES[number], isStart)
     },
     [onDrop]
   )
 
-  const dropZoneActive = onDrop && (nodes.length === 0 || isDraggingFromPalette)
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    const related = e.relatedTarget as HTMLElement | null
+    if (!related || !e.currentTarget.contains(related)) setIsDragOverCanvas(false)
+  }, [])
+
+  const dropZoneActive = onDrop && (nodes.length === 0 || isDraggingFromPalette || isDragOverCanvas)
 
   return (
     <div
       className={`rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 min-h-[300px] overflow-hidden relative ${className}`}
       style={{ height }}
+      onDragEnter={onDrop ? () => setIsDragOverCanvas(true) : undefined}
+      onDragOver={onDrop ? handleDragOver : undefined}
+      onDragLeave={onDrop ? handleDragLeave : undefined}
     >
       <ReactFlow
         ref={reactFlowRef as any}
@@ -274,9 +285,10 @@ export default function FlowCanvas({ nodes, onNodeClick, onNodeDragStop, onConne
       {/* Camada que recebe o drop: cobre o canvas, z-50 para ficar acima do React Flow. Ativa quando não há nós (sempre) ou quando está arrastando da paleta. */}
       {onDrop && (
         <div
-          className="absolute inset-0 z-[50] rounded-xl"
+          className="absolute inset-0 rounded-xl"
           style={{
             pointerEvents: dropZoneActive ? 'auto' : 'none',
+            zIndex: 9999,
           }}
           onDragOver={handleDragOver}
           onDrop={handleDrop}

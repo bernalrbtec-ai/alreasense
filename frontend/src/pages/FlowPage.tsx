@@ -1022,9 +1022,9 @@ export default function FlowPage() {
                         draggable
                         aria-label={`Arrastar etapa ${item.label} para o canvas`}
                         onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', item.nodeType)
                           e.dataTransfer.setData(FLOW_DROP_TYPE, item.nodeType)
                           e.dataTransfer.setData(FLOW_DROP_START, item.isStart ? '1' : '0')
-                          e.dataTransfer.setData('text/plain', item.nodeType)
                           e.dataTransfer.effectAllowed = 'copy'
                           setIsDraggingFromPalette(true)
                         }}

@@ -122,10 +122,22 @@ class FlowViewSet(viewsets.ModelViewSet):
                 {"detail": "Crie uma conversa com esse número antes ou use um número que já tenha conversa"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        from apps.chat.services.flow_engine import send_flow_node
+        from apps.chat.services.flow_engine import send_flow_node, _auto_advance_message_chain
+        from apps.chat.models_flow import ConversationFlowState
+        state, created = ConversationFlowState.objects.get_or_create(
+            conversation_id=conversation.id,
+            defaults={"flow_id": flow.id, "current_node_id": start_node.id},
+        )
+        if not created:
+            state.flow_id = flow.id
+            state.current_node_id = start_node.id
+            state.save(update_fields=["flow_id", "current_node_id"])
         message = send_flow_node(conversation, start_node)
         if not message:
+            if created:
+                state.delete()
             return Response({"detail": "Falha ao enfileirar mensagem de teste"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        _auto_advance_message_chain(conversation, state)
         return Response({"message_id": str(message.id), "conversation_id": str(conversation.id)})
 
 
