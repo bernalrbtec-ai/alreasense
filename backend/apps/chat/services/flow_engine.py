@@ -124,6 +124,26 @@ def _conversation_uses_evolution(conversation: Conversation) -> bool:
     return inst is not None and getattr(inst, "integration_type", None) == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
 
 
+def _flow_should_send_interactive(flow: Optional[Flow], conversation: Conversation) -> bool:
+    """
+    True se a mensagem do fluxo deve levar interactive_list/interactive_reply_buttons no metadata.
+    O envio usa flow_prefer_instance_name (instância do fluxo) ou conversation.instance_name.
+    Só NÃO colocamos interativo quando temos certeza de que a instância usada será Evolution.
+    """
+    from apps.notifications.models import WhatsAppInstance
+    if not flow:
+        return not _conversation_uses_evolution(conversation)
+    # Fluxo tem instância preferida: envio usará ela (flow_prefer_instance_name no task)
+    try:
+        wa = getattr(flow, "whatsapp_instance", None)
+        if wa is not None:
+            return getattr(wa, "integration_type", None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+    except Exception:
+        pass
+    # Sem instância no fluxo: usa a da conversa
+    return not _conversation_uses_evolution(conversation)
+
+
 def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Message]:
     """
     Cria mensagem (texto, imagem, arquivo, lista ou botões) do nó e enfileira envio.
@@ -151,6 +171,7 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
 
     content = ""
     metadata = {"flow_node_id": str(node.id), "flow_id": str(node.flow_id)}
+    flow = None
     try:
         flow = getattr(node, "flow", None) or Flow.objects.select_related("whatsapp_instance").filter(pk=node.flow_id).first()
         if flow and getattr(flow, "whatsapp_instance_id", None) and getattr(flow, "whatsapp_instance", None):
@@ -185,7 +206,7 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
             logger.warning("[FLOW] Nó lista inválido (body/button/sections): %s", node.id)
             return None
         content = payload["body_text"]
-        if not _conversation_uses_evolution(conversation):
+        if _flow_should_send_interactive(flow, conversation):
             metadata["interactive_list"] = payload
         else:
             logger.info("[FLOW] Instância Evolution: enviando nó lista como texto (listas desativadas na Evolution 2.3.7)")
@@ -195,7 +216,7 @@ def send_flow_node(conversation: Conversation, node: FlowNode) -> Optional[Messa
             logger.warning("[FLOW] Nó botões inválido (body/buttons): %s", node.id)
             return None
         content = payload["body_text"]
-        if not _conversation_uses_evolution(conversation):
+        if _flow_should_send_interactive(flow, conversation):
             metadata["interactive_reply_buttons"] = payload
         else:
             logger.info("[FLOW] Instância Evolution: enviando nó botões como texto (botões desativados na Evolution 2.3.7)")
