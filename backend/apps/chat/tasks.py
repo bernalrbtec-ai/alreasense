@@ -1388,9 +1388,47 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                         from apps.chat.whatsapp_24h import is_within_24h_window
                         within_24h = await database_sync_to_async(is_within_24h_window)(conversation)
                         meta = message.metadata or {}
+                        is_flow_message = bool(meta.get('flow_node_id'))
                         interactive_list_meta = meta.get('interactive_list')
                         if interactive_list_meta and isinstance(interactive_list_meta, dict) and interactive_list_meta.get('body_text') and interactive_list_meta.get('button_text') and (interactive_list_meta.get('sections') or []):
                             if not within_24h:
+                                if is_flow_message:
+                                    log.info(
+                                        "[CHAT ENVIO] Meta: lista fora da janela 24h (fluxo) → enviando como texto | conversation_id=%s",
+                                        str(conversation.id),
+                                    )
+                                    last_ok, last_data = await asyncio.to_thread(
+                                        sender.send_text,
+                                        recipient_value,
+                                        (interactive_list_meta.get('body_text') or '').strip(),
+                                        quoted_message_id,
+                                    )
+                                    if last_ok:
+                                        evo_id = _extract_provider_message_id(last_data, provider_kind)
+                                        if evo_id:
+                                            close_old_connections()
+                                            await database_sync_to_async(
+                                                Message.objects.filter(id=message.id).update
+                                            )(message_id=evo_id)
+                                        close_old_connections()
+                                        await database_sync_to_async(
+                                            Message.objects.filter(id=message.id).update
+                                        )(status='sent', evolution_status='sent')
+                                        from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                                        msg_obj = await database_sync_to_async(
+                                            Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                                        )(id=message.id)
+                                        await database_sync_to_async(broadcast_message_received)(msg_obj)
+                                        await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                                        log.info("✅ [CHAT ENVIO] Lista de fluxo enviada como texto (fora 24h) | conversation_id=%s", str(conversation.id))
+                                        return
+                                    err = last_data.get('error', '') or str(last_data)
+                                    close_old_connections()
+                                    await database_sync_to_async(
+                                        Message.objects.filter(id=message.id).update
+                                    )(status='failed', error_message=err[:500])
+                                    await database_sync_to_async(_broadcast_message_failed)(message.id)
+                                    return
                                 close_old_connections()
                                 await database_sync_to_async(
                                     Message.objects.filter(id=message.id).update
@@ -1463,6 +1501,43 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                         interactive = meta.get('interactive_reply_buttons')
                         if interactive and interactive.get('body_text') and interactive.get('buttons') and 1 <= len(interactive['buttons']) <= 3:
                             if not within_24h:
+                                if is_flow_message:
+                                    log.info(
+                                        "[CHAT ENVIO] Meta: botões fora da janela 24h (fluxo) → enviando como texto | conversation_id=%s",
+                                        str(conversation.id),
+                                    )
+                                    last_ok, last_data = await asyncio.to_thread(
+                                        sender.send_text,
+                                        recipient_value,
+                                        (interactive.get('body_text') or '').strip(),
+                                        quoted_message_id,
+                                    )
+                                    if last_ok:
+                                        evo_id = _extract_provider_message_id(last_data, provider_kind)
+                                        if evo_id:
+                                            close_old_connections()
+                                            await database_sync_to_async(
+                                                Message.objects.filter(id=message.id).update
+                                            )(message_id=evo_id)
+                                        close_old_connections()
+                                        await database_sync_to_async(
+                                            Message.objects.filter(id=message.id).update
+                                        )(status='sent', evolution_status='sent')
+                                        from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                                        msg_obj = await database_sync_to_async(
+                                            Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                                        )(id=message.id)
+                                        await database_sync_to_async(broadcast_message_received)(msg_obj)
+                                        await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                                        log.info("✅ [CHAT ENVIO] Botões de fluxo enviados como texto (fora 24h) | conversation_id=%s", str(conversation.id))
+                                        return
+                                    err = last_data.get('error', '') or str(last_data)
+                                    close_old_connections()
+                                    await database_sync_to_async(
+                                        Message.objects.filter(id=message.id).update
+                                    )(status='failed', error_message=err[:500])
+                                    await database_sync_to_async(_broadcast_message_failed)(message.id)
+                                    return
                                 close_old_connections()
                                 await database_sync_to_async(
                                     Message.objects.filter(id=message.id).update
@@ -1484,6 +1559,33 @@ async def handle_send_message(message_id: str, retry_count: int = 0, extra: Opti
                                 interactive['buttons'],
                                 quoted_message_id,
                             )
+                            if last_ok:
+                                evo_id = _extract_provider_message_id(last_data, provider_kind)
+                                if evo_id:
+                                    close_old_connections()
+                                    await database_sync_to_async(
+                                        Message.objects.filter(id=message.id).update
+                                    )(message_id=evo_id)
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='sent', evolution_status='sent')
+                                from apps.chat.utils.websocket import broadcast_message_received, broadcast_conversation_updated
+                                msg_obj = await database_sync_to_async(
+                                    Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                                )(id=message.id)
+                                await database_sync_to_async(broadcast_message_received)(msg_obj)
+                                await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                                log.info("✅ [CHAT ENVIO] Botões interativos enviados (Meta) conversation_id=%s", str(conversation.id))
+                                return
+                            err = last_data.get('error', '') or str(last_data)
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(status='failed', error_message=err[:500])
+                            log.warning("❌ [CHAT ENVIO] Meta send_interactive_reply_buttons falhou: %s", err[:200])
+                            await database_sync_to_async(_broadcast_message_failed)(message.id)
+                            return
                         elif not within_24h:
                             wa_template_id = meta.get('wa_template_id')
                             if not wa_template_id:

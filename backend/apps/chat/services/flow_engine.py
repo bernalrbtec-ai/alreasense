@@ -59,14 +59,32 @@ def _normalize_option_id(raw: str) -> str:
 
 
 def _build_interactive_list_payload(node: FlowNode) -> Dict[str, Any]:
-    """Monta payload interactive_list a partir do nó (tipo list). Limites: 10 seções, 10 linhas por seção."""
+    """Monta payload interactive_list a partir do nó (tipo list). Limites: 10 seções, 10 linhas por seção.
+    Normaliza cada row para ter 'id' e 'title' (Meta/Evolution esperam esse formato).
+    """
     sections = list(node.sections or [])[:10]
     out_sections = []
     for sec in sections:
         if not isinstance(sec, dict):
             continue
-        rows = (sec.get("rows") or []) if isinstance(sec.get("rows"), list) else []
-        out_sections.append({**sec, "rows": rows[:10]})
+        rows_raw = (sec.get("rows") or []) if isinstance(sec.get("rows"), list) else []
+        rows = []
+        for i, r in enumerate(rows_raw[:10]):
+            if not isinstance(r, dict):
+                continue
+            # Meta/Evolution: id e title obrigatórios; aceitar option_id como id
+            row_id = (r.get("id") or r.get("option_id") or "").strip() or f"row{i}"
+            row_title = (r.get("title") or "").strip()
+            if not row_title:
+                continue
+            rows.append({
+                "id": row_id[:256],
+                "title": row_title[:24],
+                **({"description": (r.get("description") or "").strip()[:72]} if (r.get("description") or "").strip() else {}),
+            })
+        if not rows:
+            continue
+        out_sections.append({"title": (sec.get("title") or "").strip()[:24] or "Opções", "rows": rows})
     return {
         "body_text": (node.body_text or "").strip()[:1024],
         "button_text": (node.button_text or "").strip()[:20],
@@ -77,12 +95,18 @@ def _build_interactive_list_payload(node: FlowNode) -> Dict[str, Any]:
 
 
 def _build_interactive_buttons_payload(node: FlowNode) -> Dict[str, Any]:
-    """Monta payload interactive_reply_buttons a partir do nó (tipo buttons)."""
+    """Monta payload interactive_reply_buttons a partir do nó (tipo buttons). Meta: id e title obrigatórios."""
     buttons = list(node.buttons or [])[:3]
-    return {
-        "body_text": (node.body_text or "").strip()[:1024],
-        "buttons": [{"id": (b.get("id") or "").strip()[:100], "title": (b.get("title") or "").strip()[:20]} for b in buttons if isinstance(b, dict)],
-    }
+    out = []
+    for i, b in enumerate(buttons):
+        if not isinstance(b, dict):
+            continue
+        bid = (b.get("id") or b.get("option_id") or "").strip() or f"btn{i}"
+        title = (b.get("title") or "").strip()
+        if not title:
+            continue
+        out.append({"id": bid[:100], "title": title[:20]})
+    return {"body_text": (node.body_text or "").strip()[:1024], "buttons": out}
 
 
 def _conversation_uses_evolution(conversation: Conversation) -> bool:
