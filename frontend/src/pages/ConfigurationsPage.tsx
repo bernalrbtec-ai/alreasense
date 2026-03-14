@@ -479,16 +479,19 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchMetaTemplates = async () => {
+  const fetchMetaTemplates = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true
     try {
-      setMetaTemplatesLoading(true)
+      if (!silent) setMetaTemplatesLoading(true)
       const response = await api.get('/notifications/whatsapp-templates/')
       setMetaTemplates(response.data.results || response.data || [])
     } catch (error) {
-      console.error('Erro ao carregar templates Meta:', error)
-      showErrorToast('carregar', 'Templates', { message: 'Falha ao carregar templates' })
+      if (!silent) {
+        console.error('Erro ao carregar templates Meta:', error)
+        showErrorToast('carregar', 'Templates', { message: 'Falha ao carregar templates' })
+      }
     } finally {
-      setMetaTemplatesLoading(false)
+      if (!silent) setMetaTemplatesLoading(false)
     }
   }
 
@@ -553,6 +556,7 @@ export default function ConfigurationsPage() {
       }
       closeMetaTemplateModal()
       fetchMetaTemplates()
+      syncMetaStatusInBackground()
     } catch (err: unknown) {
       const data = (err as { response?: { data?: Record<string, unknown>; status?: number } })?.response?.data
       let message: string
@@ -584,6 +588,17 @@ export default function ConfigurationsPage() {
     } catch (error) {
       updateToastError(toastId, 'excluir', 'Template')
       setMetaTemplateToDelete(null)
+    }
+  }
+
+  /** Sincroniza status dos templates com a Meta em background (sem toasts). Usado ao abrir aba/modal. */
+  const syncMetaStatusInBackground = async () => {
+    if (!hasMetaInstanceWithWaba) return
+    try {
+      await api.post('/notifications/whatsapp-templates/sync_meta_status/')
+      await fetchMetaTemplates({ silent: true })
+    } catch (e) {
+      console.warn('Sync automático status Meta (templates):', e)
     }
   }
 
@@ -646,11 +661,18 @@ export default function ConfigurationsPage() {
     }
     if (activeTab === 'instances') {
       fetchMetaTemplates()
+      syncMetaStatusInBackground()
     }
     if (activeTab === 'smtp') {
       fetchSmtpConfigs()
     }
   }, [activeTab, selectedBusinessHoursDept, isTenantAdmin])
+
+  // Ao abrir o modal de templates WhatsApp (Meta), sincronizar status com a Meta e atualizar lista
+  useEffect(() => {
+    if (!showMetaTemplatesListModal || !hasMetaInstanceWithWaba) return
+    syncMetaStatusInBackground()
+  }, [showMetaTemplatesListModal, hasMetaInstanceWithWaba])
 
   // Fechar modal de templates Meta com Escape (só se o modal de criar/editar não estiver aberto)
   useEffect(() => {

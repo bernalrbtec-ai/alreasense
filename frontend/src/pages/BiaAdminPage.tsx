@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
-import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2, Edit, FileText } from 'lucide-react'
+import { Lock, Send, Save, Loader2, MessageSquare, Settings, FlaskConical, Trash2, Edit, FileText, X, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Label } from '../components/ui/Label'
@@ -80,6 +80,7 @@ export default function BiaAdminPage() {
   const [secretarySaving, setSecretarySaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
+  const [advancedOptionsModalOpen, setAdvancedOptionsModalOpen] = useState(false)
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
 
@@ -879,139 +880,151 @@ export default function BiaAdminPage() {
                     </label>
                   </div>
 
-                  <details className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
-                    <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+                  <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAdvancedOptionsModalOpen(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <SlidersHorizontal className="h-4 w-4" />
                       Configurações avançadas do modelo
-                    </summary>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 mb-4">
-                      Parâmetros de geração da IA. Os valores padrão já são adequados para uma secretária objetiva.
-                    </p>
-                    {(() => {
-                      const o = secretaryProfile?.advanced_options
-                      const safeAdv = (o != null && typeof o === 'object' && !Array.isArray(o))
-                        ? { ...DEFAULT_ADVANCED_OPTIONS, ...o }
-                        : { ...DEFAULT_ADVANCED_OPTIONS }
-                      return (
-                        <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="adv_temperature" className="text-gray-700 dark:text-gray-300">Criatividade (temperature)</Label>
-                        <Input
-                          id="adv_temperature"
-                          type="number"
-                          min={0}
-                          max={1}
-                          step={0.05}
-                          value={safeAdv.temperature}
-                          onChange={(e) => setSecretaryProfile({
-                            ...secretaryProfile,
-                            advanced_options: {
-                              ...safeAdv,
-                              temperature: Number(e.target.value) || 0,
-                            },
-                          })}
-                          className="mt-1 max-w-[8rem]"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">0.2–0.4 = mais objetiva; maior = mais criativa.</p>
+                    </Button>
+                  </div>
+
+                  {advancedOptionsModalOpen && secretaryProfile && (() => {
+                    const o = secretaryProfile.advanced_options
+                    const safeAdv = (o != null && typeof o === 'object' && !Array.isArray(o))
+                      ? { ...DEFAULT_ADVANCED_OPTIONS, ...o }
+                      : { ...DEFAULT_ADVANCED_OPTIONS }
+                    return (
+                      <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setAdvancedOptionsModalOpen(false)}>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700" onClick={e => e.stopPropagation()}>
+                          <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between flex-shrink-0">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Configurações avançadas do modelo</h3>
+                            <button
+                              type="button"
+                              onClick={() => setAdvancedOptionsModalOpen(false)}
+                              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded"
+                              aria-label="Fechar"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
+                          </div>
+                          <div className="p-4 overflow-y-auto flex-1">
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                              Parâmetros de geração da IA. Os valores padrão já são adequados para uma secretária objetiva.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="modal_adv_temperature" className="text-gray-700 dark:text-gray-300">Criatividade (temperature)</Label>
+                                <Input
+                                  id="modal_adv_temperature"
+                                  type="number"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={safeAdv.temperature}
+                                  onChange={(e) => setSecretaryProfile({
+                                    ...secretaryProfile,
+                                    advanced_options: { ...safeAdv, temperature: Number(e.target.value) || 0 },
+                                  })}
+                                  className="mt-1 max-w-[8rem]"
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">0.2–0.4 = mais objetiva; maior = mais criativa.</p>
+                              </div>
+                              <div>
+                                <Label htmlFor="modal_adv_top_p" className="text-gray-700 dark:text-gray-300">top_p</Label>
+                                <Input
+                                  id="modal_adv_top_p"
+                                  type="number"
+                                  min={0.1}
+                                  max={1}
+                                  step={0.05}
+                                  value={safeAdv.top_p}
+                                  onChange={(e) => setSecretaryProfile({
+                                    ...secretaryProfile,
+                                    advanced_options: { ...safeAdv, top_p: Number(e.target.value) || 0.85 },
+                                  })}
+                                  className="mt-1 max-w-[8rem]"
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Nucleus sampling; mais baixo = mais conservador.</p>
+                              </div>
+                              <div>
+                                <Label htmlFor="modal_adv_top_k" className="text-gray-700 dark:text-gray-300">top_k</Label>
+                                <Input
+                                  id="modal_adv_top_k"
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  value={safeAdv.top_k}
+                                  onChange={(e) => setSecretaryProfile({
+                                    ...secretaryProfile,
+                                    advanced_options: { ...safeAdv, top_k: Number(e.target.value) || 30 },
+                                  })}
+                                  className="mt-1 max-w-[8rem]"
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Limita opções de tokens; 20–40 = mais obediente.</p>
+                              </div>
+                              <div>
+                                <Label htmlFor="modal_adv_repeat_penalty" className="text-gray-700 dark:text-gray-300">repeat_penalty</Label>
+                                <Input
+                                  id="modal_adv_repeat_penalty"
+                                  type="number"
+                                  min={0.8}
+                                  max={2}
+                                  step={0.05}
+                                  value={safeAdv.repeat_penalty}
+                                  onChange={(e) => setSecretaryProfile({
+                                    ...secretaryProfile,
+                                    advanced_options: { ...safeAdv, repeat_penalty: Number(e.target.value) || 1.15 },
+                                  })}
+                                  className="mt-1 max-w-[8rem]"
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reduz repetições e enrolação.</p>
+                              </div>
+                              <div>
+                                <Label htmlFor="modal_adv_min_p" className="text-gray-700 dark:text-gray-300">min_p</Label>
+                                <Input
+                                  id="modal_adv_min_p"
+                                  type="number"
+                                  min={0}
+                                  max={0.5}
+                                  step={0.01}
+                                  value={safeAdv.min_p}
+                                  onChange={(e) => setSecretaryProfile({
+                                    ...secretaryProfile,
+                                    advanced_options: { ...safeAdv, min_p: Number(e.target.value) || 0.05 },
+                                  })}
+                                  className="mt-1 max-w-[8rem]"
+                                />
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Filtra tokens improváveis; ajuda em consistência.</p>
+                              </div>
+                            </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSecretaryProfile({ ...secretaryProfile, advanced_options: null })
+                                  handleSaveSecretaryProfile({ advanced_options: null })
+                                  setAdvancedOptionsModalOpen(false)
+                                }}
+                                disabled={secretarySaving}
+                              >
+                                Restaurar valores padrão
+                              </Button>
+                              <Button type="button" variant="outline" size="sm" onClick={() => setAdvancedOptionsModalOpen(false)}>
+                                Fechar
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="adv_top_p" className="text-gray-700 dark:text-gray-300">top_p</Label>
-                        <Input
-                          id="adv_top_p"
-                          type="number"
-                          min={0.1}
-                          max={1}
-                          step={0.05}
-                          value={safeAdv.top_p}
-                          onChange={(e) => setSecretaryProfile({
-                            ...secretaryProfile,
-                            advanced_options: {
-                              ...safeAdv,
-                              top_p: Number(e.target.value) || 0.85,
-                            },
-                          })}
-                          className="mt-1 max-w-[8rem]"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Nucleus sampling; mais baixo = mais conservador.</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="adv_top_k" className="text-gray-700 dark:text-gray-300">top_k</Label>
-                        <Input
-                          id="adv_top_k"
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={safeAdv.top_k}
-                          onChange={(e) => setSecretaryProfile({
-                            ...secretaryProfile,
-                            advanced_options: {
-                              ...safeAdv,
-                              top_k: Number(e.target.value) || 30,
-                            },
-                          })}
-                          className="mt-1 max-w-[8rem]"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Limita opções de tokens; 20–40 = mais obediente.</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="adv_repeat_penalty" className="text-gray-700 dark:text-gray-300">repeat_penalty</Label>
-                        <Input
-                          id="adv_repeat_penalty"
-                          type="number"
-                          min={0.8}
-                          max={2}
-                          step={0.05}
-                          value={safeAdv.repeat_penalty}
-                          onChange={(e) => setSecretaryProfile({
-                            ...secretaryProfile,
-                            advanced_options: {
-                              ...safeAdv,
-                              repeat_penalty: Number(e.target.value) || 1.15,
-                            },
-                          })}
-                          className="mt-1 max-w-[8rem]"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Reduz repetições e enrolação.</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="adv_min_p" className="text-gray-700 dark:text-gray-300">min_p</Label>
-                        <Input
-                          id="adv_min_p"
-                          type="number"
-                          min={0}
-                          max={0.5}
-                          step={0.01}
-                          value={safeAdv.min_p}
-                          onChange={(e) => setSecretaryProfile({
-                            ...secretaryProfile,
-                            advanced_options: {
-                              ...safeAdv,
-                              min_p: Number(e.target.value) || 0.05,
-                            },
-                          })}
-                          className="mt-1 max-w-[8rem]"
-                        />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Filtra tokens improváveis; ajuda em consistência.</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSecretaryProfile({ ...secretaryProfile, advanced_options: null })
-                          handleSaveSecretaryProfile({ advanced_options: null })
-                        }}
-                        disabled={secretarySaving}
-                      >
-                        Restaurar valores padrão
-                      </Button>
-                    </div>
-                        </>
-                      )
-                    })()}
-                  </details>
+                    )
+                  })()}
                 </div>
                 <div className="flex justify-end">
                   <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretarySaving}>
