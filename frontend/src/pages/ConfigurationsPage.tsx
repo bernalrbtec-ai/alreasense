@@ -299,7 +299,25 @@ export default function ConfigurationsPage() {
   const isTenantAdmin = Boolean(user?.is_admin || user?.role === 'admin' || user?.is_superuser)
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'flow' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'rag-memories' | 'auditoria-ia'>('config')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'agentes' | 'rag-memories' | 'auditoria-ia'>('config')
+  // Estados para sub-tab Agentes (LibreChat)
+  const [librechatAgents, setLibrechatAgents] = useState<Array<{ id: string; name: string }>>([])
+  const [librechatAvailable, setLibrechatAvailable] = useState(false)
+  const [librechatError, setLibrechatError] = useState<string | null>(null)
+  const [agentsLoading, setAgentsLoading] = useState(false)
+  const [agentAssignments, setAgentAssignments] = useState<Array<{
+    id: string
+    scope_type: string
+    scope_id: string | null
+    librechat_agent_id: string
+    display_name: string
+    department_name?: string | null
+  }>>([])
+  const [assignmentsLoading, setAssignmentsLoading] = useState(false)
+  const [assignmentSaving, setAssignmentSaving] = useState<string | null>(null)
+  const [assignmentDeleting, setAssignmentDeleting] = useState<string | null>(null)
+  const [assignmentToDelete, setAssignmentToDelete] = useState<{ id: string; scopeLabel: string } | null>(null)
+  const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -659,6 +677,10 @@ export default function ConfigurationsPage() {
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
     }
+    if (activeTab === 'ai' && aiSubTab === 'agentes' && isTenantAdmin) {
+      loadLibrechatAgents()
+      loadAgentAssignments()
+    }
     if (activeTab === 'instances') {
       fetchMetaTemplates()
       syncMetaStatusInBackground()
@@ -666,7 +688,7 @@ export default function ConfigurationsPage() {
     if (activeTab === 'smtp') {
       fetchSmtpConfigs()
     }
-  }, [activeTab, selectedBusinessHoursDept, isTenantAdmin])
+  }, [activeTab, aiSubTab, selectedBusinessHoursDept, isTenantAdmin])
 
   // Ao abrir o modal de templates WhatsApp (Meta), sincronizar status com a Meta e atualizar lista
   useEffect(() => {
@@ -1576,6 +1598,83 @@ export default function ConfigurationsPage() {
     } finally {
       setSecretaryProfileLoading(false)
     }
+  }
+
+  const loadLibrechatAgents = async () => {
+    setAgentsLoading(true)
+    setLibrechatError(null)
+    try {
+      const [agentsRes, healthRes] = await Promise.all([
+        api.get<{ available: boolean; agents: Array<{ id: string; name: string }>; error?: string }>('/ai/librechat-agents/'),
+        api.get<{ ok?: boolean; error?: string }>('/ai/librechat-health/').catch(() => ({ data: { ok: false } })),
+      ])
+      const data = agentsRes.data
+      setLibrechatAvailable(Boolean(data?.available))
+      setLibrechatAgents(Array.isArray(data?.agents) ? data.agents : [])
+      if (data?.error) setLibrechatError(data.error)
+      setLibrechatHealthOk(healthRes.data?.ok === true)
+    } catch (e: any) {
+      setLibrechatAvailable(false)
+      setLibrechatAgents([])
+      setLibrechatError(e.response?.data?.error || e.message || 'Erro ao carregar agentes')
+      setLibrechatHealthOk(false)
+    } finally {
+      setAgentsLoading(false)
+    }
+  }
+
+  const loadAgentAssignments = async () => {
+    setAssignmentsLoading(true)
+    try {
+      const { data } = await api.get<Array<{ id: string; scope_type: string; scope_id: string | null; librechat_agent_id: string; display_name: string; department_name?: string | null }>>('/ai/agent-assignments/')
+      setAgentAssignments(Array.isArray(data) ? data : [])
+    } catch (e: any) {
+      setAgentAssignments([])
+      showErrorToast(e.response?.data?.error || 'Erro ao carregar associações')
+    } finally {
+      setAssignmentsLoading(false)
+    }
+  }
+
+  const saveAgentAssignment = async (scopeType: 'inbox' | 'department', scopeId: string | null, agentId: string) => {
+    if (!agentId || typeof agentId !== 'string' || !agentId.trim()) return
+    const key = scopeType === 'inbox' ? 'inbox' : (scopeId ?? '')
+    setAssignmentSaving(key)
+    try {
+      const displayName = librechatAgents.find((a) => a.id === agentId)?.name || agentId
+      await api.put('/ai/agent-assignments/upsert/', {
+        scope_type: scopeType,
+        scope_id: scopeId,
+        librechat_agent_id: agentId,
+        display_name: displayName,
+      })
+      showSuccessToast('Associação salva')
+      await loadAgentAssignments()
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao salvar')
+    } finally {
+      setAssignmentSaving(null)
+    }
+  }
+
+  const deleteAgentAssignment = async (assignmentId: string) => {
+    if (!assignmentId || typeof assignmentId !== 'string') return
+    setAssignmentDeleting(assignmentId)
+    setAssignmentToDelete(null)
+    try {
+      await api.delete(`/ai/agent-assignments/${assignmentId}/`)
+      showSuccessToast('Associação removida')
+      await loadAgentAssignments()
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao remover')
+    } finally {
+      setAssignmentDeleting(null)
+    }
+  }
+
+  const requestDeleteAgentAssignment = (assignment: { id: string; scope_type: string; scope_id: string | null; department_name?: string | null }, deptName?: string) => {
+    const scopeLabel = assignment.scope_type === 'inbox' ? 'Inbox' : (deptName ?? assignment.department_name ?? 'Departamento')
+    setAssignmentToDelete({ id: assignment.id, scopeLabel })
   }
 
   const handleSaveSecretaryProfile = async (profileOverride?: Partial<SecretaryProfile> | null) => {
@@ -2567,6 +2666,18 @@ export default function ConfigurationsPage() {
             </button>
             <button
               type="button"
+              onClick={() => {
+                setAiSubTab('agentes')
+                setAgentsLoading(true)
+                setAssignmentsLoading(true)
+              }}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'agentes' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+            >
+              <Sparkles className="h-4 w-4" />
+              Agentes
+            </button>
+            <button
+              type="button"
               onClick={() => setAiSubTab('rag-memories')}
               className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
@@ -2586,6 +2697,139 @@ export default function ConfigurationsPage() {
             <RagMemoriesManager />
           ) : aiSubTab === 'ia-assistente' ? (
             <BiaAdminPage />
+          ) : aiSubTab === 'agentes' ? (
+            <div className="space-y-6">
+              {agentsLoading || assignmentsLoading ? (
+                <Card className="p-6">
+                  <div className="flex items-center justify-center h-48">
+                    <LoadingSpinner />
+                  </div>
+                </Card>
+              ) : !librechatAvailable ? (
+                <Card className="p-6 border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-medium text-amber-900 dark:text-amber-100">LibreChat não está configurado</h3>
+                      <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                        Configure a URL e a API key no servidor para listar e associar agentes ao Inbox e aos departamentos.
+                      </p>
+                      {librechatError && <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">{librechatError}</p>}
+                    </div>
+                  </div>
+                </Card>
+              ) : (
+                <>
+                  {librechatHealthOk === false && (
+                    <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        LibreChat indisponível no momento. As respostas da secretária usarão o fallback n8n quando necessário.
+                      </p>
+                    </div>
+                  )}
+                  <Card className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agentes disponíveis no LibreChat</h3>
+                      <Button type="button" variant="outline" size="sm" onClick={() => loadLibrechatAgents()} disabled={agentsLoading}>
+                        <RefreshCw className={`h-4 w-4 mr-1 ${agentsLoading ? 'animate-spin' : ''}`} />
+                        Atualizar
+                      </Button>
+                    </div>
+                    {librechatAgents.length === 0 ? (
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum agente encontrado no LibreChat. Crie agentes no LibreChat e clique em Atualizar.</p>
+                    ) : (
+                      <ul className="space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                        {librechatAgents.map((a) => (
+                          <li key={a.id} className="flex items-center gap-2">
+                            <span className="font-medium">{a.name}</span>
+                            <span className="text-gray-500 dark:text-gray-400">({a.id})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Card>
+                  <Card className="p-6">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Associação por escopo</h3>
+                    <div className="space-y-6">
+                      <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div className="flex-1 min-w-[200px]">
+                          <Label className="text-gray-700 dark:text-gray-300">Inbox</Label>
+                          <select
+                            value={agentAssignments.find((a) => a.scope_type === 'inbox')?.librechat_agent_id ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v) void saveAgentAssignment('inbox', null, v)
+                              else {
+                                const cur = agentAssignments.find((a) => a.scope_type === 'inbox')
+                                if (cur) requestDeleteAgentAssignment(cur)
+                              }
+                            }}
+                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
+                          >
+                            <option value="">Nenhum</option>
+                            {librechatAgents.map((a) => (
+                              <option key={a.id} value={a.id}>{a.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {agentAssignments.some((a) => a.scope_type === 'inbox') && (
+                          <Button type="button" variant="outline" size="sm" onClick={() => { const cur = agentAssignments.find((a) => a.scope_type === 'inbox'); if (cur) requestDeleteAgentAssignment(cur) }} disabled={assignmentDeleting !== null}>
+                            {assignmentDeleting ? 'Removendo...' : 'Remover'}
+                          </Button>
+                        )}
+                      </div>
+                      <div>
+                        <Label className="text-gray-700 dark:text-gray-300 mb-2 block">Por departamento</Label>
+                        {departments.length === 0 ? (
+                          <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum departamento. Crie em Equipe / Departamentos para associar agentes por departamento.</p>
+                        ) : (
+                          <ul className="space-y-3">
+                            {departments.map((dept) => {
+                              const assignment = agentAssignments.find((a) => a.scope_type === 'department' && a.scope_id === dept.id)
+                              return (
+                                <li key={dept.id} className="flex flex-wrap items-end gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                                  <span className="w-32 font-medium text-gray-700 dark:text-gray-300 truncate">{dept.name}</span>
+                                  <select
+                                    value={assignment?.librechat_agent_id ?? ''}
+                                    onChange={(e) => {
+                                      const v = e.target.value
+                                      if (v) void saveAgentAssignment('department', dept.id, v)
+                                      else if (assignment) requestDeleteAgentAssignment(assignment, dept.name)
+                                    }}
+                                    className="flex-1 min-w-[180px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
+                                  >
+                                    <option value="">Nenhum</option>
+                                    {librechatAgents.map((a) => (
+                                      <option key={a.id} value={a.id}>{a.name}</option>
+                                    ))}
+                                  </select>
+                                  {assignment && (
+                                    <Button type="button" variant="outline" size="sm" onClick={() => requestDeleteAgentAssignment(assignment, dept.name)} disabled={assignmentDeleting !== null}>
+                                      {assignmentDeleting === assignment.id ? 'Removendo...' : 'Remover'}
+                                    </Button>
+                                  )}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                  <ConfirmDialog
+                    show={assignmentToDelete !== null}
+                    title="Remover associação?"
+                    message={assignmentToDelete ? `O agente deixará de ser usado para "${assignmentToDelete.scopeLabel}". Deseja continuar?` : ''}
+                    confirmText="Remover"
+                    cancelText="Cancelar"
+                    variant="danger"
+                    onConfirm={() => assignmentToDelete && void deleteAgentAssignment(assignmentToDelete.id)}
+                    onCancel={() => setAssignmentToDelete(null)}
+                  />
+                </>
+              )}
+            </div>
           ) : aiSubTab === 'auditoria-ia' ? (
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">

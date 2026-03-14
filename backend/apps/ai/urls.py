@@ -32,4 +32,10 @@ urlpatterns = [
     path('summaries/consolidate-by-contact/', views.conversation_summary_consolidate_by_contact, name='conversation-summary-consolidate-by-contact'),
     path('summaries/consolidate-all/', views.conversation_summary_consolidate_all, name='conversation-summary-consolidate-all'),
     path('summaries/<int:pk>/', views.conversation_summary_detail, name='conversation-summary-detail'),
+    path('librechat-agents/', views.librechat_agents, name='librechat-agents'),
+    path('librechat-health/', views.librechat_health, name='librechat-health'),
+    path('secretary-metrics/', views.secretary_metrics, name='secretary-metrics'),
+    path('agent-assignments/', views.agent_assignments_list, name='agent-assignments-list'),
+    path('agent-assignments/upsert/', views.agent_assignment_upsert, name='agent-assignment-upsert'),
+    path('agent-assignments/<uuid:assignment_id>/', views.agent_assignment_delete, name='agent-assignment-delete'),
 ]

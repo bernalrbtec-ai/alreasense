@@ -136,7 +136,7 @@ def _librechat_chat_impl(
         if system_override and final_messages and final_messages[0].get("role") != "system":
             final_messages.insert(0, {"role": "system", "content": system_override})
     # Não chamar a API sem mensagens (pelo menos uma user ou assistant)
-    if not any(m.get("role") in ("user", "assistant") for m in final_messages):
+    if not any((m if isinstance(m, dict) else {}).get("role") in ("user", "assistant") for m in final_messages):
         return {"ok": False, "error": "Nenhuma mensagem de usuário ou assistente para enviar."}
     url = f"{base_url}/api/agents/v1/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -175,6 +175,88 @@ def _librechat_chat_impl(
         except (ValueError, TypeError) as e:
             last_error = e
             logger.warning("[LIBRECHAT] Erro ao processar resposta: %s", e, exc_info=True)
+        if attempt == 0:
+            time.sleep(LIBRECHAT_RETRY_DELAY)
+    return {"ok": False, "error": str(last_error) if last_error else "Erro ao chamar LibreChat."}
+
+
+def librechat_chat_with_agent_id(
+    librechat_agent_id: str,
+    messages: List[Dict[str, str]],
+    context: Optional[Dict[str, Any]] = None,
+    system_prompt_override: str = "",
+) -> Dict[str, Any]:
+    """
+    Chama o LibreChat com agent_id explícito (ex.: de AgentAssignment).
+    Retorno igual a librechat_chat: {"ok": True, "reply_text": "..."} ou {"ok": False, "error": "..."}.
+    """
+    try:
+        return _librechat_chat_impl_with_agent_id(
+            librechat_agent_id, messages, context, system_prompt_override
+        )
+    except Exception as e:
+        logger.warning("[LIBRECHAT] Erro inesperado (chat_with_agent_id): %s", e, exc_info=True)
+        return {"ok": False, "error": str(e) if str(e) else "Erro inesperado no plug LibreChat."}
+
+
+def _librechat_chat_impl_with_agent_id(
+    agent_id: str,
+    messages: List[Dict[str, str]],
+    context: Optional[Dict[str, Any]] = None,
+    system_prompt_override: str = "",
+) -> Dict[str, Any]:
+    base_url = (getattr(settings, "LIBRECHAT_URL", None) or "").strip().rstrip("/")
+    api_key = (getattr(settings, "LIBRECHAT_API_KEY", None) or "").strip()
+    if not base_url or not api_key:
+        return {"ok": False, "error": "LibreChat não configurado."}
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return {"ok": False, "error": "LIBRECHAT_URL deve usar http:// ou https://."}
+    agent_id = (agent_id or "").strip()
+    if not agent_id:
+        return {"ok": False, "error": "librechat_agent_id vazio."}
+    if context and "messages" in context and isinstance(context["messages"], list):
+        final_messages = _build_messages(
+            context["messages"],
+            system_prompt_override=system_prompt_override or "",
+            context_extra=context,
+        )
+    else:
+        if not messages:
+            return {"ok": False, "error": "messages vazio."}
+        final_messages = list(messages)
+        if system_prompt_override and final_messages and final_messages[0].get("role") != "system":
+            final_messages.insert(0, {"role": "system", "content": system_prompt_override})
+    if not any((m if isinstance(m, dict) else {}).get("role") in ("user", "assistant") for m in final_messages):
+        return {"ok": False, "error": "Nenhuma mensagem de usuário ou assistente para enviar."}
+    url = f"{base_url}/api/agents/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {"model": agent_id, "messages": final_messages, "stream": False}
+    last_error = None
+    for attempt in range(2):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=LIBRECHAT_TIMEOUT)
+            if resp.status_code >= 400:
+                err_msg = _parse_error_response(resp)
+                logger.warning("[LIBRECHAT] HTTP %s agent_id=%s: %s", resp.status_code, agent_id, err_msg)
+                return {"ok": False, "error": err_msg}
+            try:
+                data = resp.json() if resp.content else {}
+            except (ValueError, TypeError):
+                return {"ok": False, "error": "Resposta inválida do LibreChat (não-JSON)."}
+            choices = data.get("choices") or []
+            if not choices:
+                return {"ok": False, "error": "Resposta sem choices."}
+            msg = choices[0].get("message") or {}
+            reply_text = (msg.get("content") or "").strip()
+            if len(reply_text) > LIBRECHAT_REPLY_MAX_LENGTH:
+                reply_text = reply_text[:LIBRECHAT_REPLY_MAX_LENGTH]
+            return {"ok": True, "reply_text": reply_text}
+        except requests.Timeout as e:
+            last_error = e
+        except requests.RequestException as e:
+            last_error = e
+        except (ValueError, TypeError) as e:
+            last_error = e
         if attempt == 0:
             time.sleep(LIBRECHAT_RETRY_DELAY)
     return {"ok": False, "error": str(last_error) if last_error else "Erro ao chamar LibreChat."}

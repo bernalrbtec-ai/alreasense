@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -381,6 +382,37 @@ class Agent(models.Model):
 
     def __str__(self):
         return f"Agent {self.slug} ({self.tenant_id or 'sistema'})"
+
+
+class AgentAssignment(models.Model):
+    """
+    Associação de agente LibreChat a escopo: Inbox (scope_id nulo) ou departamento (scope_id = department_id).
+    Tabela criada via script SQL (docs/sql/ai/0016_agent_assignment.up.sql); managed=False.
+    """
+    SCOPE_INBOX = "inbox"
+    SCOPE_DEPARTMENT = "department"
+    SCOPE_CHOICES = [(SCOPE_INBOX, "Inbox"), (SCOPE_DEPARTMENT, "Departamento")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="agent_assignments",
+    )
+    scope_type = models.CharField(max_length=20, choices=SCOPE_CHOICES)
+    scope_id = models.UUIDField(null=True, blank=True, help_text="NULL para Inbox; id do departamento para department.")
+    librechat_agent_id = models.CharField(max_length=255)
+    display_name = models.CharField(max_length=200, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_agent_assignment"
+        managed = False
+        ordering = ["scope_type", "scope_id"]
+
+    def __str__(self):
+        return f"Assignment {self.scope_type} ({self.scope_id or 'inbox'}) -> {self.display_name}"
 
 
 class AiTranscriptionDailyMetric(models.Model):

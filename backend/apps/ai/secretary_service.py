@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 from django.conf import settings
+from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 
@@ -27,6 +28,21 @@ from apps.ai.models import (
 from apps.ai.vector_store import search_knowledge, search_memory_for_contact
 
 logger = logging.getLogger(__name__)
+
+SECRETARY_METRICS_CACHE_TIMEOUT = 86400 * 365  # 1 ano
+
+
+def _incr_secretary_reply_source(source: str) -> None:
+    """Incrementa contador de respostas da secretária por origem (librechat ou n8n)."""
+    if source not in ("librechat", "n8n"):
+        return
+    key = f"ai:secretary:{source}_total"
+    try:
+        cache.add(key, 0, timeout=SECRETARY_METRICS_CACHE_TIMEOUT)
+        cache.incr(key)
+    except Exception:
+        pass
+
 
 # Parâmetros de geração da IA (defaults globais; overrides por tenant em TenantSecretaryProfile.generation_options_override)
 DEFAULT_GENERATION_OPTIONS = {
@@ -930,31 +946,69 @@ def _secretary_worker(conversation, message) -> None:
 
         context = _build_secretary_context(conversation, message, profile)
         data = None
+        agent_display_name_for_message = None  # Preencher quando resposta vier do LibreChat para exibir "Agente X está atendendo"
 
-        # Plug LibreChat: só tenta se URL+key configurados e existir agente "secretaria" com librechat_agent_id
-        # Sem agentes ou sem config: fluxo segue direto para n8n (ou retorna se n8n também indisponível)
+        # Plug LibreChat: (1) AgentAssignment por escopo (Inbox/departamento), (2) Agent slug "secretaria", (3) n8n
         librechat_url = (getattr(settings, "LIBRECHAT_URL", None) or "").strip()
         librechat_key = (getattr(settings, "LIBRECHAT_API_KEY", None) or "").strip()
         if librechat_url and librechat_key:
             try:
-                from apps.ai.librechat_plug import resolve_agent, librechat_chat
-                agent = resolve_agent("secretaria", tenant.id)
-                if agent and (agent.librechat_agent_id or "").strip():
-                    result = librechat_chat("secretaria", tenant.id, [], context=context)
+                from apps.ai.models import AgentAssignment
+                from apps.ai.librechat_plug import (
+                    resolve_agent,
+                    librechat_chat,
+                    librechat_chat_with_agent_id,
+                )
+                # (1) Tentar AgentAssignment para este escopo (Inbox ou department_id)
+                scope_type = AgentAssignment.SCOPE_INBOX if not conversation.department_id else AgentAssignment.SCOPE_DEPARTMENT
+                scope_id = None if scope_type == AgentAssignment.SCOPE_INBOX else conversation.department_id
+                assignment = None
+                if scope_type == AgentAssignment.SCOPE_INBOX:
+                    assignment = AgentAssignment.objects.filter(
+                        tenant=tenant,
+                        scope_type=AgentAssignment.SCOPE_INBOX,
+                        scope_id__isnull=True,
+                    ).first()
+                else:
+                    assignment = AgentAssignment.objects.filter(
+                        tenant=tenant,
+                        scope_type=AgentAssignment.SCOPE_DEPARTMENT,
+                        scope_id=conversation.department_id,
+                    ).first()
+
+                if assignment and (assignment.librechat_agent_id or "").strip():
+                    result = librechat_chat_with_agent_id(
+                        assignment.librechat_agent_id,
+                        [],
+                        context=context,
+                        system_prompt_override="",
+                    )
                     if isinstance(result, dict) and result.get("ok") and (result.get("reply_text") or "").strip():
                         data = {"reply_text": (result.get("reply_text") or "").strip()}
+                        agent_display_name_for_message = (assignment.display_name or "").strip() or assignment.librechat_agent_id
+                        _incr_secretary_reply_source("librechat")
                         logger.info(
-                            "[SECRETARY] Resposta via LibreChat conversation_id=%s",
+                            "[SECRETARY] Resposta via LibreChat (assignment) conversation_id=%s",
                             conversation.id,
                         )
                     elif isinstance(result, dict) and not result.get("ok"):
-                        logger.info(
-                            "[SECRETARY] LibreChat falhou, fallback n8n: %s",
-                            result.get("error", "unknown"),
-                        )
-                # agent is None ou livrechat_agent_id vazio: não chama plug; data continua None, usa n8n
+                        logger.info("[SECRETARY] LibreChat assignment falhou, fallback: %s", result.get("error", "unknown"))
+                # (2) Fallback: Agent slug "secretaria"
+                if data is None:
+                    agent = resolve_agent("secretaria", tenant.id)
+                    if agent and (agent.librechat_agent_id or "").strip():
+                        result = librechat_chat("secretaria", tenant.id, [], context=context)
+                        if isinstance(result, dict) and result.get("ok") and (result.get("reply_text") or "").strip():
+                            data = {"reply_text": (result.get("reply_text") or "").strip()}
+                            agent_display_name_for_message = (getattr(agent, "display_name", None) or "").strip() or agent.librechat_agent_id
+                            _incr_secretary_reply_source("librechat")
+                            logger.info(
+                                "[SECRETARY] Resposta via LibreChat (agent secretaria) conversation_id=%s",
+                                conversation.id,
+                            )
+                        elif isinstance(result, dict) and not result.get("ok"):
+                            logger.info("[SECRETARY] LibreChat agent falhou, fallback n8n: %s", result.get("error", "unknown"))
             except Exception as e:
-                # ProgrammingError/OperationalError = tabela ai_agent inexistente (migrações não rodadas)
                 from django.db.utils import ProgrammingError, OperationalError
                 if isinstance(e, (ProgrammingError, OperationalError)):
                     logger.info("[SECRETARY] LibreChat indisponível (DB), fallback n8n: %s", e)
@@ -976,6 +1030,7 @@ def _secretary_worker(conversation, message) -> None:
                     resp = requests.post(n8n_url, json=body, timeout=SECRETARY_N8N_TIMEOUT)
                     resp.raise_for_status()
                     data = resp.json() if resp.content else {}
+                    _incr_secretary_reply_source("n8n")
                     break
                 except Exception as e:
                     last_error = e
@@ -1013,7 +1068,7 @@ def _secretary_worker(conversation, message) -> None:
         input_tokens = meta.get("input_tokens") if isinstance(meta.get("input_tokens"), int) else None
         output_tokens = meta.get("output_tokens") if isinstance(meta.get("output_tokens"), int) else None
 
-        sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Assistente"
+        sender_name = (agent_display_name_for_message or (getattr(profile, "signature_name", None) or "").strip() or "Assistente")
         room_group_name = f"chat_tenant_{tenant_id}_conversation_{conversation.id}"
         tenant_group = f"chat_tenant_{tenant_id}"
         channel_layer = get_channel_layer()
@@ -1040,6 +1095,10 @@ def _secretary_worker(conversation, message) -> None:
 
         # Criar mensagem de resposta só quando o modelo devolveu texto válido
         if not no_reply_from_model:
+            msg_metadata = {}
+            if agent_display_name_for_message and str(agent_display_name_for_message).strip():
+                msg_metadata["from_ai_agent"] = True
+                msg_metadata["agent_display_name"] = str(agent_display_name_for_message).strip()
             message_obj = ChatMessage.objects.create(
                 conversation=conversation,
                 sender=None,
@@ -1048,6 +1107,7 @@ def _secretary_worker(conversation, message) -> None:
                 direction="outgoing",
                 status="pending",
                 is_internal=False,
+                metadata=msg_metadata,
             )
             msg_data = serialize_message_for_ws(message_obj)
             conv_data = serialize_conversation_for_ws(conversation)

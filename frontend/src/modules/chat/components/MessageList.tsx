@@ -1136,6 +1136,12 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   });
                 }}
               >
+                {/* Label "Agente X está atendendo" para mensagens outgoing da IA (LibreChat) */}
+                {messageItem.direction === 'outgoing' && messageItem.metadata?.from_ai_agent === true && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                    Agente {(messageItem.metadata?.agent_display_name || messageItem.sender_name || 'Assistente')} está atendendo
+                  </p>
+                )}
                 {/* Cabeçalho da bolha: nome (grupos) à esquerda + badge Template (menor, à direita); só renderiza se houver algo a mostrar */}
                 {(activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone)) || (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) ? (
                   <div className="flex justify-between items-center gap-2 mb-1 min-h-0">

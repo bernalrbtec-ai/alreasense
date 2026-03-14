@@ -13,6 +13,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -23,6 +24,7 @@ from apps.chat.models import Conversation, Message as ChatMessage
 from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.ai.models import (
+    AgentAssignment,
     AiGatewayAudit,
     AiTriageResult,
     TenantAiSettings,
@@ -2900,3 +2902,217 @@ def conversation_summary_auto_approve_config(request):
     profile.summary_auto_approve_config = full_config
     profile.save(update_fields=["summary_auto_approve_config", "updated_at"])
     return Response(full_config)
+
+
+# ----- LibreChat agents proxy e agent-assignments -----
+
+def _librechat_agents_proxy():
+    """Chama GET LibreChat /api/agents/v1/models. Retorna (available, agents, error_message)."""
+    base_url = (getattr(settings, "LIBRECHAT_URL", None) or "").strip().rstrip("/")
+    api_key = (getattr(settings, "LIBRECHAT_API_KEY", None) or "").strip()
+    if not base_url or not api_key:
+        return False, [], "LibreChat não configurado (LIBRECHAT_URL ou LIBRECHAT_API_KEY vazio)."
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return False, [], "LIBRECHAT_URL deve usar http:// ou https://."
+    url = f"{base_url}/api/agents/v1/models"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code >= 400:
+            return False, [], (resp.text or f"HTTP {resp.status_code}")[:500]
+        data = resp.json() if resp.content else None
+        if data is None:
+            return True, [], None
+        # LibreChat models: pode vir em "data" (dict) ou como lista direta
+        if isinstance(data, list):
+            agents = data
+        elif isinstance(data, dict):
+            agents = data.get("data") if isinstance(data.get("data"), list) else []
+        else:
+            agents = []
+        # Normalizar para { id, name } quando possível
+        out = []
+        for item in agents:
+            if isinstance(item, dict):
+                aid = item.get("id") or item.get("model") or ""
+                name = (item.get("name") or item.get("id") or item.get("model") or str(aid)).strip() or str(aid)
+                aid = str(aid).strip()
+                if aid:
+                    out.append({"id": aid, "name": name or aid})
+            elif isinstance(item, str) and item.strip():
+                out.append({"id": item.strip(), "name": item.strip()})
+        return True, out, None
+    except requests.Timeout:
+        return False, [], "Timeout ao conectar ao LibreChat."
+    except requests.RequestException as e:
+        logger.warning("LibreChat agents proxy request error: %s", e, exc_info=True)
+        return False, [], str(e) if str(e) else "Erro ao conectar ao LibreChat."
+    except (ValueError, TypeError) as e:
+        logger.warning("LibreChat agents proxy parse error: %s", e, exc_info=True)
+        return False, [], "Resposta inválida do LibreChat."
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def librechat_agents(request):
+    """GET: lista agentes disponíveis no LibreChat (proxy). Retorna { available, agents, error? }."""
+    available, agents, err = _librechat_agents_proxy()
+    payload = {"available": available, "agents": agents}
+    if err:
+        payload["error"] = err
+    if not available:
+        return Response(payload, status=status.HTTP_200_OK)
+    return Response(payload)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def librechat_health(request):
+    """GET: health check do LibreChat. Retorna { ok: true } ou { ok: false, error: \"...\" }."""
+    available, _, err = _librechat_agents_proxy()
+    if available:
+        return Response({"ok": True})
+    return Response({"ok": False, "error": err or "LibreChat indisponível"}, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def secretary_metrics(request):
+    """GET: contadores de respostas da secretária por origem (LibreChat vs n8n)."""
+    librechat_total = cache.get("ai:secretary:librechat_total", 0)
+    n8n_total = cache.get("ai:secretary:n8n_total", 0)
+    return Response({
+        "librechat_total": int(librechat_total) if librechat_total is not None else 0,
+        "n8n_total": int(n8n_total) if n8n_total is not None else 0,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def agent_assignments_list(request):
+    """GET: lista associações do tenant (Inbox + por departamento). Inclui department_name quando scope_type=department."""
+    from django.db.utils import ProgrammingError, OperationalError
+    from apps.authn.models import Department
+
+    tenant = request.user.tenant
+    try:
+        assignments = AgentAssignment.objects.filter(tenant=tenant).order_by("scope_type", "scope_id")
+    except (ProgrammingError, OperationalError):
+        return Response([])
+    dept_ids = [a.scope_id for a in assignments if a.scope_type == AgentAssignment.SCOPE_DEPARTMENT and a.scope_id]
+    dept_map = {}
+    if dept_ids:
+        for d in Department.objects.filter(id__in=dept_ids):
+            dept_map[str(d.id)] = d.name
+    out = []
+    for a in assignments:
+        item = {
+            "id": str(a.id),
+            "scope_type": a.scope_type,
+            "scope_id": str(a.scope_id) if a.scope_id else None,
+            "librechat_agent_id": a.librechat_agent_id,
+            "display_name": a.display_name,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+        }
+        if a.scope_type == AgentAssignment.SCOPE_DEPARTMENT and a.scope_id:
+            item["department_name"] = dept_map.get(str(a.scope_id)) or "Departamento removido"
+        else:
+            item["department_name"] = None
+        out.append(item)
+    return Response(out)
+
+
+@api_view(["PUT", "PATCH", "POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def agent_assignment_upsert(request):
+    """Cria ou atualiza associação por (scope_type, scope_id). scope_id obrigatório para department."""
+    from django.db.utils import ProgrammingError, OperationalError
+    from apps.authn.models import Department
+
+    tenant = request.user.tenant
+    data = request.data or {}
+    scope_type = (data.get("scope_type") or "").strip().lower()
+    if scope_type not in (AgentAssignment.SCOPE_INBOX, AgentAssignment.SCOPE_DEPARTMENT):
+        return Response(
+            {"error": "scope_type deve ser 'inbox' ou 'department'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    scope_id = data.get("scope_id")
+    if scope_type == AgentAssignment.SCOPE_DEPARTMENT:
+        if not scope_id:
+            return Response({"error": "scope_id obrigatório para scope_type department."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            scope_id = uuid.UUID(str(scope_id))
+            Department.objects.get(id=scope_id, tenant=tenant)
+        except (Department.DoesNotExist, ValueError, TypeError):
+            return Response({"error": "Departamento não encontrado ou não pertence ao tenant."}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        scope_id = None
+
+    librechat_agent_id = (data.get("librechat_agent_id") or "").strip()
+    display_name = (data.get("display_name") or "").strip()
+    if not librechat_agent_id:
+        return Response({"error": "librechat_agent_id é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+    if not display_name:
+        display_name = librechat_agent_id
+
+    try:
+        if scope_type == AgentAssignment.SCOPE_INBOX:
+            assignment, created = AgentAssignment.objects.update_or_create(
+                tenant=tenant,
+                scope_type=AgentAssignment.SCOPE_INBOX,
+                scope_id=None,
+                defaults={"librechat_agent_id": librechat_agent_id, "display_name": display_name},
+            )
+        else:
+            assignment, created = AgentAssignment.objects.update_or_create(
+                tenant=tenant,
+                scope_type=AgentAssignment.SCOPE_DEPARTMENT,
+                scope_id=scope_id,
+                defaults={"librechat_agent_id": librechat_agent_id, "display_name": display_name},
+            )
+        assignment.updated_at = timezone.now()
+        assignment.save(update_fields=["updated_at"])
+    except (ProgrammingError, OperationalError) as e:
+        logger.warning("AgentAssignment upsert: tabela inexistente ou erro DB: %s", e)
+        return Response(
+            {"error": "Tabela de associações não disponível. Execute o script SQL docs/sql/ai/0016_agent_assignment.up.sql"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    out = {
+        "id": str(assignment.id),
+        "scope_type": assignment.scope_type,
+        "scope_id": str(assignment.scope_id) if assignment.scope_id else None,
+        "librechat_agent_id": assignment.librechat_agent_id,
+        "display_name": assignment.display_name,
+        "created_at": assignment.created_at.isoformat() if assignment.created_at else None,
+        "updated_at": assignment.updated_at.isoformat() if assignment.updated_at else None,
+    }
+    if assignment.scope_type == AgentAssignment.SCOPE_DEPARTMENT and assignment.scope_id:
+        try:
+            dept = Department.objects.get(id=assignment.scope_id)
+            out["department_name"] = dept.name
+        except Department.DoesNotExist:
+            out["department_name"] = "Departamento removido"
+    else:
+        out["department_name"] = None
+    return Response(out, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def agent_assignment_delete(request, assignment_id):
+    """DELETE: remove associação por id."""
+    from django.db.utils import ProgrammingError, OperationalError
+
+    tenant = request.user.tenant
+    try:
+        assignment = AgentAssignment.objects.get(id=assignment_id, tenant=tenant)
+    except (AgentAssignment.DoesNotExist, ValueError):
+        return Response({"error": "Associação não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+    except (ProgrammingError, OperationalError):
+        return Response({"error": "Tabela de associações não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    assignment.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
