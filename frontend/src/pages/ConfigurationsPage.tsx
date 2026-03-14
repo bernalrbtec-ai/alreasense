@@ -1642,13 +1642,36 @@ export default function ConfigurationsPage() {
     setAssignmentSaving(key)
     try {
       const displayName = librechatAgents.find((a) => a.id === agentId)?.name || agentId
-      await api.put('/ai/agent-assignments/upsert/', {
+      const { data } = await api.put<{
+        id: string
+        scope_type: string
+        scope_id: string | null
+        librechat_agent_id: string
+        display_name: string
+        department_name?: string | null
+      }>('/ai/agent-assignments/upsert/', {
         scope_type: scopeType,
         scope_id: scopeId,
         librechat_agent_id: agentId,
         display_name: displayName,
       })
       showSuccessToast('Associação salva')
+      if (data) {
+        setAgentAssignments((prev) => {
+          const next = prev.filter(
+            (a) => !(a.scope_type === data.scope_type && (data.scope_type === 'inbox' ? !a.scope_id : a.scope_id === data.scope_id))
+          )
+          next.push({
+            id: data.id,
+            scope_type: data.scope_type,
+            scope_id: data.scope_id,
+            librechat_agent_id: data.librechat_agent_id,
+            display_name: data.display_name,
+            department_name: data.department_name ?? null,
+          })
+          return next
+        })
+      }
       await loadAgentAssignments()
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao salvar')
@@ -1660,15 +1683,17 @@ export default function ConfigurationsPage() {
   const deleteAgentAssignment = async (assignmentId: string) => {
     if (!assignmentId || typeof assignmentId !== 'string') return
     setAssignmentDeleting(assignmentId)
-    setAssignmentToDelete(null)
+    setAgentAssignments((prev) => prev.filter((a) => a.id !== assignmentId))
     try {
       await api.delete(`/ai/agent-assignments/${assignmentId}/`)
       showSuccessToast('Associação removida')
       await loadAgentAssignments()
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao remover')
+      await loadAgentAssignments()
     } finally {
       setAssignmentDeleting(null)
+      setAssignmentToDelete(null)
     }
   }
 
@@ -2699,7 +2724,7 @@ export default function ConfigurationsPage() {
             <BiaAdminPage />
           ) : aiSubTab === 'agentes' ? (
             <div className="space-y-6">
-              {agentsLoading || assignmentsLoading ? (
+              {(agentsLoading || assignmentsLoading) && agentAssignments.length === 0 && librechatAgents.length === 0 ? (
                 <Card className="p-6">
                   <div className="flex items-center justify-center h-48">
                     <LoadingSpinner />
@@ -2765,7 +2790,8 @@ export default function ConfigurationsPage() {
                                 if (cur) requestDeleteAgentAssignment(cur)
                               }
                             }}
-                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
+                            disabled={assignmentSaving === 'inbox'}
+                            className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm disabled:opacity-60"
                           >
                             <option value="">Nenhum</option>
                             {librechatAgents.map((a) => (
@@ -2773,11 +2799,13 @@ export default function ConfigurationsPage() {
                             ))}
                           </select>
                         </div>
-                        {agentAssignments.some((a) => a.scope_type === 'inbox') && (
+                        {assignmentSaving === 'inbox' ? (
+                          <span className="text-sm text-gray-500 dark:text-gray-400">Salvando...</span>
+                        ) : agentAssignments.some((a) => a.scope_type === 'inbox') ? (
                           <Button type="button" variant="outline" size="sm" onClick={() => { const cur = agentAssignments.find((a) => a.scope_type === 'inbox'); if (cur) requestDeleteAgentAssignment(cur) }} disabled={assignmentDeleting !== null}>
                             {assignmentDeleting ? 'Removendo...' : 'Remover'}
                           </Button>
-                        )}
+                        ) : null}
                       </div>
                       <div>
                         <Label className="text-gray-700 dark:text-gray-300 mb-2 block">Por departamento</Label>
@@ -2797,18 +2825,21 @@ export default function ConfigurationsPage() {
                                       if (v) void saveAgentAssignment('department', dept.id, v)
                                       else if (assignment) requestDeleteAgentAssignment(assignment, dept.name)
                                     }}
-                                    className="flex-1 min-w-[180px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm"
+                                    disabled={assignmentSaving === dept.id}
+                                    className="flex-1 min-w-[180px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm disabled:opacity-60"
                                   >
                                     <option value="">Nenhum</option>
                                     {librechatAgents.map((a) => (
                                       <option key={a.id} value={a.id}>{a.name}</option>
                                     ))}
                                   </select>
-                                  {assignment && (
+                                  {assignmentSaving === dept.id ? (
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">Salvando...</span>
+                                  ) : assignment ? (
                                     <Button type="button" variant="outline" size="sm" onClick={() => requestDeleteAgentAssignment(assignment, dept.name)} disabled={assignmentDeleting !== null}>
                                       {assignmentDeleting === assignment.id ? 'Removendo...' : 'Remover'}
                                     </Button>
-                                  )}
+                                  ) : null}
                                 </li>
                               )
                             })}
@@ -2822,8 +2853,10 @@ export default function ConfigurationsPage() {
                     title="Remover associação?"
                     message={assignmentToDelete ? `O agente deixará de ser usado para "${assignmentToDelete.scopeLabel}". Deseja continuar?` : ''}
                     confirmText="Remover"
+                    confirmLoadingText="Removendo..."
                     cancelText="Cancelar"
                     variant="danger"
+                    confirmLoading={assignmentToDelete !== null && assignmentDeleting === assignmentToDelete?.id}
                     onConfirm={() => assignmentToDelete && void deleteAgentAssignment(assignmentToDelete.id)}
                     onCancel={() => setAssignmentToDelete(null)}
                   />

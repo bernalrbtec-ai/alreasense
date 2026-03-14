@@ -8,6 +8,8 @@ interface ConfirmDialogProps {
   confirmText?: string
   cancelText?: string
   variant?: 'danger' | 'warning' | 'info'
+  confirmLoading?: boolean
+  confirmLoadingText?: string
   onConfirm: () => void
   onCancel: () => void
 }
@@ -19,6 +21,8 @@ export default function ConfirmDialog({
   confirmText = 'Confirmar',
   cancelText = 'Cancelar',
   variant = 'danger',
+  confirmLoading = false,
+  confirmLoadingText,
   onConfirm,
   onCancel
 }: ConfirmDialogProps) {
@@ -75,8 +79,9 @@ export default function ConfirmDialog({
             </div>
             <div className="ml-4 flex-shrink-0 flex">
               <button
-                className="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring ring-offset-background"
+                className="bg-white dark:bg-gray-800 rounded-md inline-flex text-gray-400 dark:text-gray-500 hover:text-gray-500 dark:hover:text-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring ring-offset-background disabled:opacity-50 disabled:pointer-events-none"
                 onClick={onCancel}
+                disabled={confirmLoading}
               >
                 <span className="sr-only">Fechar</span>
                 <X className="h-5 w-5" />
@@ -87,14 +92,16 @@ export default function ConfirmDialog({
             <Button
               variant="outline"
               onClick={onCancel}
+              disabled={confirmLoading}
             >
               {cancelText}
             </Button>
             <Button
               className={styles.confirmButton}
               onClick={onConfirm}
+              disabled={confirmLoading}
             >
-              {confirmText}
+              {confirmLoading ? (confirmLoadingText ?? confirmText) : confirmText}
             </Button>
           </div>
         </div>
