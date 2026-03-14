@@ -732,6 +732,9 @@ def gateway_test(request):
         if first_department:
             department_id = first_department.id
 
+    # simulate_production: quando True, envia o mesmo formato da produção (action=secretary, business_hours,
+    # departments, RAG, company_context). Usado nas abas Configuração e Homologação da BIA para que o JSON
+    # enviado ao webhook seja idêntico ao fluxo real. Quando False, envia payload simples (action=chat).
     simulate_production = request.data.get("simulate_production") is True
     if simulate_production:
         logger.info(
