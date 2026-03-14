@@ -775,6 +775,7 @@ export default function BiaAdminPage() {
               )}
             </div>
             {secretaryProfile && !secretaryLoading && (
+              <>
               <div className="mt-6 space-y-8">
                 {/* Identidade e ativação */}
                 <section className="space-y-4">
@@ -1045,7 +1046,7 @@ export default function BiaAdminPage() {
                     {secretarySaving ? 'Salvando...' : 'Salvar'}
                   </Button>
                 </div>
-              </div>
+              </>
             )}
           </Card>
 
