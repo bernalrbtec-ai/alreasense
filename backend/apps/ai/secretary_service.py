@@ -35,7 +35,7 @@ DEFAULT_GENERATION_OPTIONS = {
     "top_k": 30,
     "repeat_penalty": 1.15,
     "min_p": 0.05,
-    "num_ctx": 8192,
+    "num_ctx": 32768,
 }
 _GENERATION_OPTIONS_RANGES = {
     "temperature": (0.0, 1.0),
