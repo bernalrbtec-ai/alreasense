@@ -459,6 +459,10 @@ N8N_UTILITY_WEBHOOK = config('N8N_UTILITY_WEBHOOK', default='')
 AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
 
+# LibreChat (plug agentes): base URL e API key (remoteAgents). Se preenchidos, a Secretária tenta LibreChat antes do n8n.
+LIBRECHAT_URL = config('LIBRECHAT_URL', default='')
+LIBRECHAT_API_KEY = config('LIBRECHAT_API_KEY', default='')
+
 # AI Cache Configuration (Otimização de uso de IA)
 AI_EMBEDDING_CACHE_ENABLED = config('AI_EMBEDDING_CACHE_ENABLED', default=True, cast=bool)
 AI_RESPONSE_CACHE_ENABLED = config('AI_RESPONSE_CACHE_ENABLED', default=True, cast=bool)

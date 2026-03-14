@@ -323,6 +323,66 @@ class TenantSecretaryProfile(models.Model):
         return f"Secretary profile ({self.tenant_id})"
 
 
+class Agent(models.Model):
+    """
+    Registro de agente para o plug LibreChat.
+    Resolução: primeiro agente sistema (tenant_id nulo), depois agente do tenant.
+    Slug do tenant não pode coincidir com slug de agente sistema.
+    """
+    slug = models.CharField(max_length=100, db_index=True)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="librechat_agents",
+        null=True,
+        blank=True,
+        help_text="Nulo = agente padrão (todos os tenants); preenchido = agente do tenant.",
+    )
+    librechat_agent_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="ID do agente no LibreChat (campo model na API /api/agents/v1/chat/completions). Vazio = não usar LibreChat para este agente.",
+    )
+    display_name = models.CharField(max_length=200, blank=True)
+    system_prompt_override = models.TextField(
+        blank=True,
+        help_text="Texto de sistema injetado pelo plug (ex.: nome da empresa, regras).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_agent"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["slug", "tenant"],
+                name="uniq_ai_agent_slug_tenant",
+            ),
+            models.UniqueConstraint(
+                fields=["slug"],
+                condition=models.Q(tenant__isnull=True),
+                name="uniq_ai_agent_slug_system",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["slug", "tenant"], name="ai_agent_slug_tenant_idx"),
+        ]
+        ordering = ["slug", "tenant_id"]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        # Agente do tenant não pode usar slug que já existe como agente sistema (resolução seria ambígua)
+        if self.tenant_id is not None and self.slug:
+            if Agent.objects.filter(slug=self.slug, tenant_id__isnull=True).exclude(pk=self.pk).exists():
+                raise ValidationError(
+                    {"slug": "Já existe um agente do sistema com este slug. Escolha outro."}
+                )
+
+    def __str__(self):
+        return f"Agent {self.slug} ({self.tenant_id or 'sistema'})"
+
+
 class AiTranscriptionDailyMetric(models.Model):
     """Métricas diárias de transcrição por tenant (UTC)."""
 

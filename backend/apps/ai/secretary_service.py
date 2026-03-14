@@ -243,6 +243,7 @@ SOURCE_SECRETARY = "secretary"
 SECRETARY_N8N_TIMEOUT = 20
 SECRETARY_N8N_RETRY_DELAY = 2
 SECRETARY_TYPING_DELAY_SECONDS = 8  # Tempo que o indicador "digitando" fica ativo
+SECRETARY_REPLY_MAX_LENGTH = 4096  # Truncar resposta (n8n ou LibreChat) antes de criar mensagem
 
 
 def _apply_prompt_name_variable(prompt_text: str, signature_name: Optional[str]) -> str:
@@ -928,34 +929,72 @@ def _secretary_worker(conversation, message) -> None:
         _send_typing_indicator(conversation)
 
         context = _build_secretary_context(conversation, message, profile)
-        body = {"action": "secretary", **context}
-        logger.info(
-            "[SECRETARY] Chamando n8n url=%s conversation_id=%s model=%s",
-            n8n_url[:50] + "..." if len(n8n_url) > 50 else n8n_url,
-            conversation.id,
-            body.get("model"),
-        )
+        data = None
 
-        last_error = None
-        for attempt in range(2):
+        # Plug LibreChat: só tenta se URL+key configurados e existir agente "secretaria" com librechat_agent_id
+        # Sem agentes ou sem config: fluxo segue direto para n8n (ou retorna se n8n também indisponível)
+        librechat_url = (getattr(settings, "LIBRECHAT_URL", None) or "").strip()
+        librechat_key = (getattr(settings, "LIBRECHAT_API_KEY", None) or "").strip()
+        if librechat_url and librechat_key:
             try:
-                resp = requests.post(n8n_url, json=body, timeout=SECRETARY_N8N_TIMEOUT)
-                resp.raise_for_status()
-                data = resp.json() if resp.content else {}
-                break
+                from apps.ai.librechat_plug import resolve_agent, librechat_chat
+                agent = resolve_agent("secretaria", tenant.id)
+                if agent and (agent.librechat_agent_id or "").strip():
+                    result = librechat_chat("secretaria", tenant.id, [], context=context)
+                    if isinstance(result, dict) and result.get("ok") and (result.get("reply_text") or "").strip():
+                        data = {"reply_text": (result.get("reply_text") or "").strip()}
+                        logger.info(
+                            "[SECRETARY] Resposta via LibreChat conversation_id=%s",
+                            conversation.id,
+                        )
+                    elif isinstance(result, dict) and not result.get("ok"):
+                        logger.info(
+                            "[SECRETARY] LibreChat falhou, fallback n8n: %s",
+                            result.get("error", "unknown"),
+                        )
+                # agent is None ou livrechat_agent_id vazio: não chama plug; data continua None, usa n8n
             except Exception as e:
-                last_error = e
-                if attempt == 0:
-                    time.sleep(SECRETARY_N8N_RETRY_DELAY)
+                # ProgrammingError/OperationalError = tabela ai_agent inexistente (migrações não rodadas)
+                from django.db.utils import ProgrammingError, OperationalError
+                if isinstance(e, (ProgrammingError, OperationalError)):
+                    logger.info("[SECRETARY] LibreChat indisponível (DB), fallback n8n: %s", e)
                 else:
-                    logger.warning("Secretary n8n call failed for tenant %s: %s", tenant_id, e, exc_info=True)
-                    return
-        else:
-            if last_error:
-                raise last_error
+                    logger.warning("[SECRETARY] LibreChat exception, fallback n8n: %s", e, exc_info=True)
+
+        # Fallback n8n quando LibreChat não retornou resposta
+        if data is None and n8n_url:
+            body = {"action": "secretary", **context}
+            logger.info(
+                "[SECRETARY] Chamando n8n url=%s conversation_id=%s model=%s",
+                n8n_url[:50] + "..." if len(n8n_url) > 50 else n8n_url,
+                conversation.id,
+                body.get("model"),
+            )
+            last_error = None
+            for attempt in range(2):
+                try:
+                    resp = requests.post(n8n_url, json=body, timeout=SECRETARY_N8N_TIMEOUT)
+                    resp.raise_for_status()
+                    data = resp.json() if resp.content else {}
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt == 0:
+                        time.sleep(SECRETARY_N8N_RETRY_DELAY)
+                    else:
+                        logger.warning("Secretary n8n call failed for tenant %s: %s", tenant_id, e, exc_info=True)
+                        return
+            else:
+                if last_error:
+                    raise last_error
+                return
+
+        if data is None:
             return
 
         reply_text = str(data.get("reply_text") or "").strip()
+        if len(reply_text) > SECRETARY_REPLY_MAX_LENGTH:
+            reply_text = reply_text[:SECRETARY_REPLY_MAX_LENGTH]
         no_reply_from_model = not reply_text or reply_text == "(Sem resposta do modelo.)"
         suggested_department_id = data.get("suggested_department_id")
         # Se não há resposta nem transferência, não há nada a fazer
