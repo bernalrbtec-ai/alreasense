@@ -3632,16 +3632,27 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             except Exception as e:
                 logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
             
-            # ✅ Fluxo: processar resposta a lista/botão quando conversa está em um fluxo (antes do Welcome Menu)
+            # ✅ Fluxo: Typebot (continueChat) ou Sense (lista/botão) — só se conversa não está com humano
             flow_processed = False
-            try:
-                from apps.chat.services.flow_engine import process_flow_reply
-                flow_processed = process_flow_reply(conversation, message)
-                if flow_processed:
-                    logger.info("✅ [FLOW] Resposta do fluxo processada")
-                    conversation.refresh_from_db()
-            except Exception as e:
-                logger.error("❌ [FLOW] Erro ao processar resposta do fluxo: %s", e, exc_info=True)
+            if not conversation.assigned_to_id:
+                try:
+                    from apps.chat.models_flow import ConversationFlowState
+                    state = ConversationFlowState.objects.filter(conversation_id=conversation.id).first()
+                    if state and ((getattr(state, "typebot_session_id", None) or "").strip()):
+                        from apps.chat.services.typebot_flow_service import continue_typebot_flow
+                        msg_content = (getattr(message, "content", None) or "").strip()
+                        if msg_content and continue_typebot_flow(conversation, msg_content):
+                            flow_processed = True
+                            logger.info("✅ [FLOW] Resposta Typebot processada")
+                    if not flow_processed:
+                        from apps.chat.services.flow_engine import process_flow_reply
+                        flow_processed = process_flow_reply(conversation, message)
+                        if flow_processed:
+                            logger.info("✅ [FLOW] Resposta do fluxo processada")
+                    if flow_processed:
+                        conversation.refresh_from_db()
+                except Exception as e:
+                    logger.error("❌ [FLOW] Erro ao processar resposta do fluxo: %s", e, exc_info=True)
             # ✅ Processar resposta do menu de boas-vindas (apenas se não foi processada pelo fluxo)
             if not flow_processed:
                 try:

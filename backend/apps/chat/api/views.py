@@ -598,7 +598,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             conversation.department = None  # ✅ NOVO: Remover department
             conversation.status = 'open'
             conversation.save(update_fields=['assigned_to', 'department', 'status'])
-            
+            # Humano assumiu: interromper fluxo Typebot/Flowise para que próximas mensagens não vão para o bot
+            from apps.chat.models_flow import ConversationFlowState
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
             serializer = self.get_serializer(conversation)
             return Response(serializer.data)
         
@@ -634,7 +636,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.assigned_to = assigned_to
         conversation.status = 'open'
         conversation.save(update_fields=['department', 'assigned_to', 'status'])
-        
+        # Humano assumiu: interromper fluxo Typebot/Flowise
+        from apps.chat.models_flow import ConversationFlowState
+        ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
         serializer = self.get_serializer(conversation)
         return Response(serializer.data)
     
@@ -672,7 +676,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # department não é alterado: conversa continua no departamento com "X está atendendo"
         conversation.status = 'open'
         conversation.save(update_fields=['assigned_to', 'status'])
-        
+        # Humano assumiu: interromper fluxo Typebot/Flowise
+        from apps.chat.models_flow import ConversationFlowState
+        ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
         # ✅ LOGS: Log detalhado
         logger.info(
             f"✅ [START CONVERSATION] Conversa {conversation.id} iniciada por {user.email} "
@@ -4027,7 +4033,27 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             'next': f'/chat/conversations/{pk}/messages/?limit={limit}&offset={offset+limit}' if offset + limit < total_count else None,
             'previous': f'/chat/conversations/{pk}/messages/?limit={limit}&offset={max(0, offset-limit)}' if offset > 0 else None
         })
-    
+
+    @action(detail=True, methods=['post'], url_path='start-flow')
+    def start_flow(self, request, pk=None):
+        """
+        Dispara o fluxo (lista/botões) do escopo atual da conversa (Inbox ou departamento).
+        Se a conversa já estiver em um fluxo, reinicia do nó inicial.
+        Útil para "Enviar menu" ou "Iniciar fluxo" manualmente na conversa.
+        """
+        conversation = self.get_object()
+        from apps.chat.services.flow_engine import try_send_flow_start
+        from apps.chat.models_flow import ConversationFlowState
+        # Permitir reinício: remover estado atual para try_send_flow_start criar novo
+        ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        sent = try_send_flow_start(conversation)
+        if sent:
+            return Response({'success': True, 'message': 'Fluxo iniciado.'}, status=status.HTTP_200_OK)
+        return Response(
+            {'success': False, 'message': 'Nenhum fluxo ativo para o Inbox/departamento desta conversa.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):
         """
@@ -4191,6 +4217,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # ✅ FIX: Recarregar conversa do banco para garantir dados atualizados
         conversation.refresh_from_db()
+        # Humano assumiu (transferência para agente): interromper fluxo Typebot/Flowise
+        if conversation.assigned_to_id:
+            from apps.chat.models_flow import ConversationFlowState
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
         
         # ✅ FIX: Criar mensagem interna de transferência APENAS se transferência foi bem-sucedida
         import logging
@@ -4224,12 +4254,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.error(f"❌ [TRANSFER] Erro ao criar mensagem de transferência: {e}", exc_info=True)
             # Não falhar a transferência se a mensagem não puder ser criada
             # Mas logar o erro para diagnóstico
-        
-        # ✅ Enviar mensagem automática ao cliente só quando o DEPARTAMENTO mudar (não ao trocar só de agente no mesmo depto)
+
+        # ✅ Disparar fluxo do departamento quando a conversa entra no novo departamento (lista/botões ou Typebot futuro)
         department_changed = (
             (old_department is None and conversation.department is not None)
             or (old_department is not None and conversation.department is not None and old_department.id != conversation.department.id)
         )
+        if department_changed and conversation.department_id:
+            try:
+                from apps.chat.services.flow_engine import try_send_flow_start
+                if try_send_flow_start(conversation):
+                    logger.info("📋 [FLOW] Fluxo enviado após transferência para departamento: %s", conversation.id)
+            except Exception as e:
+                logger.warning("⚠️ [TRANSFER] Fluxo não enviado após transferência: %s", e)
+        
+        # ✅ Enviar mensagem automática ao cliente só quando o DEPARTAMENTO mudar (não ao trocar só de agente no mesmo depto)
         if department_changed and conversation.department:
             try:
                 from django.db.models import Q

@@ -1328,6 +1328,9 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                         f"✅ [CHAT WS V2] Conversa {conversation.id} atribuída automaticamente a {self.user.email}"
                     )
                     conversation.refresh_from_db()
+                    # Humano assumiu: interromper fluxo Typebot/Flowise
+                    from apps.chat.models_flow import ConversationFlowState
+                    ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
             
             return message
         
