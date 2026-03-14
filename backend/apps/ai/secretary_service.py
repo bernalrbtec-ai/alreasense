@@ -28,6 +28,90 @@ from apps.ai.vector_store import search_knowledge, search_memory_for_contact
 
 logger = logging.getLogger(__name__)
 
+# Parâmetros de geração da IA (defaults globais; overrides por tenant em TenantSecretaryProfile.generation_options_override)
+DEFAULT_GENERATION_OPTIONS = {
+    "temperature": 0.3,
+    "top_p": 0.85,
+    "top_k": 30,
+    "repeat_penalty": 1.15,
+    "min_p": 0.05,
+    "num_ctx": 8192,
+}
+_GENERATION_OPTIONS_RANGES = {
+    "temperature": (0.0, 1.0),
+    "top_p": (0.1, 1.0),
+    "top_k": (1, 100),
+    "repeat_penalty": (0.8, 2.0),
+    "min_p": (0.0, 0.5),
+    "num_ctx": (2048, 32768),
+}
+_VALID_OPTIONS_KEYS = frozenset(DEFAULT_GENERATION_OPTIONS.keys())
+
+
+def get_effective_generation_options(profile: Optional[TenantSecretaryProfile]) -> Dict[str, Any]:
+    """
+    Retorna parâmetros de geração efetivos: defaults + override do perfil (com clamp).
+    Sempre retorna um dict completo; valores inválidos ou ausentes usam o default.
+    """
+    opts = dict(DEFAULT_GENERATION_OPTIONS)
+    if not profile:
+        return opts
+    override = getattr(profile, "generation_options_override", None)
+    if not isinstance(override, dict):
+        return opts
+    for key in _VALID_OPTIONS_KEYS:
+        if key not in override:
+            continue
+        val = override[key]
+        try:
+            if key == "num_ctx":
+                val = int(val) if val is not None else opts[key]
+            else:
+                val = float(val) if val is not None else opts[key]
+        except (TypeError, ValueError):
+            logger.warning(
+                "[SECRETARY] generation_options_override.%s inválido (%s); usando default",
+                key, override[key],
+            )
+            continue
+        low, high = _GENERATION_OPTIONS_RANGES[key]
+        val = max(low, min(high, val))
+        opts[key] = val
+    return opts
+
+
+def validate_and_sanitize_generation_options(data: Any) -> tuple:
+    # Returns (dict_sanitized, None) or (None, error_message)
+    """
+    Valida e sanitiza um dict de advanced_options para gravar em generation_options_override.
+    Retorna (dict_sanitizado, None) ou (None, mensagem_erro).
+    Aceita None ou {} para "restaurar defaults" (retorna ({}, None) -> gravar null/empty).
+    """
+    if data is None:
+        return {}, None
+    if not isinstance(data, dict):
+        return None, "advanced_options deve ser um objeto."
+    out = {}
+    for key in data:
+        if key not in _VALID_OPTIONS_KEYS:
+            continue
+        val = data[key]
+        try:
+            if key == "num_ctx":
+                val = int(val) if val is not None else None
+            else:
+                val = float(val) if val is not None else None
+        except (TypeError, ValueError):
+            return None, f"advanced_options.{key} deve ser um número."
+        if val is None:
+            continue
+        low, high = _GENERATION_OPTIONS_RANGES[key]
+        if not (low <= val <= high):
+            return None, f"advanced_options.{key} deve estar entre {low} e {high}."
+        out[key] = val
+    return out, None
+
+
 # Delay na primeira interação: timers por conversation_id (fallback quando Redis indisponível)
 _pending_secretary_timers = {}
 _pending_secretary_lock = threading.Lock()
@@ -531,6 +615,8 @@ Nunca envie apenas as linhas internas sem a mensagem ao cliente antes."""
     signature_name = getattr(profile, "signature_name", None) or ""
     prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
 
+    opts = get_effective_generation_options(profile)
+    logger.debug("[SECRETARY] context built with generation options keys: %s", list(opts.keys()))
     return {
         "agent_type": "secretary",
         "use_memory": getattr(profile, "use_memory", False),
@@ -564,6 +650,7 @@ Nunca envie apenas as linhas internas sem a mensagem ao cliente antes."""
         "model": secretary_model,
         "metadata": {"model": secretary_model},
         "prompt": prompt_with_data,
+        "options": opts,
     }
 
 
@@ -665,6 +752,10 @@ def build_secretary_payload_for_test(
         tenant_name, business_hours_info, server_time_utc
     ) + (prompt or "").strip()
     prompt_with_data = _apply_prompt_name_variable(prompt_with_data, signature_name)
+    opts = get_effective_generation_options(
+        TenantSecretaryProfile.objects.filter(tenant=tenant).first()
+    )
+    logger.debug("[SECRETARY] test payload built with generation options keys: %s", list(opts.keys()))
     payload = {
         "protocol_version": "v1",
         "action": "secretary",
@@ -698,6 +789,7 @@ def build_secretary_payload_for_test(
         "model": model,
         "metadata": {"model": model, "source": "test"},
         "prompt": prompt_with_data,
+        "options": opts,
     }
     return payload
 

@@ -307,6 +307,12 @@ class TenantSecretaryProfile(models.Model):
         blank=True,
         help_text='Config de aprovação automática de resumos RAG: enabled, criteria (min_words, max_words, etc.).',
     )
+    generation_options_override = models.JSONField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text='Override de parâmetros de geração da IA (temperature, top_p, top_k, repeat_penalty, min_p, num_ctx). Null = usar defaults.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

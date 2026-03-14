@@ -229,6 +229,8 @@ interface SecretaryProfile {
   use_memory: boolean
   is_active: boolean
   inbox_idle_minutes: number
+  response_delay_seconds?: number
+  advanced_options?: Record<string, number> | null
 }
 
 interface GatewayAuditItem {
@@ -1529,6 +1531,12 @@ export default function ConfigurationsPage() {
         use_memory: response.data?.use_memory ?? true,
         is_active: response.data?.is_active ?? false,
         inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+        response_delay_seconds: response.data?.response_delay_seconds ?? 0,
+        advanced_options: (() => {
+          const o = response.data?.advanced_options
+          if (o != null && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, number>
+          return undefined
+        })(),
       }
       console.log('[SECRETARY FETCH] Dados carregados do servidor:', {
         form_data_keys: Object.keys(loadedProfile.form_data),
@@ -1563,7 +1571,12 @@ export default function ConfigurationsPage() {
     const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
     try {
       setSecretaryProfileSaving(true)
-      const response = await api.put('/ai/secretary/profile/', profileToSave)
+      const payload = { ...profileToSave }
+      if (payload.advanced_options != null && typeof payload.advanced_options === 'object') {
+        const { num_ctx: _, ...rest } = payload.advanced_options as Record<string, unknown>
+        payload.advanced_options = Object.keys(rest).length ? rest : null
+      }
+      const response = await api.put('/ai/secretary/profile/', payload)
 
       if (response.data) {
         const savedProfile: SecretaryProfile = {
@@ -1573,6 +1586,12 @@ export default function ConfigurationsPage() {
           use_memory: response.data?.use_memory ?? true,
           is_active: response.data?.is_active ?? false,
           inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+          response_delay_seconds: response.data?.response_delay_seconds ?? 0,
+          advanced_options: (() => {
+            const o = response.data?.advanced_options
+            if (o != null && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, number>
+            return undefined
+          })(),
         }
         setSecretaryProfile(savedProfile)
       }

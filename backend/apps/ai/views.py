@@ -43,8 +43,11 @@ from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.ai.throttling import GatewayReplyThrottle, GatewayTestThrottle
 from apps.ai.secretary_service import (
     build_secretary_payload_for_test,
+    DEFAULT_GENERATION_OPTIONS,
+    get_effective_generation_options,
     _message_content_for_secretary,
     _server_time_utc_iso,
+    validate_and_sanitize_generation_options,
 )
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
@@ -1175,6 +1178,7 @@ def secretary_profile(request):
             "is_active": profile.is_active,
             "inbox_idle_minutes": getattr(profile, 'inbox_idle_minutes', 0) or 0,
             "response_delay_seconds": getattr(profile, 'response_delay_seconds', 0) or 0,
+            "advanced_options": get_effective_generation_options(profile),
             "created_at": timezone.localtime(profile.created_at).isoformat(),
             "updated_at": timezone.localtime(profile.updated_at).isoformat(),
         })
@@ -1251,6 +1255,21 @@ def secretary_profile(request):
         except (TypeError, ValueError):
             errors['response_delay_seconds'] = 'Valor inválido.'
 
+    if 'advanced_options' in data:
+        sanitized_opts, err = validate_and_sanitize_generation_options(data.get('advanced_options'))
+        if err:
+            errors['advanced_options'] = err
+        else:
+            if not sanitized_opts:
+                profile.generation_options_override = None
+            elif all(
+                sanitized_opts.get(k) == DEFAULT_GENERATION_OPTIONS.get(k)
+                for k in sanitized_opts
+            ):
+                profile.generation_options_override = None
+            else:
+                profile.generation_options_override = sanitized_opts
+
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1283,6 +1302,7 @@ def secretary_profile(request):
         "is_active": profile.is_active,
         "inbox_idle_minutes": getattr(profile, 'inbox_idle_minutes', 0) or 0,
         "response_delay_seconds": getattr(profile, 'response_delay_seconds', 0) or 0,
+        "advanced_options": get_effective_generation_options(profile),
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
     })
 
