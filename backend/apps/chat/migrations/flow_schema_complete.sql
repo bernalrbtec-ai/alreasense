@@ -1,6 +1,6 @@
 -- =============================================================================
--- FLUXO CONVERSACIONAL + media_url (tudo em um script para rodar direto no banco)
--- Substitui as migrations 0017 + 0018 + 0019 quando você aplica direto no PostgreSQL.
+-- FLUXO CONVERSACIONAL + media_url + campos Typebot (tudo em um script para rodar direto no banco)
+-- Equivalente a flow_schema.sql (0017) + flow_typebot_fields.sql + ajustes de media_url.
 -- Pré-requisito: tenancy_tenant, authn_department, chat_conversation existem.
 -- Idempotente: pode rodar mais de uma vez (CREATE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS).
 -- =============================================================================
@@ -75,3 +75,19 @@ CREATE TABLE IF NOT EXISTS chat_conversation_flow_state (
 
 CREATE INDEX IF NOT EXISTS idx_chat_conv_flow_state_conversation ON chat_conversation_flow_state(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_chat_conv_flow_state_flow ON chat_conversation_flow_state(flow_id);
+
+-- 5) Campos Typebot (idempotente: adiciona só se não existirem)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_public_id') THEN
+    ALTER TABLE chat_flow ADD COLUMN typebot_public_id VARCHAR(100) NOT NULL DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_base_url') THEN
+    ALTER TABLE chat_flow ADD COLUMN typebot_base_url VARCHAR(200) NOT NULL DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_conversation_flow_state' AND column_name = 'typebot_session_id') THEN
+    ALTER TABLE chat_conversation_flow_state ADD COLUMN typebot_session_id VARCHAR(255) NOT NULL DEFAULT '';
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_chat_conv_flow_state_typebot_session ON chat_conversation_flow_state(typebot_session_id) WHERE typebot_session_id <> '';
+ALTER TABLE chat_conversation_flow_state ALTER COLUMN current_node_id DROP NOT NULL;

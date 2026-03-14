@@ -471,6 +471,18 @@ def try_send_flow_start(conversation: Conversation) -> bool:
     if not flow:
         return False
 
+    # Typebot: quando o fluxo tem typebot_public_id, executar via Typebot em vez de nós/arestas
+    typebot_public_id = (getattr(flow, "typebot_public_id", None) or "").strip()
+    if typebot_public_id:
+        try:
+            from apps.chat.services.typebot_flow_service import start_typebot_flow
+            if start_typebot_flow(conversation, flow):
+                logger.info("[FLOW] Fluxo Typebot iniciado: conversation=%s flow=%s", conversation.id, flow.name)
+                return True
+        except Exception as e:
+            logger.exception("[FLOW] Erro ao iniciar Typebot: %s", e)
+        return False
+
     start_node = get_start_node(flow)
     if not start_node:
         logger.warning("[FLOW] Fluxo sem nó inicial: %s", flow.id)

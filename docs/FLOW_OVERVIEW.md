@@ -11,12 +11,14 @@
   - `send_flow_node`: cria mensagem com lista/botões e enfileira envio (task Evolution/Meta).
   - `process_flow_reply`: processa resposta (list_reply/button_reply), match por option_id normalizado, avança nó / transferência / encerramento.
   - `try_send_flow_start`: envia nó inicial em conversa nova ou reaberta; respeita `allow_meta_interactive_buttons`; não reenvia se já existir estado.
-- **Webhook** (`webhooks.py`): Grava `list_reply`/`button_reply` em `message.metadata`; chama `process_flow_reply` antes do Welcome Menu; em conversa nova/reaberta chama `try_send_flow_start` antes de `send_welcome_menu`.
-- **API** (`api/views_flow.py`, `serializers_flow.py`): CRUD de flows, flow-nodes, flow-edges; filtro por tenant; `send_test` e `available_departments`; validações (body_text, sections, buttons, to_node mesmo fluxo, etc.).
+  - **Typebot**: quando `Flow.typebot_public_id` está preenchido, a execução é feita por `services/typebot_flow_service.py` (startChat/continueChat); o disparo continua igual (nova conversa, reabertura, transferência, botão Iniciar fluxo). O motor continua respeitando `allow_meta_interactive_buttons` do tenant antes de iniciar qualquer fluxo.
+- **Webhook** (`webhooks.py`): Grava `list_reply`/`button_reply` em `message.metadata`; chama `process_flow_reply` (ou `continue_typebot_flow` se sessão Typebot ativa) antes do Welcome Menu; em conversa nova/reaberta chama `try_send_flow_start` antes de `send_welcome_menu`.
+- **API** (`api/views.py`: endpoint **start-flow** no ConversationViewSet; `api/views_flow.py`, `serializers_flow.py`): CRUD de flows, flow-nodes, flow-edges; filtro por tenant; `send_test` e `available_departments`; `POST /chat/conversations/{id}/start-flow/` reinicia o fluxo do escopo; validações (body_text, sections, buttons, to_node mesmo fluxo, etc.).
 - **Admin** (`admin.py`): Flow, FlowNode, FlowEdge registrados; visíveis só para `role=admin` (ou superuser); querysets filtrados por tenant.
 
 ### Frontend
-- **FlowPage** (`pages/FlowPage.tsx`): Lista fluxos, criar fluxo, seleção pós-criar, loading do detalhe, preview em texto, envio de teste (phone), CRUD de nós e arestas em modais, confirmação de exclusão, validação de JSON (seções/botões), toasts e tratamento de erros da API.
+- **FlowPage** (`pages/FlowPage.tsx`): Lista fluxos, criar fluxo, seleção pós-criar, loading do detalhe, preview em texto, envio de teste (phone), CRUD de nós e arestas em modais, confirmação de exclusão, validação de JSON (seções/botões), toasts e tratamento de erros da API. Se o fluxo for **Typebot** (`typebot_public_id` preenchido), exibe iframe do Typebot em vez do canvas e oculta a lista "Etapas".
+- **Chat**: botão **"Iniciar fluxo"** no menu da conversa (três pontos) chama o endpoint `start-flow`.
 - **Rota**: `/configurations/flows`; aba em Configurações.
 
 ### Integração
@@ -64,6 +66,10 @@
    Modelo permite; `get_start_node` usa o primeiro com `is_start=True`. Comportamento definido.  
    **Opcional:** Validar no serializer “apenas um is_start por fluxo” para evitar confusão.
 
+6. **Fluxos Typebot**  
+   Sem o script SQL dos campos Typebot (`flow_typebot_fields.sql`) ou com a API do Typebot (typebot.io ou URL base self-hosted) inacessível, fluxos Typebot não iniciam e send_test falha.  
+   **Evitar:** Aplicar `backend/apps/chat/migrations/flow_typebot_fields.sql` após o schema de fluxo; garantir que a API do Typebot esteja acessível para startChat/continueChat.
+
 ---
 
 ## Melhorias recomendadas (não bloqueantes)
@@ -79,6 +85,7 @@
 ## Checklist pré-produção
 
 - [ ] Schema de fluxo aplicado (flow_schema.sql ou migrate 0017).
+- [ ] Para fluxos Typebot: script `flow_typebot_fields.sql` aplicado; API do Typebot (typebot.io ou self-hosted) acessível.
 - [ ] Tenant com `allow_meta_interactive_buttons` configurado conforme desejado.
 - [ ] Pelo menos um fluxo com nó inicial e arestas testado (envio + resposta) no ambiente alvo.
 - [ ] Verificar que conversas novas/reabertas recebem fluxo ou Welcome Menu conforme esperado.

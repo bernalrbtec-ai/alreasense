@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -35,6 +35,7 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Inicializar todos os estados ANTES de qualquer hook que dependa de activeConversation
   const [showMenu, setShowMenu] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [startFlowLoading, setStartFlowLoading] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
@@ -996,6 +997,32 @@ export function ChatWindow() {
                   >
                     <ArrowRightLeft className="w-4 h-4" />
                     Transferir conversa
+                  </button>
+                )}
+
+                {activeConversation?.conversation_type !== 'group' && conversationId && (
+                  <button
+                    onClick={async () => {
+                      setShowMenu(false);
+                      setStartFlowLoading(true);
+                      try {
+                        const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`);
+                        if (res.data?.success) {
+                          toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                        } else {
+                          toast.error(res.data?.message || 'Nenhum fluxo ativo para esta conversa.');
+                        }
+                      } catch (e: any) {
+                        toast.error(e.response?.data?.message || 'Não foi possível iniciar o fluxo.');
+                      } finally {
+                        setStartFlowLoading(false);
+                      }
+                    }}
+                    disabled={startFlowLoading}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 disabled:opacity-50"
+                  >
+                    <Zap className="w-4 h-4" />
+                    {startFlowLoading ? 'Iniciando...' : 'Iniciar fluxo'}
                   </button>
                 )}
 

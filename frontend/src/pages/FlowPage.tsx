@@ -63,6 +63,8 @@ interface Flow {
   department_name: string | null
   whatsapp_instance?: string | null
   whatsapp_instance_name?: string | null
+  typebot_public_id?: string | null
+  typebot_base_url?: string | null
   is_active: boolean
   nodes?: FlowNode[]
 }
@@ -177,6 +179,8 @@ export default function FlowPage() {
   const [editFlowScope, setEditFlowScope] = useState<'inbox' | 'department'>('inbox')
   const [editFlowDepartmentId, setEditFlowDepartmentId] = useState<string | null>(null)
   const [editFlowInstanceId, setEditFlowInstanceId] = useState<string | null>(null)
+  const [editTypebotPublicId, setEditTypebotPublicId] = useState('')
+  const [editTypebotBaseUrl, setEditTypebotBaseUrl] = useState('')
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
@@ -316,6 +320,8 @@ export default function FlowPage() {
     setEditFlowScope((selectedFlow.scope as 'inbox' | 'department') || 'inbox')
     setEditFlowDepartmentId(selectedFlow.department || null)
     setEditFlowInstanceId(selectedFlow.whatsapp_instance ?? null)
+    setEditTypebotPublicId(selectedFlow.typebot_public_id ?? '')
+    setEditTypebotBaseUrl(selectedFlow.typebot_base_url ?? '')
     setEditFlowOpen(true)
   }
 
@@ -337,6 +343,8 @@ export default function FlowPage() {
         scope: editFlowScope,
         department: editFlowScope === 'department' ? editFlowDepartmentId : null,
         whatsapp_instance: editFlowInstanceId || null,
+        typebot_public_id: editTypebotPublicId.trim() || null,
+        typebot_base_url: editTypebotBaseUrl.trim() || null,
       })
       toast.success('Fluxo atualizado')
       setEditFlowOpen(false)
@@ -349,6 +357,8 @@ export default function FlowPage() {
         department_name: data?.department_name ?? null,
         whatsapp_instance: data?.whatsapp_instance ?? null,
         whatsapp_instance_name: data?.whatsapp_instance_name ?? null,
+        typebot_public_id: data?.typebot_public_id ?? null,
+        typebot_base_url: data?.typebot_base_url ?? null,
         is_active: data?.is_active ?? selectedFlow.is_active,
       })
       selectedFlowIdRef.current = selectedFlow.id
@@ -1013,6 +1023,26 @@ export default function FlowPage() {
                     <span className="block mt-1 text-gray-500 dark:text-gray-400">Instância: usar da conversa</span>
                   )}
                 </p>
+                {(flowDetail.typebot_public_id || '').trim() ? (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Este fluxo usa o <strong>Typebot</strong>. Edite o fluxo no Typebot (aba Share &gt; Iframe/API). As mensagens serão enviadas ao WhatsApp automaticamente.
+                    </p>
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900" style={{ minHeight: 520 }}>
+                      <iframe
+                        title={`Typebot ${flowDetail.name}`}
+                        src={(() => {
+                          const base = (flowDetail.typebot_base_url || '').trim().replace(/\/api\/v1\/?$/, '')
+                          const viewerBase = base || 'https://typebot.io'
+                          return `${viewerBase}/embed/${(flowDetail.typebot_public_id || '').trim()}`
+                        })()}
+                        width="100%"
+                        height={520}
+                        className="border-0 w-full"
+                      />
+                    </div>
+                  </div>
+                ) : (
                 <div className="flex gap-4">
                   <div className="flex flex-col gap-1.5 shrink-0 w-40 py-2">
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Arraste para o canvas</span>
@@ -1048,6 +1078,7 @@ export default function FlowPage() {
                     />
                   </div>
                 </div>
+                )}
               </Card>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
@@ -1072,6 +1103,7 @@ export default function FlowPage() {
                   </div>
                 </Card>
               </div>
+              {!(flowDetail.typebot_public_id || '').trim() && (
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-medium text-gray-900 dark:text-gray-100">Etapas ({flowDetail.nodes?.length || 0})</h3>
@@ -1134,6 +1166,7 @@ export default function FlowPage() {
                   ))}
                 </ul>
               </Card>
+              )}
             </motion.div>
           )}
           </AnimatePresence>
@@ -1552,9 +1585,27 @@ export default function FlowPage() {
                 </select>
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher uma instância, o fluxo sempre envia por ela.</p>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-1">
-                Tomadas de decisão e transferência: na lista &quot;Etapas&quot; abaixo, use &quot;Conectar&quot; em cada etapa para definir para onde leva cada opção (próxima etapa, transferir para departamento ou encerrar).
-              </p>
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                <Label className="text-accent-600 dark:text-accent-400">Typebot (substitui etapas por fluxo no Typebot)</Label>
+                <Input
+                  className="mt-1"
+                  value={editTypebotPublicId}
+                  onChange={(e) => setEditTypebotPublicId(e.target.value)}
+                  placeholder="Public ID do Typebot (Share &gt; API)"
+                />
+                <Input
+                  className="mt-2"
+                  value={editTypebotBaseUrl}
+                  onChange={(e) => setEditTypebotBaseUrl(e.target.value)}
+                  placeholder="URL base da API (vazio = typebot.io)"
+                />
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp.</p>
+              </div>
+              {!editTypebotPublicId.trim() && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-1">
+                  Tomadas de decisão e transferência: na lista &quot;Etapas&quot; abaixo, use &quot;Conectar&quot; em cada etapa para definir para onde leva cada opção (próxima etapa, transferir para departamento ou encerrar).
+                </p>
+              )}
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleSaveFlow} disabled={savingFlow}>

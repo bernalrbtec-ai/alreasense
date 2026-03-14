@@ -48,6 +48,20 @@ class Flow(models.Model):
         verbose_name="Instância WhatsApp",
         help_text="Quando definida, o fluxo envia/responde por esta instância.",
     )
+    # Typebot: quando preenchido, o fluxo é executado pelo Typebot (em vez de nós/arestas).
+    typebot_public_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Typebot Public ID",
+        help_text="ID público do Typebot (Share > API). Deixe vazio para usar fluxo com nós/lista/botões.",
+    )
+    typebot_base_url = models.URLField(
+        blank=True,
+        default="",
+        verbose_name="Typebot Base URL",
+        help_text="URL base da API do Typebot (ex: https://typebot.io ou self-hosted). Vazio = typebot.io",
+    )
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -227,7 +241,7 @@ class FlowEdge(models.Model):
 
 
 class ConversationFlowState(models.Model):
-    """Estado do fluxo por conversa: em qual nó a conversa está."""
+    """Estado do fluxo por conversa: nó atual (fluxo Sense) ou sessão Typebot."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     conversation = models.OneToOneField(
@@ -246,7 +260,18 @@ class ConversationFlowState(models.Model):
         FlowNode,
         on_delete=models.CASCADE,
         related_name="conversation_states",
+        null=True,
+        blank=True,
         verbose_name="Nó atual",
+        help_text="Null quando o fluxo é Typebot (usa typebot_session_id).",
+    )
+    typebot_session_id = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        db_index=True,
+        verbose_name="Typebot Session ID",
+        help_text="Sessão retornada pelo Typebot startChat; usado em continueChat.",
     )
     entered_at = models.DateTimeField(auto_now_add=True)
     metadata = models.JSONField(default=dict, blank=True)
@@ -257,4 +282,6 @@ class ConversationFlowState(models.Model):
         verbose_name_plural = "Estados de fluxo"
 
     def __str__(self):
-        return f"{self.conversation_id} @ {self.current_node.name}"
+        if self.typebot_session_id:
+            return f"{self.conversation_id} @ Typebot({self.typebot_session_id[:16]}...)"
+        return f"{self.conversation_id} @ {self.current_node.name if self.current_node else '?'}"

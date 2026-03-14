@@ -67,6 +67,7 @@ class FlowViewSet(viewsets.ModelViewSet):
         """
         Envia o passo inicial do fluxo para um número de teste.
         Body: { "phone": "5511999999999" }
+        Se o fluxo for Typebot (typebot_public_id preenchido), inicia a sessão Typebot e envia as primeiras mensagens.
         """
         flow = self.get_object()
         from apps.tenancy.models import Tenant
@@ -79,30 +80,8 @@ class FlowViewSet(viewsets.ModelViewSet):
         phone = (request.data.get("phone") or "").strip()
         if not phone:
             return Response({"detail": "phone é obrigatório"}, status=status.HTTP_400_BAD_REQUEST)
-        from apps.chat.services.flow_engine import get_start_node
-        start_node = get_start_node(flow)
-        if not start_node:
-            return Response({"detail": "Fluxo sem nó inicial"}, status=status.HTTP_400_BAD_REQUEST)
-        if start_node.node_type == FlowNode.NODE_TYPE_DELAY:
-            return Response(
-                {"detail": "O fluxo começa com uma etapa timer. Para teste, use um nó inicial do tipo mensagem, lista ou botões."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
         from apps.chat.models import Conversation
-        from apps.notifications.models import WhatsAppInstance
-        instance = WhatsAppInstance.objects.filter(tenant=request.user.tenant, is_active=True).first()
-        if not instance:
-            return Response({"detail": "Nenhuma instância WhatsApp ativa"}, status=status.HTTP_400_BAD_REQUEST)
-        if start_node.node_type in (FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS) and getattr(
-            instance, "integration_type", None
-        ) == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
-            return Response(
-                {
-                    "detail": "Lista e botões estão desativados para instâncias Evolution API (bug na v2.3.7). "
-                    "O fluxo de teste usaria o nó inicial como lista/botões. Use uma instância Meta ou altere o nó inicial para mensagem de texto."
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        from apps.chat.models_flow import ConversationFlowState
         phone_digits = "".join(c for c in phone.replace("+", "").replace(" ", "").replace("-", "") if c.isdigit())
         if not phone_digits:
             return Response({"detail": "Número de telefone inválido"}, status=status.HTTP_400_BAD_REQUEST)
@@ -122,8 +101,37 @@ class FlowViewSet(viewsets.ModelViewSet):
                 {"detail": "Crie uma conversa com esse número antes ou use um número que já tenha conversa"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Fluxo Typebot: iniciar sessão e enviar mensagens via API
+        if (getattr(flow, "typebot_public_id", None) or "").strip():
+            from apps.chat.services.typebot_flow_service import start_typebot_flow
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+            if start_typebot_flow(conversation, flow):
+                return Response({"message_id": "typebot", "conversation_id": str(conversation.id)})
+            return Response({"detail": "Falha ao iniciar Typebot (verifique Public ID e URL base)."}, status=status.HTTP_502_BAD_GATEWAY)
+        from apps.chat.services.flow_engine import get_start_node
+        start_node = get_start_node(flow)
+        if not start_node:
+            return Response({"detail": "Fluxo sem nó inicial"}, status=status.HTTP_400_BAD_REQUEST)
+        if start_node.node_type == FlowNode.NODE_TYPE_DELAY:
+            return Response(
+                {"detail": "O fluxo começa com uma etapa timer. Para teste, use um nó inicial do tipo mensagem, lista ou botões."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        from apps.notifications.models import WhatsAppInstance
+        instance = WhatsAppInstance.objects.filter(tenant=request.user.tenant, is_active=True).first()
+        if not instance:
+            return Response({"detail": "Nenhuma instância WhatsApp ativa"}, status=status.HTTP_400_BAD_REQUEST)
+        if start_node.node_type in (FlowNode.NODE_TYPE_LIST, FlowNode.NODE_TYPE_BUTTONS) and getattr(
+            instance, "integration_type", None
+        ) == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
+            return Response(
+                {
+                    "detail": "Lista e botões estão desativados para instâncias Evolution API (bug na v2.3.7). "
+                    "O fluxo de teste usaria o nó inicial como lista/botões. Use uma instância Meta ou altere o nó inicial para mensagem de texto."
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         from apps.chat.services.flow_engine import send_flow_node, _auto_advance_message_chain
-        from apps.chat.models_flow import ConversationFlowState
         state, created = ConversationFlowState.objects.get_or_create(
             conversation_id=conversation.id,
             defaults={"flow_id": flow.id, "current_node_id": start_node.id},
