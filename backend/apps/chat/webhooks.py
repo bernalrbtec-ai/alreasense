@@ -2454,7 +2454,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     try:
                         from apps.chat.services.flow_engine import try_send_flow_start
                         from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        if try_send_flow_start(conversation):
+                        sent_flow, _ = try_send_flow_start(conversation)
+                        if sent_flow:
                             logger.info("📋 [FLOW] Fluxo enviado para nova conversa: %s", conversation.id)
                         elif WelcomeMenuService.should_send_menu(conversation):
                             logger.info("📋 [WELCOME MENU] Enviando menu para nova conversa: %s", conversation.id)
@@ -2910,7 +2911,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         try:
                             from apps.chat.services.flow_engine import try_send_flow_start
                             from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                            if try_send_flow_start(conversation):
+                            sent_flow, _ = try_send_flow_start(conversation)
+                            if sent_flow:
                                 logger.info("📋 [FLOW] Fluxo enviado para conversa reaberta: %s", conversation.id)
                             else:
                                 logger.info("📋 [WELCOME MENU] Enviando menu para conversa reaberta: %s", conversation.id)

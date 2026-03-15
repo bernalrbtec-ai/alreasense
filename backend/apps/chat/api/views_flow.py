@@ -2,14 +2,15 @@
 Views para Fluxo (lista/botões por Inbox ou departamento).
 """
 import logging
+from django.utils import timezone
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from apps.authn.permissions import IsAdmin
 from apps.authn.models import Department
-from apps.chat.models_flow import Flow, FlowNode, FlowEdge
+from apps.chat.models_flow import Flow, FlowNode, FlowEdge, ConversationFlowState
 from apps.chat.api.serializers_flow import (
     FlowSerializer,
     FlowListSerializer,

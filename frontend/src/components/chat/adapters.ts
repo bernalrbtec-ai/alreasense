@@ -14,6 +14,8 @@ export interface ConversationSidebarConversation {
   contactPhone: string;
   avatarInitials: string;
   avatarColor: string;
+  /** URL da foto de perfil (ex.: WhatsApp); null = usar apenas iniciais */
+  profilePicUrl: string | null;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -97,6 +99,7 @@ export function conversationToSidebarItem(conv: Conversation): ConversationSideb
     contactPhone: conv.contact_phone ?? '',
     avatarInitials,
     avatarColor: getAvatarColor(conv.id),
+    profilePicUrl: conv.profile_pic_url ?? null,
     lastMessage: lastMessageText,
     lastMessageAt,
     unreadCount: conv.unread_count ?? 0,

@@ -60,6 +60,14 @@ Se o teste falhar, confira o **Public ID** (Share > API no Typebot) e a **URL ba
 
 ---
 
+## Fluxo inicia mas nenhuma mensagem chega ao WhatsApp
+
+- **Primeiro bloco do Typebot:** o Sense só envia ao WhatsApp mensagens do tipo **texto** retornadas pela API. Se o primeiro bloco do fluxo for só um input (pergunta sem texto de boas-vindas) ou outro tipo (imagem, etc.), a API pode retornar 0 mensagens e o cliente não recebe nada. Inclua um bloco de **texto** no início (ex.: "Olá! Em que posso ajudar?") antes do primeiro input.
+- **Logs:** no servidor, procure por `[TYPEBOT]`. Se aparecer "startChat retornou 0 mensagens de texto" e "types=...", o Typebot respondeu mas sem mensagens de texto; ajuste o fluxo no Typebot.
+- **Resposta da API start-flow:** se o frontend mostrar o aviso "Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem", o backend retornou `messages_queued: 0`; confira o primeiro bloco do fluxo no Typebot.
+
+---
+
 ## Typebot cloud vs self-hosted
 
 - **Typebot cloud (typebot.io):** deixe a URL base vazia. O Sense usa `https://typebot.io/api/v1` para startChat/continueChat.

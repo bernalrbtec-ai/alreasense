@@ -450,43 +450,44 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
         return False
 
 
-def try_send_flow_start(conversation: Conversation) -> bool:
+def try_send_flow_start(conversation: Conversation):
     """
     Se existir fluxo ativo para o escopo da conversa, envia o nó inicial e cria estado.
     Respeita allow_meta_interactive_buttons do tenant (se desativado, não envia fluxo).
     Não envia se a conversa já estiver em um fluxo (evita reenviar nó inicial).
-    Retorna True se enviou fluxo; False para fallback para Welcome Menu.
+    Retorna (sent: bool, extra: dict). extra pode ter "messages_queued" (Typebot).
     """
     if not conversation or not conversation.tenant_id:
-        return False
+        return (False, {})
     if ConversationFlowState.objects.filter(conversation_id=conversation.id).exists():
-        return False
+        return (False, {})
     from apps.tenancy.models import Tenant
     allow = Tenant.objects.filter(id=conversation.tenant_id).values_list("allow_meta_interactive_buttons", flat=True).first()
     if allow is False:
         logger.info("[FLOW] Tenant desativou botões interativos, não enviando fluxo: tenant=%s", conversation.tenant_id)
-        return False
+        return (False, {})
 
     flow = get_active_flow_for_conversation(conversation)
     if not flow:
-        return False
+        return (False, {})
 
     # Typebot: quando o fluxo tem typebot_public_id, executar via Typebot em vez de nós/arestas
     typebot_public_id = (getattr(flow, "typebot_public_id", None) or "").strip()
     if typebot_public_id:
         try:
             from apps.chat.services.typebot_flow_service import start_typebot_flow
-            if start_typebot_flow(conversation, flow):
-                logger.info("[FLOW] Fluxo Typebot iniciado: conversation=%s flow=%s", conversation.id, flow.name)
-                return True
+            ok, messages_queued = start_typebot_flow(conversation, flow)
+            if ok:
+                logger.info("[FLOW] Fluxo Typebot iniciado: conversation=%s flow=%s messages_queued=%s", conversation.id, flow.name, messages_queued)
+                return (True, {"messages_queued": messages_queued})
         except Exception as e:
             logger.exception("[FLOW] Erro ao iniciar Typebot: %s", e)
-        return False
+        return (False, {})
 
     start_node = get_start_node(flow)
     if not start_node:
         logger.warning("[FLOW] Fluxo sem nó inicial: %s", flow.id)
-        return False
+        return (False, {})
 
     # Criar estado primeiro (evita race: dois requests não enviam o nó inicial duas vezes)
     try:
@@ -496,10 +497,10 @@ def try_send_flow_start(conversation: Conversation) -> bool:
         )
     except Exception as e:
         logger.exception("[FLOW] Erro ao criar ConversationFlowState: %s", e)
-        return False
+        return (False, {})
 
     if not created:
-        return False  # Já estava em fluxo (outro request criou o estado)
+        return (False, {})  # Já estava em fluxo (outro request criou o estado)
 
     if start_node.node_type == FlowNode.NODE_TYPE_DELAY:
         sec = getattr(start_node, "delay_seconds", None) or 0
@@ -512,7 +513,7 @@ def try_send_flow_start(conversation: Conversation) -> bool:
             daemon=True,
         )
         t.start()
-        return True
+        return (True, {})
 
     message = send_flow_node(conversation, start_node)
     if not message:
@@ -521,8 +522,8 @@ def try_send_flow_start(conversation: Conversation) -> bool:
         except Exception:
             pass
         logger.warning("[FLOW] Falha ao enfileirar nó inicial; estado removido conversation=%s", conversation.id)
-        return False
+        return (False, {})
 
     _auto_advance_message_chain(conversation, state)
     logger.info("[FLOW] Fluxo iniciado conversation=%s flow=%s", conversation.id, flow.name)
-    return True
+    return (True, {})

@@ -1,17 +1,23 @@
 /**
  * Sidebar de conversas (presentacional).
- * Lista virtualizada com avatar, preview, tempo, badge unread e sentimento.
+ * Lista virtualizada com avatar (foto ou iniciais), preview, tempo, badge unread e sentimento.
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useCallback } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { motion } from 'framer-motion';
 import { Search, Plus } from 'lucide-react';
 import type { ConversationSidebarConversation } from './adapters';
-import { sentimentConfig } from '@/utils/sentiment';
 import { formatTimeAgo } from '@/utils/formatTime';
 
 const ROW_HEIGHT = 72;
+
+function getMediaProxyUrl(externalUrl: string): string {
+  const API_BASE_URL = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+}
+/** Abaixo deste tamanho não usamos virtualização, para evitar bug com container sem altura (só 1 item visível). */
+const USE_VIRTUAL_THRESHOLD = 25;
 
 export interface ConversationSidebarProps {
   conversations: ConversationSidebarConversation[];
@@ -35,15 +41,28 @@ export function ConversationSidebar({
   onNewConversation,
 }: ConversationSidebarProps) {
   const parentRef = useRef<HTMLDivElement>(null);
+  const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
+  const useVirtual = conversations.length > USE_VIRTUAL_THRESHOLD;
+
+  const handleAvatarError = useCallback((id: string) => {
+    setFailedImageIds((prev) => new Set(prev).add(id));
+  }, []);
 
   const rowVirtualizer = useVirtualizer({
-    count: conversations.length,
+    count: useVirtual ? conversations.length : 0,
     getScrollElement: () => parentRef.current,
     estimateSize: () => ROW_HEIGHT,
     overscan: 8,
   });
 
-  const items = rowVirtualizer.getVirtualItems();
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
+  const itemsToRender = useVirtual
+    ? virtualItems.map((virtualRow) => ({ item: conversations[virtualRow.index], virtualRow }))
+    : conversations.map((conv, index) => ({
+        item: conv,
+        virtualRow: { index, start: index * ROW_HEIGHT, size: ROW_HEIGHT } as const,
+      }));
 
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
@@ -78,20 +97,23 @@ export function ConversationSidebar({
 
       <div
         ref={parentRef}
-        className="flex-1 overflow-y-auto custom-scrollbar"
+        className="flex-1 overflow-y-auto custom-scrollbar min-h-0"
         aria-label="Lista de conversas"
       >
         <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
+          style={
+            useVirtual
+              ? {
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  width: '100%',
+                  position: 'relative' as const,
+                }
+              : undefined
+          }
+          className={useVirtual ? '' : 'flex flex-col'}
         >
-          {items.map((virtualRow) => {
-            const item = conversations[virtualRow.index];
+          {itemsToRender.map(({ item, virtualRow }) => {
             const isActive = activeId !== null && String(item.id) === String(activeId);
-            const sentiment = sentimentConfig[item.sentimentScore];
 
             return (
               <motion.div
@@ -108,27 +130,40 @@ export function ConversationSidebar({
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: `${virtualRow.size}px`,
-                  transform: `translateY(${virtualRow.start}px)`,
-                }}
+                style={
+                  useVirtual
+                    ? {
+                        position: 'absolute' as const,
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }
+                    : undefined
+                }
                 className={`
-                  w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4
+                  w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 flex-shrink-0
                   hover:bg-[#f0f2f5] dark:hover:bg-gray-700 active:scale-[0.99]
                   transition-colors border-b border-gray-100 dark:border-gray-700
                   cursor-pointer
+                  ${useVirtual ? '' : 'min-h-[72px]'}
                   ${isActive ? 'bg-[#f0f2f5] dark:bg-gray-700 ring-inset ring-2 ring-blue-500' : ''}
                 `}
               >
-                <div
-                  className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full ${item.avatarColor} flex items-center justify-center text-white font-medium text-sm`}
-                  aria-hidden
-                >
-                  {item.avatarInitials}
+                <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-white font-medium text-sm">
+                  {item.profilePicUrl && !failedImageIds.has(item.id) ? (
+                    <img
+                      src={getMediaProxyUrl(item.profilePicUrl)}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      onError={() => handleAvatarError(item.id)}
+                    />
+                  ) : (
+                    <span className={`w-full h-full flex items-center justify-center ${item.avatarColor}`} aria-hidden>
+                      {item.avatarInitials}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex-1 min-w-0 text-left">
@@ -141,11 +176,6 @@ export function ConversationSidebar({
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sentiment.dot}`}
-                      title={sentiment.label}
-                      aria-hidden
-                    />
                     <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1 min-w-0">
                       {item.lastMessage || 'Sem mensagens'}
                     </span>

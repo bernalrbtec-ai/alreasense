@@ -62,6 +62,12 @@ class Flow(models.Model):
         verbose_name="Typebot Base URL",
         help_text="URL base da API do Typebot (ex: https://typebot.io ou self-hosted). Vazio = typebot.io",
     )
+    typebot_prefilled_extra = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Typebot variáveis extras",
+        help_text='Variáveis adicionais enviadas ao Typebot em prefilledVariables (ex: {"campanha": "black-friday"}). Chaves e valores devem ser string.',
+    )
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

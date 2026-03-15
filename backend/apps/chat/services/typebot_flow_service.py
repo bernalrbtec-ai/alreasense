@@ -86,38 +86,44 @@ def _send_texts_to_whatsapp(conversation: Conversation, texts: List[str], metada
             logger.exception("[TYPEBOT] Erro ao criar/enfileirar mensagem: %s", e)
 
 
-def start_typebot_flow(conversation: Conversation, flow: Flow) -> bool:
+def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, int]:
     """
     Inicia fluxo Typebot: chama startChat, persiste session_id no ConversationFlowState,
     envia as mensagens retornadas ao WhatsApp.
-    Retorna True se iniciou com sucesso.
+    Retorna (True, mensagens_enfileiradas) se iniciou com sucesso; (False, 0) em caso de falha.
     """
     public_id = _typebot_public_id(flow)
     if not public_id:
-        return False
+        return (False, 0)
     base = _typebot_base_url(flow)
     url = f"{base}/typebots/{public_id}/startChat"
-    payload = {
-        "prefilledVariables": {
-            "conversation_id": str(conversation.id),
-            "contact_phone": (conversation.contact_phone or "").strip(),
-            "contact_name": (conversation.contact_name or "").strip() or "Contato",
-            "tenant_id": str(conversation.tenant_id),
-        }
+    prefilled = {
+        "conversation_id": str(conversation.id),
+        "contact_phone": (conversation.contact_phone or "").strip(),
+        "contact_name": (conversation.contact_name or "").strip() or "Contato",
+        "tenant_id": str(conversation.tenant_id),
     }
     if conversation.department_id:
-        payload["prefilledVariables"]["department_id"] = str(conversation.department_id)
+        prefilled["department_id"] = str(conversation.department_id)
+    extra = getattr(flow, "typebot_prefilled_extra", None)
+    if isinstance(extra, dict) and extra:
+        for k, v in extra.items():
+            if k and isinstance(v, (str, int, float, bool)):
+                prefilled[str(k).strip()] = str(v)
+            elif k and v is not None:
+                prefilled[str(k).strip()] = str(v)
+    payload = {"prefilledVariables": prefilled}
     try:
         r = requests.post(url, json=payload, timeout=15)
         r.raise_for_status()
         data = r.json()
     except requests.RequestException as e:
         logger.warning("[TYPEBOT] startChat falhou: %s", e)
-        return False
+        return (False, 0)
     session_id = (data.get("sessionId") or "").strip()
     if not session_id:
         logger.warning("[TYPEBOT] startChat não retornou sessionId")
-        return False
+        return (False, 0)
     try:
         with transaction.atomic():
             state, created = ConversationFlowState.objects.update_or_create(
@@ -128,13 +134,25 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> bool:
                     "typebot_session_id": session_id,
                 },
             )
+            result_id = (data.get("resultId") or "").strip()
+            if result_id:
+                state.metadata["typebot_result_id"] = result_id
+                state.save(update_fields=["metadata"])
         texts = _extract_text_from_messages(data)
+        if not texts:
+            raw_messages = data.get("messages") if isinstance(data.get("messages"), list) else []
+            msg_types = [m.get("type") for m in raw_messages if isinstance(m, dict)]
+            logger.warning(
+                "[TYPEBOT] startChat retornou 0 mensagens de texto conversation=%s sessionId=%s raw_messages=%s types=%s. "
+                "Garanta que o primeiro bloco do Typebot envia uma mensagem de texto (tipo text).",
+                conversation.id, session_id[:16], len(raw_messages), msg_types,
+            )
         _send_texts_to_whatsapp(conversation, texts)
         logger.info("[TYPEBOT] Fluxo iniciado conversation=%s sessionId=%s messages=%s", conversation.id, session_id[:16], len(texts))
-        return True
+        return (True, len(texts))
     except Exception as e:
         logger.exception("[TYPEBOT] Erro ao salvar estado ou enviar mensagens: %s", e)
-        return False
+        return (False, 0)
 
 
 def continue_typebot_flow(conversation: Conversation, user_message: str) -> bool:

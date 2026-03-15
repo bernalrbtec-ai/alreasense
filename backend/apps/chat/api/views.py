@@ -4046,9 +4046,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from apps.chat.models_flow import ConversationFlowState
         # Permitir reinício: remover estado atual para try_send_flow_start criar novo
         ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
-        sent = try_send_flow_start(conversation)
+        sent, extra = try_send_flow_start(conversation)
         if sent:
-            return Response({'success': True, 'message': 'Fluxo iniciado.'}, status=status.HTTP_200_OK)
+            payload = {'success': True, 'message': 'Fluxo iniciado.'}
+            if extra.get('messages_queued') is not None:
+                payload['messages_queued'] = extra['messages_queued']
+            return Response(payload, status=status.HTTP_200_OK)
         return Response(
             {'success': False, 'message': 'Nenhum fluxo ativo para o Inbox/departamento desta conversa.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -4263,7 +4266,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if department_changed and conversation.department_id:
             try:
                 from apps.chat.services.flow_engine import try_send_flow_start
-                if try_send_flow_start(conversation):
+                sent_flow, _ = try_send_flow_start(conversation)
+                if sent_flow:
                     logger.info("📋 [FLOW] Fluxo enviado após transferência para departamento: %s", conversation.id)
             except Exception as e:
                 logger.warning("⚠️ [TRANSFER] Fluxo não enviado após transferência: %s", e)

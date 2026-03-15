@@ -1008,7 +1008,12 @@ export function ChatWindow() {
                       try {
                         const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`);
                         if (res.data?.success) {
-                          toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                          const queued = res.data?.messages_queued;
+                          if (typeof queued === 'number' && queued === 0) {
+                            toast.warning('Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem. Verifique se o primeiro bloco do fluxo é do tipo texto.');
+                          } else {
+                            toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                          }
                         } else {
                           toast.error(res.data?.message || 'Nenhum fluxo ativo para esta conversa.');
                         }
