@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { AlertCircle, Wifi } from 'lucide-react';
 import { DepartmentTabs } from './DepartmentTabs';
 import { ConversationList } from './ConversationList';
+import { ChatConversationSidebarWrapper } from './ChatConversationSidebarWrapper';
 import { ChatWindow } from './ChatWindow';
 import { useChatStore } from '../store/chatStore';
 // ✅ REMOVIDO: useTenantSocket já está conectado globalmente no Layout.tsx
@@ -67,7 +68,11 @@ export function ChatPage() {
           }
           flex-shrink-0 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out
         `}>
-          <ConversationList />
+          {import.meta.env.VITE_CHAT_UI_V2 === 'true' ? (
+            <ChatConversationSidebarWrapper />
+          ) : (
+            <ConversationList />
+          )}
         </div>
         
         {/* Chat window - EXPANDE AO MÁXIMO quando conversa aberta */}
