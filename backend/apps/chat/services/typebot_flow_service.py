@@ -2,7 +2,11 @@
 Integração com Typebot: execução de fluxos via API (startChat / continueChat).
 Quando Flow.typebot_public_id está preenchido, o fluxo é executado pelo Typebot;
 as mensagens retornadas pela API são enviadas ao WhatsApp via Message + send_message_to_evolution.
+
+Instruções no texto: trechos #{"chave": valor} são interpretados (closeTicket, transferTo),
+executados e removidos antes de enviar ao cliente.
 """
+import json
 import logging
 from typing import Any, List, Optional, Tuple
 
@@ -16,6 +20,51 @@ from apps.chat.tasks import send_message_to_evolution
 logger = logging.getLogger(__name__)
 
 DEFAULT_TYPEBOT_BASE = "https://typebot.io/api/v1"
+MAX_INSTRUCTION_JSON_LENGTH = 500
+CLOSE_KEYS = ("closeTicket", "encerrar", "closeConversation")
+TRANSFER_KEYS = ("transferTo", "transferToDepartment")
+
+
+def _find_matching_brace(text: str, open_pos: int) -> int:
+    """
+    Encontra o índice do '}' que fecha o '{' em open_pos, respeitando strings em double-quotes
+    (e aspas escapadas \\" e barra escapada \\\\).
+    Retorna -1 se não encontrar dentro de MAX_INSTRUCTION_JSON_LENGTH caracteres.
+    """
+    if open_pos < 0 or open_pos >= len(text) or text[open_pos] != "{":
+        return -1
+    depth = 1
+    i = open_pos + 1
+    limit = min(len(text), open_pos + MAX_INSTRUCTION_JSON_LENGTH)
+    in_string = False
+    while i < limit:
+        c = text[i]
+        if in_string:
+            if c == "\\":
+                if i + 1 >= limit:
+                    break  # backslash no final da string (JSON inválido)
+                i += 2  # skip escaped char
+                continue
+            if c == '"':
+                in_string = False
+            i += 1
+            continue
+        if c == '"':
+            in_string = True
+            i += 1
+            continue
+        if c == "{":
+            depth += 1
+            i += 1
+            continue
+        if c == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+            i += 1
+            continue
+        i += 1
+    return -1
 
 
 def _typebot_base_url(flow: Flow) -> str:
@@ -109,6 +158,192 @@ def _send_texts_to_whatsapp(conversation: Conversation, texts: List[str], metada
             logger.info("[TYPEBOT] Mensagem enfileirada conversation=%s", conversation.id)
         except Exception as e:
             logger.exception("[TYPEBOT] Erro ao criar/enfileirar mensagem: %s", e)
+
+
+def close_conversation_from_typebot(conversation: Conversation) -> bool:
+    """
+    Fecha a conversa (mensagens não lidas -> lidas, status=closed, department/assigned_to=None,
+    remove ConversationFlowState). Usado pelo webhook Typebot e por instruções no texto.
+    Retorna True se fechou com sucesso.
+    """
+    if not conversation or getattr(conversation, "status", None) == "closed":
+        return True
+    try:
+        with transaction.atomic():
+            Message.objects.filter(
+                conversation=conversation,
+                direction="incoming",
+                status__in=["sent", "delivered"],
+            ).update(status="seen")
+            conversation.status = "closed"
+            conversation.department = None
+            conversation.assigned_to = None
+            conversation.save(update_fields=["status", "department", "assigned_to"])
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        conversation.refresh_from_db()
+        logger.info("[TYPEBOT] Conversa %s fechada (instrução ou webhook)", conversation.id)
+        return True
+    except Exception as e:
+        logger.warning("[TYPEBOT] Erro ao fechar conversa: %s", e, exc_info=True)
+        return False
+
+
+def _execute_transfer_by_department_name(conversation: Conversation, department_name: str) -> bool:
+    """Transfere conversa para o departamento identificado pelo nome (tenant + name__iexact)."""
+    if not conversation or not conversation.tenant_id:
+        return False
+    name = (department_name if isinstance(department_name, str) else str(department_name)).strip()
+    if not name:
+        return False
+    from apps.authn.models import Department
+
+    dept = Department.objects.filter(
+        tenant_id=conversation.tenant_id,
+        name__iexact=name,
+    ).first()
+    if not dept:
+        logger.warning("[TYPEBOT] Departamento não encontrado por nome: %r conversation=%s", name, conversation.id)
+        return False
+    try:
+        old_department = conversation.department
+        with transaction.atomic():
+            conversation.department = dept
+            conversation.assigned_to = None
+            conversation.status = "open"
+            conversation.save(update_fields=["department", "assigned_to", "status"])
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        old_name = old_department.name if old_department else "Inbox"
+        transfer_msg = (
+            f"Conversa transferida:\nDe: {old_name} (Não atribuído)\nPara: {dept.name} (Não atribuído)\n(por Typebot)"
+        )
+        Message.objects.create(
+            conversation=conversation,
+            sender=None,
+            content=transfer_msg,
+            direction="outgoing",
+            status="sent",
+            is_internal=True,
+        )
+        from apps.chat.services.flow_engine import try_send_flow_start
+
+        try_send_flow_start(conversation)
+        from apps.chat.utils.websocket import broadcast_conversation_updated
+
+        broadcast_conversation_updated(conversation)
+        transfer_message_text = (getattr(dept, "transfer_message", None) or "").strip()
+        if not transfer_message_text:
+            transfer_message_text = (
+                f"Sua conversa foi transferida para o departamento {dept.name}. Em breve você será atendido."
+            )
+        from django.db.models import Q
+        from apps.notifications.models import WhatsAppInstance
+        from apps.notifications.whatsapp_providers import get_sender
+
+        wa_instance = None
+        inst_name = (conversation.instance_name or "").strip()
+        if inst_name:
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
+                tenant_id=conversation.tenant_id,
+                is_active=True,
+                status="active",
+            ).first()
+            if not wa_instance and inst_name.isdigit():
+                wa_instance = WhatsAppInstance.objects.filter(
+                    phone_number_id=inst_name,
+                    integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                    tenant_id=conversation.tenant_id,
+                    is_active=True,
+                    status="active",
+                ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant_id=conversation.tenant_id,
+                is_active=True,
+                status="active",
+            ).first()
+        if wa_instance:
+            sender = get_sender(wa_instance)
+            if sender:
+                to_phone = (conversation.contact_phone or "").replace("@g.us", "").replace("@s.whatsapp.net", "").strip()
+                if to_phone:
+                    try:
+                        sender.send_text(to_phone, transfer_message_text)
+                    except Exception as send_err:
+                        logger.warning("[TYPEBOT] Transferência OK; falha ao enviar mensagem ao cliente: %s", send_err)
+        conversation.refresh_from_db()
+        logger.info("[TYPEBOT] Transferência por instrução: conversation=%s -> %s", conversation.id, dept.name)
+        return True
+    except Exception as e:
+        logger.warning("[TYPEBOT] Erro ao transferir por nome: %s", e, exc_info=True)
+        return False
+
+
+def _process_instructions_in_texts(conversation: Conversation, texts: List[str]) -> List[str]:
+    """
+    Detecta trechos #{"chave": valor} em cada texto, executa closeTicket/transferTo e remove o trecho.
+    Retorna lista de textos limpos. Em falha, retorna a lista original.
+    Após executar "encerrar", não executa mais instruções no mesmo lote.
+    """
+    if not conversation:
+        return []
+    if not isinstance(texts, list):
+        return []
+    if not conversation.tenant_id:
+        return list(texts)
+    cleaned: List[str] = []
+    closed = False
+    for raw in texts:
+        if not isinstance(raw, str):
+            if raw is not None and str(raw).strip():
+                cleaned.append(str(raw).strip())
+            continue
+        text = raw.strip()
+        if not text:
+            continue
+        pos = 0
+        while pos < len(text):
+            idx = text.find("#{", pos)
+            if idx < 0:
+                break
+            end = _find_matching_brace(text, idx + 1)
+            if end < 0:
+                pos = idx + 2
+                continue
+            # Incluir "{" e "}" para obter JSON válido (ex.: #{"closeTicket": true} -> segment = {"closeTicket": true})
+            segment = text[idx + 1 : end + 1].strip()[:MAX_INSTRUCTION_JSON_LENGTH]
+            pos = end + 1
+            try:
+                obj = json.loads(segment)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(obj, dict):
+                continue
+            recognized = False
+            if not closed:
+                for key in CLOSE_KEYS:
+                    if key in obj and obj[key]:
+                        recognized = True
+                        close_conversation_from_typebot(conversation)
+                        closed = True
+                        break
+            if not closed:
+                for key in TRANSFER_KEYS:
+                    if key in obj:
+                        val = obj[key]
+                        name = (val if isinstance(val, str) else str(val)).strip() if val is not None else ""
+                        if name:
+                            recognized = True
+                            _execute_transfer_by_department_name(conversation, name)
+                        break
+            if recognized:
+                before = text[:idx].rstrip()
+                after = text[pos:].lstrip()
+                text = f"{before}\n{after}".strip() if before and after else (before or after)
+                pos = 0
+        if text and text.strip():
+            cleaned.append(text.strip())
+    return cleaned
 
 
 def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, int]:
@@ -205,6 +440,10 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
                 "Garanta que o primeiro bloco do Typebot envia uma mensagem de texto (tipo text).",
                 conversation.id, session_id[:16], len(raw_messages), msg_types,
             )
+        try:
+            texts = _process_instructions_in_texts(conversation, texts)
+        except Exception as e:
+            logger.warning("[TYPEBOT] Erro ao processar instruções no texto, usando textos originais: %s", e)
         _send_texts_to_whatsapp(conversation, texts)
         logger.info("[TYPEBOT] Fluxo iniciado conversation=%s sessionId=%s messages=%s", conversation.id, session_id[:16], len(texts))
         return (True, len(texts))
@@ -248,6 +487,10 @@ def continue_typebot_flow(conversation: Conversation, user_message: str) -> bool
         logger.warning("[TYPEBOT] continueChat falhou: %s", e)
         return False
     texts = _extract_text_from_messages(data) if isinstance(data, dict) else []
+    try:
+        texts = _process_instructions_in_texts(conversation, texts)
+    except Exception as e:
+        logger.warning("[TYPEBOT] Erro ao processar instruções no texto, usando textos originais: %s", e)
     _send_texts_to_whatsapp(conversation, texts)
     # Se o Typebot retornar um "input" (próximo bloco de pergunta), a sessão continua.
     # Se não houver input, opcionalmente podemos limpar a sessão ou mantê-la para histórico.

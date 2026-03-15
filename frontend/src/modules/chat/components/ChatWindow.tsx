@@ -446,17 +446,12 @@ export function ChatWindow() {
     if (!activeConversation) return;
     
     try {
-      await api.patch(`/chat/conversations/${activeConversation.id}/`, {
-        status: 'closed'
-      });
+      // Usar endpoint dedicado para garantir: mensagens não lidas → lidas, department/assigned_to limpos, fluxo interrompido
+      const { data } = await api.post(`/chat/conversations/${activeConversation.id}/close/`);
       
-      // ✅ FIX: Atualizar conversa na lista ao invés de remover
-      // Se remover, quando nova mensagem chegar e reabrir, não aparece na lista
+      // ✅ FIX: Atualizar conversa na lista com a resposta do backend (department/assigned_to já limpos)
       const { updateConversation, setDepartments } = useChatStore.getState();
-      updateConversation({
-        ...activeConversation,
-        status: 'closed'
-      });
+      updateConversation(data);
       
       // ✅ FIX: Refetch departamentos para atualizar contadores
       api.get('/auth/departments/').then(response => {

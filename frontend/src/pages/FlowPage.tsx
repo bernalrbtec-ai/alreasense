@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap, MessageSquare, ChevronDown, ChevronUp, HelpCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -149,6 +149,17 @@ function parseButtonsSafe(val: unknown): ButtonForm[] {
   })
 }
 
+const FLOW_TYPEBOT_FAQ: { pergunta: string; resposta: string }[] = [
+  { pergunta: 'Quais variáveis o Sense envia ao Typebot?', resposta: 'conversation_id, contact_phone, contact_name, tenant_id, department_id (se houver); mais as variáveis extras (JSON) configuradas no fluxo.' },
+  { pergunta: 'O que são variáveis extras?', resposta: 'JSON no cadastro do fluxo enviado em todo startChat. Use no Typebot variáveis com o mesmo nome. Opção "Carregar variáveis" usa ID interno + API key e aplica ao JSON.' },
+  { pergunta: 'O que são instruções no texto?', resposta: 'Trechos no formato #{"chave": valor} numa mensagem de texto. O Sense executa a ação e remove o trecho antes de enviar ao WhatsApp (o cliente não vê).' },
+  { pergunta: 'Como encerrar a conversa pelo Typebot?', resposta: 'Inclua #{"closeTicket": true} (ou encerrar, closeConversation com valor truthy) no texto. Pode estar na mesma mensagem da despedida.' },
+  { pergunta: 'Como transferir para um departamento?', resposta: 'Inclua #{"transferTo": "Nome do Departamento"}. O nome deve ser igual ao cadastrado no Sense (Configurações > Departamentos). Maiúsculas/minúsculas não importam.' },
+  { pergunta: 'O nome do departamento pode ter espaços?', resposta: 'Sim. Use o nome completo como cadastrado (ex.: "Suporte Técnico", "Atendimento Comercial"). Apenas espaços no início e no fim são ignorados.' },
+  { pergunta: 'Webhook como alternativa', resposta: 'Para enviar variáveis de volta ao Sense ou encerrar via variável, use o bloco Webhook apontando para POST /api/chat/webhooks/typebot/ (documentação no guia).' },
+  { pergunta: 'Onde ver mais?', resposta: 'Guia completo na documentação do projeto (FLUXOS_TYPEBOT_GUIA) ou com o suporte.' },
+]
+
 export default function FlowPage() {
   const [flows, setFlows] = useState<Flow[]>([])
   const [departments, setDepartments] = useState<DepartmentOption[]>([])
@@ -187,6 +198,7 @@ export default function FlowPage() {
   const [typebotVariableValues, setTypebotVariableValues] = useState<Record<string, string>>({})
   const [loadingTypebotVariables, setLoadingTypebotVariables] = useState(false)
   const [editFlowVarsExpanded, setEditFlowVarsExpanded] = useState(false)
+  const [editFlowFaqExpanded, setEditFlowFaqExpanded] = useState(false)
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
@@ -1654,6 +1666,27 @@ export default function FlowPage() {
                       </div>
                     )}
                   </div>
+                </section>
+
+                {/* FAQ Typebot */}
+                <section className="space-y-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
+                  <button type="button" onClick={() => setEditFlowFaqExpanded((v) => !v)} className="flex items-center justify-between w-full py-1.5 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                    <span className="flex items-center gap-2">
+                      <HelpCircle className="h-4 w-4" />
+                      Perguntas frequentes – Typebot no Sense
+                    </span>
+                    {editFlowFaqExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  {editFlowFaqExpanded && (
+                    <ul className="mt-3 space-y-3 text-xs text-gray-600 dark:text-gray-400">
+                      {(FLOW_TYPEBOT_FAQ || []).map((item, i) => (
+                        <li key={i}>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">{item.pergunta}</p>
+                          <p className="mt-0.5">{item.resposta}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </section>
               </div>
 

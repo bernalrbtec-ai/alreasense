@@ -331,6 +331,12 @@ def typebot_webhook(request):
 
     Persiste em ConversationFlowState.metadata["typebot_variables"] e em
     Conversation.metadata["typebot_result"] para consulta na conversa.
+
+    Fechar conversa pelo Typebot: inclua em variables uma das chaves com valor true/1/sim:
+      - close_conversation
+      - encerrar_conversa
+    O Sense marcará mensagens como lidas, definirá status=closed, limpará departamento/atendente
+    e removerá o estado do fluxo. Envie a mensagem de despedida no Typebot antes do bloco Webhook.
     """
     try:
         data = request.data if isinstance(request.data, dict) else {}
@@ -441,5 +447,17 @@ def typebot_webhook(request):
                             logger.info("[TYPEBOT WEBHOOK] Contato criado para conversation=%s", conversation.id)
         except Exception as e:
             logger.warning("[TYPEBOT WEBHOOK] Erro ao sincronizar contato: %s", e, exc_info=True)
+
+    # Fechar conversa a partir do Typebot: se variáveis contiverem close_conversation ou encerrar_conversa = true/1/sim
+    close_flag = (
+        vars_simple.get("close_conversation") or vars_simple.get("encerrar_conversa") or ""
+    ).strip().lower()
+    if close_flag in ("true", "1", "sim", "yes", "sí"):
+        try:
+            from apps.chat.services.typebot_flow_service import close_conversation_from_typebot
+            close_conversation_from_typebot(conversation)
+        except Exception as e:
+            logger.warning("[TYPEBOT WEBHOOK] Erro ao fechar conversa: %s", e, exc_info=True)
+
     logger.info("[TYPEBOT WEBHOOK] Variáveis salvas conversation=%s keys=%s", state.conversation_id, list(vars_simple.keys()))
     return Response({"ok": True, "saved_keys": list(vars_simple.keys())}, status=status.HTTP_200_OK)

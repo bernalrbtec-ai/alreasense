@@ -113,6 +113,46 @@ Assim você pode consultar na conversa (API ou no chat) os dados que o Typebot c
 - **Conversação:** o objeto `Conversation` pode ter `metadata["typebot_result"]` com `variables` e `updated_at` após o webhook ter sido chamado.
 - **Estado do fluxo:** `ConversationFlowState.metadata["typebot_variables"]` contém as variáveis enviadas pelo Typebot (e `metadata["typebot_result_id"]` o resultId do startChat).
 
+### Fechar conversa a partir do Typebot
+
+Para **encerrar a conversa no Sense** quando o fluxo termina (ex.: “Obrigado, até logo!”), use o mesmo webhook e envie uma variável que indique encerramento:
+
+- No bloco **Webhook** do Typebot, inclua em `variables` uma das chaves com valor **true**, **1** ou **sim**:
+  - `close_conversation`
+  - `encerrar_conversa`
+
+**Exemplo de body do Webhook:**
+
+```json
+{
+  "result_id": "{{resultId}}",
+  "variables": {
+    "nome": "{{nome}}",
+    "email": "{{email}}",
+    "encerrar_conversa": "true"
+  }
+}
+```
+
+O Sense irá:
+
+1. Salvar as variáveis (nome, email, etc.) como de costume.
+2. Marcar mensagens não lidas como lidas.
+3. Definir a conversa como **fechada** (status=closed, sem departamento/atendente).
+4. Remover o estado do fluxo (sessão Typebot).
+
+**Recomendação:** envie a mensagem de despedida no Typebot **antes** do bloco Webhook (ex.: um bloco de texto “Obrigado! Qualquer dúvida, é só chamar.”), pois o Sense **não** envia mensagem automática ao fechar por webhook.
+
+### Instruções no texto (#{...})
+
+Você pode **encerrar a conversa** ou **transferir para um departamento** colocando um trecho no formato `#{"chave": valor}` em **qualquer mensagem de texto** do Typebot. O Sense interpreta o trecho, executa a ação e **remove** esse trecho antes de enviar ao WhatsApp (o cliente não vê).
+
+**Encerrar:** `#{"closeTicket": true}` ou `#{"encerrar": true}` ou `#{"closeConversation": true}` (valor truthy).
+
+**Transferir:** use o **nome do departamento** como cadastrado no Sense (Configurações > Departamentos). Case-insensitive; nome pode ter espaços (ex.: "Suporte Técnico"). Ex.: `#{"transferTo": "Comercial"}` ou `#{"transferToDepartment": "RH"}`.
+
+**Exemplo:** texto no Typebot: `Obrigado! Até logo.\n#{"closeTicket": true}` — o cliente recebe só: **Obrigado! Até logo.**
+
 ---
 
 ## Como testar
