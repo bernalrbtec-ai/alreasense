@@ -55,7 +55,7 @@ No **Editar fluxo** (ou via API no campo `typebot_prefilled_extra`) você pode d
 
 ### Consultar variáveis do Typebot e mapear no cadastro
 
-Se você informar no fluxo o **ID interno do Typebot** (o ID que aparece na URL ao editar o typebot no dashboard) e a **API key** do dashboard (Settings > API no Typebot), o Sense pode **buscar a lista de variáveis** que o fluxo usa e mostrar no modal de edição. Assim você:
+Se você informar no fluxo o **ID interno do Typebot** (o ID que aparece na URL ao editar o typebot no dashboard) e a **API key** do dashboard, o Sense pode **buscar a lista de variáveis**. **Onde pegar a API key:** no Typebot (app.typebot.io), clique no seu **avatar/ícone no canto inferior esquerdo** → **Settings & Members** → **My account** → na seção **API tokens** clique em **Create** → dê um nome e crie o token → copie o valor (só aparece uma vez). que o fluxo usa e mostrar no modal de edição. Assim você:
 
 1. Clica em **"Carregar variáveis do Typebot"** e o Sense chama a API do dashboard do Typebot (Builder API).
 2. A lista de variáveis do fluxo aparece; você preenche o valor desejado para cada uma (ou deixa vazio).

@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap, MessageSquare } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap, MessageSquare, ChevronDown, ChevronUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -184,6 +184,7 @@ export default function FlowPage() {
   const [typebotVariablesList, setTypebotVariablesList] = useState<Array<{ id: string; name: string }>>([])
   const [typebotVariableValues, setTypebotVariableValues] = useState<Record<string, string>>({})
   const [loadingTypebotVariables, setLoadingTypebotVariables] = useState(false)
+  const [editFlowVarsExpanded, setEditFlowVarsExpanded] = useState(false)
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
@@ -373,6 +374,7 @@ export default function FlowPage() {
     setEditTypebotApiKey(flowDetail?.typebot_api_key ?? selectedFlow.typebot_api_key ?? '')
     setTypebotVariablesList([])
     setTypebotVariableValues({})
+    setEditFlowVarsExpanded(false)
     try {
       const extra = selectedFlow.typebot_prefilled_extra
       setEditTypebotPrefilledExtra(typeof extra === 'object' && extra !== null ? JSON.stringify(extra, null, 2) : '{}')
@@ -1516,208 +1518,138 @@ export default function FlowPage() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
           onClick={() => setEditFlowOpen(false)}
           role="dialog"
           aria-modal="true"
           aria-labelledby="edit-flow-title"
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.96 }}
+            initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg max-h-[90vh] flex flex-col"
           >
-          <Card className="w-full max-w-md p-6 rounded-2xl border-gray-200/80 dark:border-gray-700/80 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h2 id="edit-flow-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar fluxo</h2>
-              <button type="button" onClick={() => setEditFlowOpen(false)} className="p-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <Label>Nome</Label>
-                <Input
-                  value={editFlowName}
-                  onChange={(e) => setEditFlowName(e.target.value)}
-                  placeholder="Ex: Menu Inbox"
-                />
+            <Card className="flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden">
+              {/* Header fixo */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 shrink-0">
+                <h2 id="edit-flow-title" className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar fluxo</h2>
+                <button type="button" onClick={() => setEditFlowOpen(false)} className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
               </div>
-              <div>
-                <Label>Escopo</Label>
-                <div className="flex gap-4 mt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={editFlowScope === 'inbox'}
-                      onChange={() => { setEditFlowScope('inbox'); setEditFlowDepartmentId(null) }}
-                    />
-                    <Inbox className="h-4 w-4" /> Inbox
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="radio"
-                      checked={editFlowScope === 'department'}
-                      onChange={() => setEditFlowScope('department')}
-                    />
-                    <Building2 className="h-4 w-4" /> Departamento
-                  </label>
-                </div>
-              </div>
-              {editFlowScope === 'department' && (
-                <div>
-                  <Label>Departamento</Label>
-                  <select
-                    className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-                    value={editFlowDepartmentId || ''}
-                    onChange={(e) => setEditFlowDepartmentId(e.target.value || null)}
-                  >
-                    <option value="">Selecione</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div>
-                <Label>Instância WhatsApp (enviar/responder por)</Label>
-                <select
-                  className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-                  value={editFlowInstanceId || ''}
-                  onChange={(e) => setEditFlowInstanceId(e.target.value || null)}
-                >
-                  <option value="">Usar instância da conversa</option>
-                  {flowInstances.map((i) => (
-                    <option key={i.id} value={i.id}>{i.friendly_name}</option>
-                  ))}
-                </select>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher uma instância, o fluxo sempre envia por ela.</p>
-              </div>
-              <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                <Label className="text-accent-600 dark:text-accent-400">Typebot</Label>
-                <Input
-                  className="mt-1"
-                  value={editTypebotPublicId}
-                  onChange={(e) => setEditTypebotPublicId(e.target.value)}
-                  placeholder="Public ID do Typebot (Share &gt; API)"
-                />
-                <Input
-                  className="mt-2"
-                  value={editTypebotBaseUrl}
-                  onChange={(e) => setEditTypebotBaseUrl(e.target.value)}
-                  placeholder="URL base da API (vazio = typebot.io)"
-                />
-                <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
-                  <Label className="text-xs text-gray-500 dark:text-gray-400">Consultar variáveis do Typebot (opcional)</Label>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">ID interno = URL ao editar o typebot no dashboard. API key = Settings &gt; API no Typebot.</p>
-                  <Input
-                    className="mt-1"
-                    value={editTypebotInternalId}
-                    onChange={(e) => setEditTypebotInternalId(e.target.value)}
-                    placeholder="ID interno do Typebot"
-                  />
-                  <Input
-                    className="mt-1"
-                    type="password"
-                    autoComplete="off"
-                    value={editTypebotApiKey}
-                    onChange={(e) => setEditTypebotApiKey(e.target.value)}
-                    placeholder="API key (dashboard)"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                    disabled={loadingTypebotVariables || !editTypebotInternalId.trim() || !editTypebotApiKey.trim()}
-                    onClick={async () => {
-                      if (!selectedFlow?.id) return
-                      setLoadingTypebotVariables(true)
-                      try {
-                        const { data } = await api.post(`/chat/flows/${selectedFlow.id}/fetch_typebot_variables/`, {
-                          typebot_internal_id: editTypebotInternalId.trim(),
-                          typebot_api_key: editTypebotApiKey.trim(),
-                        })
-                        setTypebotVariablesList(data?.variables ?? [])
-                        const prev: Record<string, string> = {}
-                        try {
-                          const extra = JSON.parse(editTypebotPrefilledExtra || '{}')
-                          if (typeof extra === 'object' && extra !== null) {
-                            Object.assign(prev, extra)
-                          }
-                        } catch { /* ignore */ }
-                        setTypebotVariableValues(prev)
-                        if ((data?.variables?.length ?? 0) > 0) toast.success(`${data.variables.length} variável(is) carregada(s). Preencha os valores e clique em Aplicar.`)
-                        else toast.info('Nenhuma variável definida neste fluxo no Typebot.')
-                      } catch (e: any) {
-                        toast.error(e?.response?.data?.detail ?? 'Falha ao carregar variáveis')
-                      } finally {
-                        setLoadingTypebotVariables(false)
-                      }
-                    }}
-                  >
-                    {loadingTypebotVariables ? <LoadingSpinner size="sm" className="mr-1" /> : null}
-                    {loadingTypebotVariables ? 'Carregando…' : 'Carregar variáveis do Typebot'}
-                  </Button>
-                  {typebotVariablesList.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <Label className="text-xs">Mapear valores para as variáveis</Label>
-                      {typebotVariablesList.map((v) => (
-                        <div key={v.id} className="flex gap-2 items-center">
-                          <span className="text-xs font-mono text-gray-600 dark:text-gray-400 w-32 shrink-0 truncate" title={v.name}>{v.name}</span>
-                          <Input
-                            className="flex-1 text-sm"
-                            value={typebotVariableValues[v.name] ?? ''}
-                            onChange={(e) => setTypebotVariableValues((prev) => ({ ...prev, [v.name]: e.target.value }))}
-                            placeholder="valor ou vazio"
-                          />
-                        </div>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const extra: Record<string, string> = {}
-                          typebotVariablesList.forEach((v) => {
-                            const val = (typebotVariableValues[v.name] ?? '').trim()
-                            if (val) extra[v.name] = val
-                          })
-                          try {
-                            const current = JSON.parse(editTypebotPrefilledExtra || '{}')
-                            const merged = typeof current === 'object' && current !== null ? { ...current, ...extra } : extra
-                            setEditTypebotPrefilledExtra(JSON.stringify(merged, null, 2))
-                            toast.success('Valores aplicados ao JSON de variáveis extras.')
-                          } catch {
-                            setEditTypebotPrefilledExtra(JSON.stringify(extra, null, 2))
-                            toast.success('Valores aplicados ao JSON de variáveis extras.')
-                          }
-                        }}
-                      >
-                        Aplicar ao JSON de variáveis extras
-                      </Button>
+
+              {/* Conteúdo rolável */}
+              <div className="overflow-y-auto overscroll-contain px-6 py-5 space-y-6">
+                {/* Seção: Geral */}
+                <section className="space-y-3">
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">Geral</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="mb-1 block">Nome</Label>
+                      <Input
+                        value={editFlowName}
+                        onChange={(e) => setEditFlowName(e.target.value)}
+                        placeholder="Ex: Menu Inbox"
+                        className="rounded-lg"
+                      />
                     </div>
-                  )}
-                </div>
-                <Label className="mt-2 block text-xs text-gray-500 dark:text-gray-400">Variáveis extras (JSON)</Label>
-                <textarea
-                  className="mt-0.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[60px]"
-                  value={editTypebotPrefilledExtra}
-                  onChange={(e) => setEditTypebotPrefilledExtra(e.target.value)}
-                  placeholder='{"campanha": "black-friday"}'
-                  rows={2}
-                />
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp. Variáveis extras são enviadas em prefilledVariables. A edição do fluxo é feita no Typebot.</p>
+                    <div>
+                      <Label className="mb-2 block">Escopo</Label>
+                      <div className="flex gap-6">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input type="radio" checked={editFlowScope === 'inbox'} onChange={() => { setEditFlowScope('inbox'); setEditFlowDepartmentId(null) }} className="text-accent-600" />
+                          <Inbox className="h-4 w-4 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" /> <span>Inbox</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                          <input type="radio" checked={editFlowScope === 'department'} onChange={() => setEditFlowScope('department')} className="text-accent-600" />
+                          <Building2 className="h-4 w-4 text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300" /> <span>Departamento</span>
+                        </label>
+                      </div>
+                    </div>
+                    {editFlowScope === 'department' && (
+                      <div>
+                        <Label className="mb-1 block">Departamento</Label>
+                        <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm" value={editFlowDepartmentId || ''} onChange={(e) => setEditFlowDepartmentId(e.target.value || null)}>
+                          <option value="">Selecione</option>
+                          {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="mb-1 block">Instância WhatsApp</Label>
+                      <select className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm" value={editFlowInstanceId || ''} onChange={(e) => setEditFlowInstanceId(e.target.value || null)}>
+                        <option value="">Usar instância da conversa</option>
+                        {flowInstances.map((i) => <option key={i.id} value={i.id}>{i.friendly_name}</option>)}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o fluxo envia.</p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Seção: Typebot */}
+                <section className="space-y-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
+                  <h3 className="text-sm font-medium text-accent-600 dark:text-accent-400 flex items-center gap-2">
+                    <Zap className="h-4 w-4" /> Typebot
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="mb-1 block text-gray-700 dark:text-gray-300">Public ID</Label>
+                      <Input value={editTypebotPublicId} onChange={(e) => setEditTypebotPublicId(e.target.value)} placeholder="Ex: my-typebot-7l6svuv" className="rounded-lg font-mono text-sm" />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">No Typebot: Share &gt; API</p>
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-gray-700 dark:text-gray-300">URL base da API</Label>
+                      <Input value={editTypebotBaseUrl} onChange={(e) => setEditTypebotBaseUrl(e.target.value)} placeholder="Vazio = typebot.io" className="rounded-lg font-mono text-sm" />
+                    </div>
+                  </div>
+
+                  {/* Variáveis: bloco recolhível */}
+                  <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
+                    <button type="button" onClick={() => setEditFlowVarsExpanded((v) => !v)} className="flex items-center justify-between w-full py-1.5 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
+                      <span>Variáveis (opcional)</span>
+                      {editFlowVarsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                    {editFlowVarsExpanded && (
+                      <div className="mt-3 space-y-3">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">ID interno = ID na URL ao editar o typebot. API key = no Typebot: avatar (canto inferior esquerdo) &rarr; Settings &amp; Members &rarr; My account &rarr; API tokens &rarr; Create.</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          <Input value={editTypebotInternalId} onChange={(e) => setEditTypebotInternalId(e.target.value)} placeholder="ID interno (ex.: da URL ao editar)" className="rounded-lg text-sm" />
+                          <Input type="password" autoComplete="off" value={editTypebotApiKey} onChange={(e) => setEditTypebotApiKey(e.target.value)} placeholder="API key (Settings & Members > My account > API tokens)" className="rounded-lg text-sm" />
+                        </div>
+                        <Button type="button" variant="outline" size="sm" disabled={loadingTypebotVariables || !editTypebotInternalId.trim() || !editTypebotApiKey.trim()} onClick={async () => { if (!selectedFlow?.id) return; setLoadingTypebotVariables(true); try { const { data } = await api.post(`/chat/flows/${selectedFlow.id}/fetch_typebot_variables/`, { typebot_internal_id: editTypebotInternalId.trim(), typebot_api_key: editTypebotApiKey.trim() }); setTypebotVariablesList(data?.variables ?? []); const prev: Record<string, string> = {}; try { const extra = JSON.parse(editTypebotPrefilledExtra || '{}'); if (typeof extra === 'object' && extra !== null) Object.assign(prev, extra); } catch { /* ignore */ } setTypebotVariableValues(prev); if ((data?.variables?.length ?? 0) > 0) toast.success(`${data.variables.length} variável(is). Preencha e clique em Aplicar.`); else toast.info('Nenhuma variável neste fluxo.'); } catch (e: any) { toast.error(e?.response?.data?.detail ?? 'Falha ao carregar'); } finally { setLoadingTypebotVariables(false); } }}>
+                          {loadingTypebotVariables ? <LoadingSpinner size="sm" className="mr-1" /> : null}{loadingTypebotVariables ? 'Carregando…' : 'Carregar variáveis'}
+                        </Button>
+                        {typebotVariablesList.length > 0 && (
+                          <div className="space-y-2 rounded-lg bg-white dark:bg-gray-800/80 p-3 border border-gray-200 dark:border-gray-600">
+                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Valores para cada variável</p>
+                            {typebotVariablesList.map((v) => (
+                              <div key={v.id} className="flex gap-2 items-center">
+                                <span className="text-xs font-mono text-gray-500 dark:text-gray-400 w-28 shrink-0 truncate" title={v.name}>{v.name}</span>
+                                <Input className="flex-1 text-sm rounded-lg" value={typebotVariableValues[v.name] ?? ''} onChange={(e) => setTypebotVariableValues((prev) => ({ ...prev, [v.name]: e.target.value }))} placeholder="valor" />
+                              </div>
+                            ))}
+                            <Button type="button" variant="outline" size="sm" onClick={() => { const extra: Record<string, string> = {}; typebotVariablesList.forEach((v) => { const val = (typebotVariableValues[v.name] ?? '').trim(); if (val) extra[v.name] = val; }); try { const current = JSON.parse(editTypebotPrefilledExtra || '{}'); const merged = typeof current === 'object' && current !== null ? { ...current, ...extra } : extra; setEditTypebotPrefilledExtra(JSON.stringify(merged, null, 2)); toast.success('Aplicado ao JSON.'); } catch { setEditTypebotPrefilledExtra(JSON.stringify(extra, null, 2)); toast.success('Aplicado ao JSON.'); } }}>Aplicar ao JSON</Button>
+                          </div>
+                        )}
+                        <div>
+                          <Label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Variáveis extras (JSON)</Label>
+                          <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[72px]" value={editTypebotPrefilledExtra} onChange={(e) => setEditTypebotPrefilledExtra(e.target.value)} placeholder='{"campanha": "black-friday"}' rows={3} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
-            </div>
-            <div className="flex gap-2 mt-4">
-              <Button onClick={handleSaveFlow} disabled={savingFlow}>
-                {savingFlow ? <LoadingSpinner size="sm" className="mr-1" /> : null}
-                {savingFlow ? 'Salvando…' : 'Salvar'}
-              </Button>
-              <Button variant="outline" onClick={() => setEditFlowOpen(false)} disabled={savingFlow}>Cancelar</Button>
-            </div>
-          </Card>
+
+              {/* Footer fixo */}
+              <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                <Button onClick={handleSaveFlow} disabled={savingFlow} className="min-w-[100px]">
+                  {savingFlow ? <LoadingSpinner size="sm" className="mr-1" /> : null}{savingFlow ? 'Salvando…' : 'Salvar'}
+                </Button>
+                <Button variant="outline" onClick={() => setEditFlowOpen(false)} disabled={savingFlow}>Cancelar</Button>
+              </div>
+            </Card>
           </motion.div>
         </motion.div>
       )}
