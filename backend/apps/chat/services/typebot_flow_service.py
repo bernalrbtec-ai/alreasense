@@ -4,7 +4,7 @@ Quando Flow.typebot_public_id está preenchido, o fluxo é executado pelo Typebo
 as mensagens retornadas pela API são enviadas ao WhatsApp via Message + send_message_to_evolution.
 """
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import requests
 from django.db import transaction
@@ -38,26 +38,51 @@ def _extract_text_from_messages(data: dict) -> List[str]:
         if not isinstance(m, dict):
             continue
         if m.get("type") == "text":
-            content = m.get("content")  # pode ser string ou richText (objeto)
+            content = m.get("content")
             if isinstance(content, str) and content.strip():
                 texts.append(content.strip())
-            elif isinstance(content, dict) and content.get("richText"):
-                # richText é array de blocos; simplificar para texto plano
-                rt = content.get("richText")
-                if isinstance(rt, list):
-                    parts = []
-                    for block in rt:
-                        if isinstance(block, dict) and "content" in block:
-                            for c in block.get("content", []) if isinstance(block.get("content"), list) else []:
-                                if isinstance(c, dict) and c.get("type") == "text" and c.get("text"):
-                                    parts.append(str(c.get("text", "")))
-                        elif isinstance(block, dict) and block.get("text"):
-                            parts.append(str(block["text"]))
-                    if parts:
-                        texts.append("\n".join(parts))
-            elif content:
+                continue
+            if not isinstance(content, dict):
+                if content:
+                    texts.append(str(content).strip())
+                continue
+            # content pode ser { type: "markdown", markdown: "..." } (quando textBubbleContentFormat=markdown)
+            if content.get("type") == "markdown":
+                md = content.get("markdown")
+                if isinstance(md, str) and md.strip():
+                    texts.append(md.strip())
+                    continue
+            # content pode ser { type: "richText", richText: [...] } (estrutura TipTap/block)
+            rt = content.get("richText")
+            if rt is not None:
+                part = _rich_text_to_plain(rt)
+                if part:
+                    texts.append(part)
+                    continue
+            if content:
                 texts.append(str(content).strip())
     return texts
+
+
+def _rich_text_to_plain(rt: Any) -> str:
+    """Converte richText (array ou objeto aninhado) em texto plano; extrai qualquer campo 'text' encontrado."""
+    parts: List[str] = []
+
+    def collect(obj: Any) -> None:
+        if isinstance(obj, str) and obj.strip():
+            parts.append(obj.strip())
+        elif isinstance(obj, list):
+            for item in obj:
+                collect(item)
+        elif isinstance(obj, dict):
+            if obj.get("text") is not None:
+                parts.append(str(obj["text"]).strip())
+            for key in ("content", "richText", "children"):
+                if key in obj and obj[key]:
+                    collect(obj[key])
+
+    collect(rt)
+    return "\n".join(p for p in parts if p)
 
 
 def _send_texts_to_whatsapp(conversation: Conversation, texts: List[str], metadata: Optional[dict] = None) -> None:
@@ -140,7 +165,10 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
                 prefilled[str(k).strip()] = str(v)
             elif k and v is not None:
                 prefilled[str(k).strip()] = str(v)
-    payload = {"prefilledVariables": prefilled}
+    payload = {
+        "prefilledVariables": prefilled,
+        "textBubbleContentFormat": "markdown",
+    }
     try:
         r = requests.post(url, json=payload, timeout=15)
         r.raise_for_status()
@@ -200,7 +228,10 @@ def continue_typebot_flow(conversation: Conversation, user_message: str) -> bool
         return False
     base = _typebot_base_url(flow)
     url = f"{base}/sessions/{state.typebot_session_id}/continueChat"
-    payload = {"message": {"type": "text", "content": user_message}}
+    payload = {
+        "message": {"type": "text", "content": user_message},
+        "textBubbleContentFormat": "markdown",
+    }
     try:
         r = requests.post(url, json=payload, timeout=15)
         r.raise_for_status()
