@@ -106,7 +106,8 @@ class FlowViewSet(viewsets.ModelViewSet):
         if (getattr(flow, "typebot_public_id", None) or "").strip():
             from apps.chat.services.typebot_flow_service import start_typebot_flow
             ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
-            if start_typebot_flow(conversation, flow):
+            ok, _ = start_typebot_flow(conversation, flow)
+            if ok:
                 return Response({"message_id": "typebot", "conversation_id": str(conversation.id)})
             return Response({"detail": "Falha ao iniciar Typebot (verifique Public ID e URL base)."}, status=status.HTTP_502_BAD_GATEWAY)
         from apps.chat.services.flow_engine import get_start_node
@@ -185,6 +186,64 @@ class FlowViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
+    @action(detail=True, methods=["post"], url_path="fetch_typebot_variables")
+    def fetch_typebot_variables(self, request, pk=None):
+        """
+        Consulta as variáveis do fluxo Typebot via API do dashboard (Builder API).
+        Usa typebot_internal_id e typebot_api_key do fluxo, ou do body (typebot_internal_id, typebot_api_key).
+        Retorna lista de variáveis [{ "id", "name" }] para mapeamento no cadastro.
+        """
+        import requests
+        flow = self.get_object()
+        internal_id = (request.data.get("typebot_internal_id") or getattr(flow, "typebot_internal_id", None) or "").strip()
+        api_key = (request.data.get("typebot_api_key") or getattr(flow, "typebot_api_key", None) or "").strip()
+        if not internal_id or not api_key:
+            return Response(
+                {"detail": "Configure 'ID interno do Typebot' e 'API key Typebot (dashboard)' no fluxo para carregar as variáveis."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        base_url = (getattr(flow, "typebot_base_url", None) or "").strip().rstrip("/")
+        if base_url and "typebot.io" not in base_url:
+            builder_base = base_url.replace("/api/v1", "").rstrip("/") or base_url
+        else:
+            builder_base = "https://app.typebot.io"
+        url = f"{builder_base}/api/v1/typebots/{internal_id}/publishedTypebot"
+        try:
+            r = requests.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=15)
+            if r.status_code == 401:
+                return Response(
+                    {"detail": "API key inválida ou expirada. Verifique no dashboard do Typebot."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if r.status_code == 404:
+                return Response(
+                    {"detail": "Typebot não encontrado. Verifique o ID interno (URL do typebot ao editar)."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            r.raise_for_status()
+            data = r.json()
+        except requests.RequestException as e:
+            logger.warning("[FLOW] fetch_typebot_variables request failed: %s", e)
+            return Response(
+                {"detail": "Não foi possível conectar à API do Typebot. Verifique a URL base e a API key."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        published = data.get("publishedTypebot")
+        if not published:
+            return Response({"variables": []}, status=status.HTTP_200_OK)
+        variables = published.get("variables")
+        if not isinstance(variables, list):
+            return Response({"variables": []}, status=status.HTTP_200_OK)
+        out = []
+        for v in variables:
+            if not isinstance(v, dict):
+                continue
+            vid = v.get("id")
+            name = v.get("name")
+            if vid and name:
+                out.append({"id": str(vid), "name": str(name)})
+        return Response({"variables": out}, status=status.HTTP_200_OK)
+
 
 class FlowNodeViewSet(viewsets.ModelViewSet):
     """CRUD de nós de um fluxo. Filtro: flow_id."""
@@ -252,3 +311,84 @@ class FlowEdgeViewSet(viewsets.ModelViewSet):
         if self.action in ("create", "update", "partial_update"):
             return FlowEdgeWriteSerializer
         return FlowEdgeSerializer
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def typebot_webhook(request):
+    """
+    Webhook para o Typebot enviar variáveis/resultado de volta ao Sense.
+    Chamado pelo bloco "Webhook" do Typebot. Não requer autenticação.
+
+    Body (JSON):
+      - session_id (opcional): sessionId retornado pelo startChat.
+      - result_id (opcional): resultId retornado pelo startChat (se não tiver session_id).
+      - variables (obrigatório): objeto com chave/valor (ex: {"nome": "João", "email": "j@x.com"}).
+
+    Persiste em ConversationFlowState.metadata["typebot_variables"] e em
+    Conversation.metadata["typebot_result"] para consulta na conversa.
+    """
+    try:
+        data = request.data if isinstance(request.data, dict) else {}
+    except Exception:
+        data = {}
+    variables = data.get("variables")
+    if not isinstance(variables, dict):
+        return Response(
+            {"detail": "Campo 'variables' (objeto) é obrigatório."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    session_id = (data.get("session_id") or "").strip()
+    result_id = (data.get("result_id") or "").strip()
+    if not session_id and not result_id:
+        return Response(
+            {"detail": "Informe 'session_id' ou 'result_id'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    state = None
+    if session_id:
+        state = (
+            ConversationFlowState.objects.filter(typebot_session_id=session_id)
+            .select_related("conversation")
+            .first()
+        )
+    if not state and result_id:
+        state = (
+            ConversationFlowState.objects.filter(metadata__typebot_result_id=result_id)
+            .select_related("conversation")
+            .first()
+        )
+    if not state:
+        return Response(
+            {"detail": "Sessão ou resultado não encontrado."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    # Normalizar valores para string (evitar tipos que não serializam bem)
+    vars_simple = {}
+    for k, v in variables.items():
+        if k is None:
+            continue
+        key = str(k).strip()
+        if not key:
+            continue
+        if v is None:
+            vars_simple[key] = ""
+        elif isinstance(v, (str, int, float, bool)):
+            vars_simple[key] = str(v)
+        else:
+            vars_simple[key] = str(v)
+    if not state.metadata:
+        state.metadata = {}
+    state.metadata["typebot_variables"] = {**(state.metadata.get("typebot_variables") or {}), **vars_simple}
+    state.save(update_fields=["metadata"])
+    conversation = state.conversation
+    if conversation:
+        if not conversation.metadata:
+            conversation.metadata = {}
+        conversation.metadata["typebot_result"] = {
+            "variables": state.metadata["typebot_variables"],
+            "updated_at": timezone.now().isoformat(),
+        }
+        conversation.save(update_fields=["metadata"])
+    logger.info("[TYPEBOT WEBHOOK] Variáveis salvas conversation=%s keys=%s", state.conversation_id, list(vars_simple.keys()))
+    return Response({"ok": True, "saved_keys": list(vars_simple.keys())}, status=status.HTTP_200_OK)

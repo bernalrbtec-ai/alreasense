@@ -68,6 +68,20 @@ class Flow(models.Model):
         verbose_name="Typebot variáveis extras",
         help_text='Variáveis adicionais enviadas ao Typebot em prefilledVariables (ex: {"campanha": "black-friday"}). Chaves e valores devem ser string.',
     )
+    typebot_internal_id = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        verbose_name="Typebot ID interno (dashboard)",
+        help_text="ID do typebot no dashboard (URL ao editar). Usado com API key para buscar lista de variáveis.",
+    )
+    typebot_api_key = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        verbose_name="Typebot API key (dashboard)",
+        help_text="Token da API do Typebot (dashboard) para consultar variáveis do fluxo. Opcional.",
+    )
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

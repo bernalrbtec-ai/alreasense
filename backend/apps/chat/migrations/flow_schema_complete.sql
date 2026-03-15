@@ -85,6 +85,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_base_url') THEN
     ALTER TABLE chat_flow ADD COLUMN typebot_base_url VARCHAR(200) NOT NULL DEFAULT '';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_prefilled_extra') THEN
+    ALTER TABLE chat_flow ADD COLUMN typebot_prefilled_extra JSONB NOT NULL DEFAULT '{}';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_internal_id') THEN
+    ALTER TABLE chat_flow ADD COLUMN typebot_internal_id VARCHAR(100) NOT NULL DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_api_key') THEN
+    ALTER TABLE chat_flow ADD COLUMN typebot_api_key VARCHAR(255) NOT NULL DEFAULT '';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_conversation_flow_state' AND column_name = 'typebot_session_id') THEN
     ALTER TABLE chat_conversation_flow_state ADD COLUMN typebot_session_id VARCHAR(255) NOT NULL DEFAULT '';
   END IF;

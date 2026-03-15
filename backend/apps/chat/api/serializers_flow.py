@@ -245,6 +245,8 @@ class FlowSerializer(serializers.ModelSerializer):
             "typebot_public_id",
             "typebot_base_url",
             "typebot_prefilled_extra",
+            "typebot_internal_id",
+            "typebot_api_key",
             "is_active",
             "nodes",
             "created_at",

@@ -79,6 +79,9 @@ interface Flow {
   whatsapp_instance_name?: string | null
   typebot_public_id?: string | null
   typebot_base_url?: string | null
+  typebot_prefilled_extra?: Record<string, string> | null
+  typebot_internal_id?: string | null
+  typebot_api_key?: string | null
   is_active: boolean
   nodes?: FlowNode[]
 }
@@ -175,11 +178,18 @@ export default function FlowPage() {
   const [editFlowInstanceId, setEditFlowInstanceId] = useState<string | null>(null)
   const [editTypebotPublicId, setEditTypebotPublicId] = useState('')
   const [editTypebotBaseUrl, setEditTypebotBaseUrl] = useState('')
+  const [editTypebotPrefilledExtra, setEditTypebotPrefilledExtra] = useState('')
+  const [editTypebotInternalId, setEditTypebotInternalId] = useState('')
+  const [editTypebotApiKey, setEditTypebotApiKey] = useState('')
+  const [typebotVariablesList, setTypebotVariablesList] = useState<Array<{ id: string; name: string }>>([])
+  const [typebotVariableValues, setTypebotVariableValues] = useState<Record<string, string>>({})
+  const [loadingTypebotVariables, setLoadingTypebotVariables] = useState(false)
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
   const [newFlowTypebotPublicId, setNewFlowTypebotPublicId] = useState('')
   const [newFlowTypebotBaseUrl, setNewFlowTypebotBaseUrl] = useState('')
+  const [newFlowTypebotPrefilledExtra, setNewFlowTypebotPrefilledExtra] = useState('')
 
   // Node form (add / edit)
   const [nodeFormOpen, setNodeFormOpen] = useState(false)
@@ -288,6 +298,22 @@ export default function FlowPage() {
         setCreatingFlow(false)
         return
       }
+      let prefilledExtra: Record<string, string> = {}
+      try {
+        const raw = newFlowTypebotPrefilledExtra.trim()
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            prefilledExtra = Object.fromEntries(
+              Object.entries(parsed).filter(([, v]) => v != null).map(([k, v]) => [String(k).trim(), String(v)])
+            )
+          }
+        }
+      } catch {
+        toast.error('Variáveis extras: JSON inválido')
+        setCreatingFlow(false)
+        return
+      }
       const { data } = await api.post('/chat/flows/', {
         name: newFlowName.trim(),
         scope: newFlowScope,
@@ -295,6 +321,7 @@ export default function FlowPage() {
         whatsapp_instance: newFlowInstanceId || null,
         typebot_public_id: pid || null,
         typebot_base_url: base || null,
+        typebot_prefilled_extra: prefilledExtra,
         is_active: true,
       })
       const id = data?.id
@@ -310,6 +337,7 @@ export default function FlowPage() {
       setNewFlowInstanceId(null)
       setNewFlowTypebotPublicId('')
       setNewFlowTypebotBaseUrl('')
+      setNewFlowTypebotPrefilledExtra('')
       await fetchFlows()
       setSelectedFlow({
         id: String(id),
@@ -319,6 +347,9 @@ export default function FlowPage() {
         department_name: data?.department_name ?? null,
         whatsapp_instance: data?.whatsapp_instance ?? null,
         whatsapp_instance_name: data?.whatsapp_instance_name ?? null,
+        typebot_public_id: data?.typebot_public_id ?? null,
+        typebot_base_url: data?.typebot_base_url ?? null,
+        typebot_prefilled_extra: data?.typebot_prefilled_extra ?? null,
         is_active: data?.is_active ?? true,
       })
       selectedFlowIdRef.current = String(id)
@@ -338,6 +369,16 @@ export default function FlowPage() {
     setEditFlowInstanceId(selectedFlow.whatsapp_instance ?? null)
     setEditTypebotPublicId(selectedFlow.typebot_public_id ?? '')
     setEditTypebotBaseUrl(selectedFlow.typebot_base_url ?? '')
+    setEditTypebotInternalId(flowDetail?.typebot_internal_id ?? selectedFlow.typebot_internal_id ?? '')
+    setEditTypebotApiKey(flowDetail?.typebot_api_key ?? selectedFlow.typebot_api_key ?? '')
+    setTypebotVariablesList([])
+    setTypebotVariableValues({})
+    try {
+      const extra = selectedFlow.typebot_prefilled_extra
+      setEditTypebotPrefilledExtra(typeof extra === 'object' && extra !== null ? JSON.stringify(extra, null, 2) : '{}')
+    } catch {
+      setEditTypebotPrefilledExtra('{}')
+    }
     setEditFlowOpen(true)
   }
 
@@ -370,6 +411,22 @@ export default function FlowPage() {
         setSavingFlow(false)
         return
       }
+      let prefilledExtra: Record<string, string> | null = null
+      try {
+        const raw = editTypebotPrefilledExtra.trim()
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+            prefilledExtra = Object.fromEntries(
+              Object.entries(parsed).filter(([, v]) => v != null).map(([k, v]) => [String(k).trim(), String(v)])
+            )
+          }
+        }
+      } catch {
+        toast.error('Variáveis extras: JSON inválido')
+        setSavingFlow(false)
+        return
+      }
       const { data } = await api.patch(`/chat/flows/${selectedFlow.id}/`, {
         name,
         scope: editFlowScope,
@@ -377,6 +434,9 @@ export default function FlowPage() {
         whatsapp_instance: editFlowInstanceId || null,
         typebot_public_id: pid || null,
         typebot_base_url: base || null,
+        typebot_prefilled_extra: prefilledExtra || {},
+        typebot_internal_id: editTypebotInternalId.trim() || null,
+        typebot_api_key: editTypebotApiKey.trim() || null,
       })
       toast.success('Fluxo atualizado')
       setEditFlowOpen(false)
@@ -391,6 +451,9 @@ export default function FlowPage() {
         whatsapp_instance_name: data?.whatsapp_instance_name ?? null,
         typebot_public_id: data?.typebot_public_id ?? null,
         typebot_base_url: data?.typebot_base_url ?? null,
+        typebot_prefilled_extra: data?.typebot_prefilled_extra ?? null,
+        typebot_internal_id: data?.typebot_internal_id ?? null,
+        typebot_api_key: data?.typebot_api_key ?? null,
         is_active: data?.is_active ?? selectedFlow.is_active,
       })
       selectedFlowIdRef.current = selectedFlow.id
@@ -959,13 +1022,21 @@ export default function FlowPage() {
                 onChange={(e) => setNewFlowTypebotPublicId(e.target.value)}
                 placeholder="Public ID do Typebot (Share &gt; API)"
               />
-              <Input
-                className="mt-2"
-                value={newFlowTypebotBaseUrl}
-                onChange={(e) => setNewFlowTypebotBaseUrl(e.target.value)}
-                placeholder="URL base da API (vazio = typebot.io)"
-              />
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para o fluxo ser executado pelo Typebot via API (startChat/continueChat).</p>
+                <Input
+                  className="mt-2"
+                  value={newFlowTypebotBaseUrl}
+                  onChange={(e) => setNewFlowTypebotBaseUrl(e.target.value)}
+                  placeholder="URL base da API (vazio = typebot.io)"
+                />
+                <Label className="mt-2 block text-xs text-gray-500 dark:text-gray-400">Variáveis extras (JSON)</Label>
+                <textarea
+                  className="mt-0.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[50px]"
+                  value={newFlowTypebotPrefilledExtra}
+                  onChange={(e) => setNewFlowTypebotPrefilledExtra(e.target.value)}
+                  placeholder='{"campanha": "black-friday"}'
+                  rows={2}
+                />
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para o fluxo ser executado pelo Typebot via API (startChat/continueChat). Variáveis extras são enviadas em prefilledVariables.</p>
             </div>
             <div className="flex gap-2">
               <Button onClick={handleCreateFlow} disabled={creatingFlow}>
@@ -1536,7 +1607,107 @@ export default function FlowPage() {
                   onChange={(e) => setEditTypebotBaseUrl(e.target.value)}
                   placeholder="URL base da API (vazio = typebot.io)"
                 />
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp. A edição do fluxo é feita no Typebot.</p>
+                <div className="mt-3 pt-2 border-t border-gray-200 dark:border-gray-600">
+                  <Label className="text-xs text-gray-500 dark:text-gray-400">Consultar variáveis do Typebot (opcional)</Label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">ID interno = URL ao editar o typebot no dashboard. API key = Settings &gt; API no Typebot.</p>
+                  <Input
+                    className="mt-1"
+                    value={editTypebotInternalId}
+                    onChange={(e) => setEditTypebotInternalId(e.target.value)}
+                    placeholder="ID interno do Typebot"
+                  />
+                  <Input
+                    className="mt-1"
+                    type="password"
+                    autoComplete="off"
+                    value={editTypebotApiKey}
+                    onChange={(e) => setEditTypebotApiKey(e.target.value)}
+                    placeholder="API key (dashboard)"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    disabled={loadingTypebotVariables || !editTypebotInternalId.trim() || !editTypebotApiKey.trim()}
+                    onClick={async () => {
+                      if (!selectedFlow?.id) return
+                      setLoadingTypebotVariables(true)
+                      try {
+                        const { data } = await api.post(`/chat/flows/${selectedFlow.id}/fetch_typebot_variables/`, {
+                          typebot_internal_id: editTypebotInternalId.trim(),
+                          typebot_api_key: editTypebotApiKey.trim(),
+                        })
+                        setTypebotVariablesList(data?.variables ?? [])
+                        const prev: Record<string, string> = {}
+                        try {
+                          const extra = JSON.parse(editTypebotPrefilledExtra || '{}')
+                          if (typeof extra === 'object' && extra !== null) {
+                            Object.assign(prev, extra)
+                          }
+                        } catch { /* ignore */ }
+                        setTypebotVariableValues(prev)
+                        if ((data?.variables?.length ?? 0) > 0) toast.success(`${data.variables.length} variável(is) carregada(s). Preencha os valores e clique em Aplicar.`)
+                        else toast.info('Nenhuma variável definida neste fluxo no Typebot.')
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.detail ?? 'Falha ao carregar variáveis')
+                      } finally {
+                        setLoadingTypebotVariables(false)
+                      }
+                    }}
+                  >
+                    {loadingTypebotVariables ? <LoadingSpinner size="sm" className="mr-1" /> : null}
+                    {loadingTypebotVariables ? 'Carregando…' : 'Carregar variáveis do Typebot'}
+                  </Button>
+                  {typebotVariablesList.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <Label className="text-xs">Mapear valores para as variáveis</Label>
+                      {typebotVariablesList.map((v) => (
+                        <div key={v.id} className="flex gap-2 items-center">
+                          <span className="text-xs font-mono text-gray-600 dark:text-gray-400 w-32 shrink-0 truncate" title={v.name}>{v.name}</span>
+                          <Input
+                            className="flex-1 text-sm"
+                            value={typebotVariableValues[v.name] ?? ''}
+                            onChange={(e) => setTypebotVariableValues((prev) => ({ ...prev, [v.name]: e.target.value }))}
+                            placeholder="valor ou vazio"
+                          />
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const extra: Record<string, string> = {}
+                          typebotVariablesList.forEach((v) => {
+                            const val = (typebotVariableValues[v.name] ?? '').trim()
+                            if (val) extra[v.name] = val
+                          })
+                          try {
+                            const current = JSON.parse(editTypebotPrefilledExtra || '{}')
+                            const merged = typeof current === 'object' && current !== null ? { ...current, ...extra } : extra
+                            setEditTypebotPrefilledExtra(JSON.stringify(merged, null, 2))
+                            toast.success('Valores aplicados ao JSON de variáveis extras.')
+                          } catch {
+                            setEditTypebotPrefilledExtra(JSON.stringify(extra, null, 2))
+                            toast.success('Valores aplicados ao JSON de variáveis extras.')
+                          }
+                        }}
+                      >
+                        Aplicar ao JSON de variáveis extras
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <Label className="mt-2 block text-xs text-gray-500 dark:text-gray-400">Variáveis extras (JSON)</Label>
+                <textarea
+                  className="mt-0.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[60px]"
+                  value={editTypebotPrefilledExtra}
+                  onChange={(e) => setEditTypebotPrefilledExtra(e.target.value)}
+                  placeholder='{"campanha": "black-friday"}'
+                  rows={2}
+                />
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp. Variáveis extras são enviadas em prefilledVariables. A edição do fluxo é feita no Typebot.</p>
               </div>
             </div>
             <div className="flex gap-2 mt-4">

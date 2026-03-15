@@ -49,6 +49,58 @@ No **startChat**, o Sense envia as seguintes variáveis em `prefilledVariables`:
 
 Você pode usar essas variáveis nos blocos do Typebot (texto, condições, etc.).
 
+### Variáveis extras por fluxo
+
+No **Editar fluxo** (ou via API no campo `typebot_prefilled_extra`) você pode definir um JSON com variáveis adicionais que serão enviadas em todo **startChat** desse fluxo. Exemplo: `{"campanha": "black-friday", "origem": "whatsapp"}`. No Typebot, crie variáveis com os mesmos nomes para usá-las. Chaves e valores são enviados como string.
+
+### Consultar variáveis do Typebot e mapear no cadastro
+
+Se você informar no fluxo o **ID interno do Typebot** (o ID que aparece na URL ao editar o typebot no dashboard) e a **API key** do dashboard (Settings > API no Typebot), o Sense pode **buscar a lista de variáveis** que o fluxo usa e mostrar no modal de edição. Assim você:
+
+1. Clica em **"Carregar variáveis do Typebot"** e o Sense chama a API do dashboard do Typebot (Builder API).
+2. A lista de variáveis do fluxo aparece; você preenche o valor desejado para cada uma (ou deixa vazio).
+3. Clica em **"Aplicar ao JSON de variáveis extras"** e o Sense monta o `typebot_prefilled_extra` com esse mapeamento.
+
+Isso exige que o Typebot esteja publicado e que você use a **API do dashboard** (não a API pública de chat): a API pública (startChat) não retorna a lista de variáveis; só a API do Builder (com token) retorna o typebot publicado com o array `variables`. Para self-hosted, a URL base do fluxo é usada também como base do Builder (mesmo servidor).
+
+---
+
+## Receber informações do Typebot no Sense
+
+### resultId
+
+O Sense guarda o **resultId** retornado pelo Typebot no **startChat** em `ConversationFlowState.metadata["typebot_result_id"]`. Assim você pode usar a API do Typebot (GET result) com esse ID para buscar variáveis/resultado depois, se precisar.
+
+### Webhook: Typebot envia variáveis para o Sense
+
+O Sense expõe um webhook para o Typebot enviar variáveis de volta em tempo real:
+
+- **URL:** `POST /api/chat/webhooks/typebot/` (base do backend do Sense).
+- **Autenticação:** nenhuma (o endpoint é público; use em ambiente controlado).
+- **Body (JSON):**
+  - `session_id` (opcional): o `sessionId` retornado pelo startChat. No Typebot você pode passar isso em uma variável (o Sense envia `conversation_id` em prefilledVariables; para session_id o Typebot não o tem por padrão — use `result_id` se não tiver session_id).
+  - `result_id` (opcional): o `resultId` retornado pelo startChat. No Typebot pode ser obtido com o bloco **Set variable** usando o valor "Result ID".
+  - `variables` (obrigatório): objeto com as variáveis a salvar. Ex.: `{"nome": "João", "email": "j@x.com", "opcao_escolhida": "vendas"}`.
+
+**Exemplo no Typebot:** use um bloco **Webhook** com:
+
+- URL: `https://seu-backend-sense.com/api/chat/webhooks/typebot/`
+- Body (JSON): `{ "result_id": "{{resultId}}", "variables": { "nome": "{{nome}}", "email": "{{email}}" } }`
+
+(No Typebot, use as variáveis do fluxo no lugar de `{{resultId}}`, `{{nome}}`, etc.)
+
+O Sense persiste em:
+
+- `ConversationFlowState.metadata["typebot_variables"]` (acumula chamadas)
+- `Conversation.metadata["typebot_result"]` com `variables` e `updated_at`
+
+Assim você pode consultar na conversa (API ou no chat) os dados que o Typebot coletou.
+
+### Consultar variáveis recebidas
+
+- **Conversação:** o objeto `Conversation` pode ter `metadata["typebot_result"]` com `variables` e `updated_at` após o webhook ter sido chamado.
+- **Estado do fluxo:** `ConversationFlowState.metadata["typebot_variables"]` contém as variáveis enviadas pelo Typebot (e `metadata["typebot_result_id"]` o resultId do startChat).
+
 ---
 
 ## Como testar

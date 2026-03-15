@@ -23,7 +23,7 @@ from apps.chat.api.views_business_hours import (
     AfterHoursTaskConfigViewSet,
 )
 from apps.chat.api.views_welcome_menu import WelcomeMenuConfigViewSet
-from apps.chat.api.views_flow import FlowViewSet, FlowNodeViewSet, FlowEdgeViewSet
+from apps.chat.api.views_flow import FlowViewSet, FlowNodeViewSet, FlowEdgeViewSet, typebot_webhook
 from apps.chat.api.views_quick_replies import QuickReplyViewSet
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
@@ -77,4 +77,6 @@ urlpatterns = [
     
     # Webhook Evolution
     path('webhooks/evolution/', evolution_webhook, name='evolution-webhook'),
+    # Webhook Typebot (receber variáveis do fluxo)
+    path('webhooks/typebot/', typebot_webhook, name='typebot-webhook'),
 ]
