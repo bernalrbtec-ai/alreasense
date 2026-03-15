@@ -192,6 +192,8 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
             )
             result_id = (data.get("resultId") or "").strip()
             if result_id:
+                if state.metadata is None:
+                    state.metadata = {}
                 state.metadata["typebot_result_id"] = result_id
                 state.save(update_fields=["metadata"])
         texts = _extract_text_from_messages(data)
@@ -228,18 +230,24 @@ def continue_typebot_flow(conversation: Conversation, user_message: str) -> bool
         return False
     base = _typebot_base_url(flow)
     url = f"{base}/sessions/{state.typebot_session_id}/continueChat"
+    # API Typebot: mensagem de texto exige propriedade "text", não "content"
     payload = {
-        "message": {"type": "text", "content": user_message},
+        "message": {"type": "text", "text": user_message},
         "textBubbleContentFormat": "markdown",
     }
     try:
         r = requests.post(url, json=payload, timeout=15)
+        if r.status_code in (404, 410):
+            logger.warning("[TYPEBOT] Sessão não encontrada ou expirada (HTTP %s), limpando estado", r.status_code)
+            state.typebot_session_id = ""
+            state.save(update_fields=["typebot_session_id"])
+            return False
         r.raise_for_status()
         data = r.json()
     except requests.RequestException as e:
         logger.warning("[TYPEBOT] continueChat falhou: %s", e)
         return False
-    texts = _extract_text_from_messages(data)
+    texts = _extract_text_from_messages(data) if isinstance(data, dict) else []
     _send_texts_to_whatsapp(conversation, texts)
     # Se o Typebot retornar um "input" (próximo bloco de pergunta), a sessão continua.
     # Se não houver input, opcionalmente podemos limpar a sessão ou mantê-la para histórico.

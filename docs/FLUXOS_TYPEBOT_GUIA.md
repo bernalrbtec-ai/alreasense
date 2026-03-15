@@ -112,6 +112,12 @@ Se o teste falhar, confira o **Public ID** (Share > API no Typebot) e a **URL ba
 
 ---
 
+## Fluxo para após a primeira resposta do usuário (ex.: e-mail)
+
+- O Sense envia a resposta ao Typebot com a propriedade **`text`** (não `content`), conforme a API. Se o fluxo parar logo após o usuário enviar um dado (e-mail, nome, etc.), confira os logs: `[TYPEBOT] continueChat falhou` indica problema de conexão ou sessão; HTTP 404/410 indica sessão expirada (o Sense limpa o estado e a próxima mensagem não será enviada ao Typebot até um novo "Iniciar fluxo").
+
+---
+
 ## Fluxo inicia mas nenhuma mensagem chega ao WhatsApp
 
 - **Primeiro bloco do Typebot:** o Sense só envia ao WhatsApp mensagens do tipo **texto** retornadas pela API. Se o primeiro bloco do fluxo for só um input (pergunta sem texto de boas-vindas) ou outro tipo (imagem, etc.), a API pode retornar 0 mensagens e o cliente não recebe nada. Inclua um bloco de **texto** no início (ex.: "Olá! Em que posso ajudar?") antes do primeiro input.
