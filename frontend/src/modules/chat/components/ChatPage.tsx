@@ -68,7 +68,7 @@ export function ChatPage() {
           }
           flex-shrink-0 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out
         `}>
-          {import.meta.env.VITE_CHAT_UI_V2 === 'true' ? (
+          {import.meta.env.VITE_CHAT_UI_V2 !== 'false' ? (
             <ChatConversationSidebarWrapper />
           ) : (
             <ConversationList />

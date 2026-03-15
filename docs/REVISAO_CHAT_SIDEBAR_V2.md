@@ -9,7 +9,7 @@ Documento de revisão da implementação da nova sidebar de conversas (ChatConve
 | Aspecto | Situação |
 |--------|----------|
 | **Escopo da V2** | Apenas a **lista de conversas** (sidebar) foi trocada. ChatWindow, MessageList, MessageInput e fluxos de mensagens permanecem inalterados. |
-| **Flag de feature** | `import.meta.env.VITE_CHAT_UI_V2 === 'true'` em `ChatPage.tsx`; fallback para `ConversationList` quando não definido ou diferente. |
+| **Flag de feature** | Por padrão a **V2** é usada. Para voltar à lista antiga: `VITE_CHAT_UI_V2=false` no `.env` do frontend. |
 | **Compatibilidade** | Store (Zustand), WebSocket, conversationUpdater e APIs são compartilhados; não há duplicação de estado entre V1 e V2. |
 
 ---
@@ -142,7 +142,7 @@ Nenhuma dessas diferenças altera MessageList, MessageInput ou ChatWindow; apena
 
 ## 11. Como ativar e reverter
 
-- **Ativar V2:** no `frontend/.env`, definir `VITE_CHAT_UI_V2=true` e reiniciar o dev server (ou rebuild).
-- **Reverter:** remover a variável ou definir `VITE_CHAT_UI_V2=false` e reiniciar/rebuild. A ConversationList continua disponível e inalterada.
+- **Padrão:** a sidebar **V2** é usada sem precisar de variável de ambiente.
+- **Reverter para a lista antiga (V1):** no `frontend/.env`, definir `VITE_CHAT_UI_V2=false` e reiniciar o dev server (ou rebuild). A ConversationList continua disponível e inalterada.
 
 Esta revisão reflete o estado da implementação após a correção do preview em grupos no adapter e a checagem de paridade com o ConversationList.
