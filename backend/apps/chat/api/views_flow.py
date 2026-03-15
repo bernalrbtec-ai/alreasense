@@ -202,8 +202,12 @@ class FlowViewSet(viewsets.ModelViewSet):
                 {"detail": "Configure 'ID interno do Typebot' e 'API key Typebot (dashboard)' no fluxo para carregar as variáveis."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        base_url = (getattr(flow, "typebot_base_url", None) or "").strip().rstrip("/")
-        if base_url and "typebot.io" not in base_url:
+        # Builder API (publishedTypebot) fica em app.typebot.io no Typebot cloud.
+        # typebot.co é só para o chat público; o dashboard/API é app.typebot.io.
+        base_url = (getattr(flow, "typebot_base_url", None) or "").strip().rstrip("/").lower()
+        if base_url and ("typebot.co" in base_url or "typebot.io" in base_url):
+            builder_base = "https://app.typebot.io"
+        elif base_url:
             builder_base = base_url.replace("/api/v1", "").rstrip("/") or base_url
         else:
             builder_base = "https://app.typebot.io"
