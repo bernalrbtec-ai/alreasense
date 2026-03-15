@@ -35,6 +35,10 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Inicializar todos os estados ANTES de qualquer hook que dependa de activeConversation
   const [showMenu, setShowMenu] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showStartFlowModal, setShowStartFlowModal] = useState(false);
+  const [flowsForStart, setFlowsForStart] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+  const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
+  const [loadingFlows, setLoadingFlows] = useState(false);
   const [startFlowLoading, setStartFlowLoading] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
@@ -698,6 +702,51 @@ export function ChatWindow() {
       setIsReady(false);
     }
   }, [conversationId, displayName]);
+
+  // Carregar fluxos quando abrir o modal "Iniciar fluxo"
+  useEffect(() => {
+    if (!showStartFlowModal || !conversationId) return;
+    let cancelled = false;
+    setLoadingFlows(true);
+    setFlowsForStart([]);
+    setSelectedFlowId(null);
+    api.get(`/chat/conversations/${conversationId}/flows/`)
+      .then((res) => {
+        if (cancelled) return;
+        const raw = res?.data;
+        const list = Array.isArray(raw)
+          ? raw
+          : (Array.isArray((raw as any)?.results) ? (raw as any).results : []);
+        const flows = list.map((f: any) => ({
+          id: String(f?.id ?? ''),
+          name: String(f?.name ?? ''),
+          description: f?.description != null ? String(f.description) : '',
+        })).filter((f: { id: string }) => f.id);
+        setFlowsForStart(flows);
+        if (flows.length === 1) setSelectedFlowId(flows[0].id);
+      })
+      .catch(() => {
+        if (!cancelled) setFlowsForStart([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingFlows(false);
+      });
+    return () => { cancelled = true; };
+  }, [showStartFlowModal, conversationId]);
+
+  // Fechar modal "Iniciar fluxo" com Escape
+  useEffect(() => {
+    if (!showStartFlowModal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowStartFlowModal(false);
+        setFlowsForStart([]);
+        setSelectedFlowId(null);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showStartFlowModal]);
   
   // ✅ REMOVIDO: useEffect separado para displayName - agora é calculado diretamente no useEffect acima
   // Isso evita problemas de inicialização e dependências circulares
@@ -1002,32 +1051,14 @@ export function ChatWindow() {
 
                 {activeConversation?.conversation_type !== 'group' && conversationId && (
                   <button
-                    onClick={async () => {
+                    onClick={() => {
                       setShowMenu(false);
-                      setStartFlowLoading(true);
-                      try {
-                        const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`);
-                        if (res.data?.success) {
-                          const queued = res.data?.messages_queued;
-                          if (typeof queued === 'number' && queued === 0) {
-                            toast.warning('Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem. Verifique se o primeiro bloco do fluxo é do tipo texto.');
-                          } else {
-                            toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
-                          }
-                        } else {
-                          toast.error(res.data?.message || 'Nenhum fluxo ativo para esta conversa.');
-                        }
-                      } catch (e: any) {
-                        toast.error(e.response?.data?.message || 'Não foi possível iniciar o fluxo.');
-                      } finally {
-                        setStartFlowLoading(false);
-                      }
+                      setShowStartFlowModal(true);
                     }}
-                    disabled={startFlowLoading}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 disabled:opacity-50"
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
                     <Zap className="w-4 h-4" />
-                    {startFlowLoading ? 'Iniciando...' : 'Iniciar fluxo'}
+                    Iniciar fluxo
                   </button>
                 )}
 
@@ -1096,6 +1127,110 @@ export function ChatWindow() {
       )}
 
       {/* Modals */}
+      {/* Modal Iniciar fluxo: lista fluxos, descrição e confirmação */}
+      {showStartFlowModal && conversationId && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="start-flow-modal-title"
+        >
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+              <h2 id="start-flow-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Iniciar fluxo</h2>
+              <button
+                type="button"
+                onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
+                aria-label="Fechar"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              {loadingFlows ? (
+                <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" aria-hidden />
+                  <span>Carregando fluxos...</span>
+                </div>
+              ) : flowsForStart.length === 0 ? (
+                <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                  <p>Nenhum fluxo ativo para o Inbox ou departamento desta conversa.</p>
+                  <p className="text-xs">Configure um fluxo em <strong>Configurações &gt; Fluxos</strong> e vincule ao Inbox ou ao departamento.</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {flowsForStart.map((f) => (
+                    <li key={f.id}>
+                      <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                        <input
+                          type="radio"
+                          name="flow"
+                          value={f.id}
+                          checked={selectedFlowId === f.id}
+                          onChange={() => setSelectedFlowId(f.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{f.name}</span>
+                          {f.description && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{f.description}</p>
+                          )}
+                        </div>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={loadingFlows || flowsForStart.length === 0 || (flowsForStart.length > 1 && !selectedFlowId) || startFlowLoading}
+                onClick={async () => {
+                  const flowId = flowsForStart.length === 1 ? flowsForStart[0].id : selectedFlowId;
+                  if (!flowId || !conversationId) return;
+                  setStartFlowLoading(true);
+                  try {
+                    const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`, {
+                      flow_id: String(flowId),
+                    });
+                    if (res?.data?.success) {
+                      const queued = res.data?.messages_queued;
+                      if (typeof queued === 'number' && queued === 0) {
+                        toast.warning('Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem. Verifique se o primeiro bloco do fluxo é do tipo texto.');
+                      } else {
+                        toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                      }
+                      setShowStartFlowModal(false);
+                      setFlowsForStart([]);
+                      setSelectedFlowId(null);
+                    } else {
+                      toast.error((res?.data?.message as string) || 'Nenhum fluxo ativo para esta conversa.');
+                    }
+                  } catch (e: any) {
+                    const msg = e?.response?.data?.message ?? e?.response?.data?.detail;
+                    toast.error(typeof msg === 'string' ? msg : 'Não foi possível iniciar o fluxo.');
+                  } finally {
+                    setStartFlowLoading(false);
+                  }
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {startFlowLoading ? 'Iniciando...' : 'Confirmar ativação'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTransferModal && activeConversation && (
         <TransferModal
           conversation={{

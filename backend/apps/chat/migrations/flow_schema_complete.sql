@@ -79,6 +79,9 @@ CREATE INDEX IF NOT EXISTS idx_chat_conv_flow_state_flow ON chat_conversation_fl
 -- 5) Campos Typebot (idempotente: adiciona só se não existirem)
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'description') THEN
+    ALTER TABLE chat_flow ADD COLUMN description VARCHAR(500) NOT NULL DEFAULT '';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_public_id') THEN
     ALTER TABLE chat_flow ADD COLUMN typebot_public_id VARCHAR(100) NOT NULL DEFAULT '';
   END IF;

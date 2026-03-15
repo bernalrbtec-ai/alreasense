@@ -72,6 +72,7 @@ interface WhatsAppInstanceOption {
 interface Flow {
   id: string
   name: string
+  description?: string | null
   scope: string
   department: string | null
   department_name: string | null
@@ -173,6 +174,7 @@ export default function FlowPage() {
   // Edit flow modal
   const [editFlowOpen, setEditFlowOpen] = useState(false)
   const [editFlowName, setEditFlowName] = useState('')
+  const [editFlowDescription, setEditFlowDescription] = useState('')
   const [editFlowScope, setEditFlowScope] = useState<'inbox' | 'department'>('inbox')
   const [editFlowDepartmentId, setEditFlowDepartmentId] = useState<string | null>(null)
   const [editFlowInstanceId, setEditFlowInstanceId] = useState<string | null>(null)
@@ -365,6 +367,7 @@ export default function FlowPage() {
   const openEditFlow = () => {
     if (!selectedFlow) return
     setEditFlowName(selectedFlow.name)
+    setEditFlowDescription(selectedFlow.description ?? '')
     setEditFlowScope((selectedFlow.scope as 'inbox' | 'department') || 'inbox')
     setEditFlowDepartmentId(selectedFlow.department || null)
     setEditFlowInstanceId(selectedFlow.whatsapp_instance ?? null)
@@ -431,6 +434,7 @@ export default function FlowPage() {
       }
       const { data } = await api.patch(`/chat/flows/${selectedFlow.id}/`, {
         name,
+        description: (editFlowDescription || '').trim(),
         scope: editFlowScope,
         department: editFlowScope === 'department' ? editFlowDepartmentId : null,
         whatsapp_instance: editFlowInstanceId || null,
@@ -446,6 +450,7 @@ export default function FlowPage() {
       setSelectedFlow({
         id: data?.id ?? selectedFlow.id,
         name: data?.name ?? name,
+        description: (data?.description ?? editFlowDescription ?? '') || '',
         scope: data?.scope ?? editFlowScope,
         department: data?.department ?? null,
         department_name: data?.department_name ?? null,
@@ -1553,6 +1558,16 @@ export default function FlowPage() {
                         placeholder="Ex: Menu Inbox"
                         className="rounded-lg"
                       />
+                    </div>
+                    <div>
+                      <Label className="mb-1 block">Descrição breve (opcional)</Label>
+                      <Input
+                        value={editFlowDescription}
+                        onChange={(e) => setEditFlowDescription(e.target.value)}
+                        placeholder="Ex: Menu de abertura de chamados"
+                        className="rounded-lg"
+                      />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Exibida ao escolher o fluxo no chat.</p>
                     </div>
                     <div>
                       <Label className="mb-2 block">Escopo</Label>

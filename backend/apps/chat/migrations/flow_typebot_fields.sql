@@ -9,9 +9,15 @@
 -- remova o registro para evitar inconsistência:
 --   DELETE FROM django_migrations WHERE app = 'chat' AND name = '0018_flow_typebot_fields';
 
--- 1) chat_flow: Typebot Public ID e URL base da API
+-- 1) chat_flow: descrição breve + Typebot Public ID e URL base da API
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'description'
+  ) THEN
+    ALTER TABLE chat_flow ADD COLUMN description VARCHAR(500) NOT NULL DEFAULT '';
+  END IF;
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'chat_flow' AND column_name = 'typebot_public_id'

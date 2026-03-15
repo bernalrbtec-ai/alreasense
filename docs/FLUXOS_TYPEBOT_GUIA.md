@@ -19,7 +19,18 @@ O fluxo (Sense ou Typebot) é iniciado nos seguintes casos:
 - **Nova conversa** (primeira mensagem no Inbox ou em um departamento com fluxo).
 - **Conversa reaberta** (conversa estava fechada e chega nova mensagem).
 - **Transferência** para um departamento que tem fluxo ativo (o endpoint de transferência chama o início do fluxo).
-- **Botão "Iniciar fluxo"** no menu da conversa (três pontos), que chama o endpoint `start-flow` e reinicia o fluxo do escopo atual (Inbox ou departamento).
+- **Botão "Iniciar fluxo"** no menu da conversa (três pontos): abre um modal com a lista de fluxos ativos (Inbox ou departamento), exibe a **descrição breve** do fluxo (se cadastrada) e pede **confirmação** antes de ativar. Se houver mais de um fluxo, o usuário escolhe qual iniciar.
+
+---
+
+## Quando o fluxo é interrompido
+
+O Sense **para o fluxo e descarta o estado** (sessão Typebot ou nó atual) nos seguintes casos:
+
+- **Humano assume a conversa:** ao clicar em "Iniciar atendimento" ou ao transferir a conversa para um atendente, o estado do fluxo é removido. As próximas mensagens do cliente não são enviadas ao Typebot nem ao fluxo Sense; o atendente responde manualmente.
+- **Conversa encerrada:** ao fechar a conversa (botão "Fechar conversa" ou encerramento pelo menu de boas-vindas), o estado do fluxo é removido. Ao reabrir, um novo fluxo só inicia se configurado para o escopo (nova mensagem ou "Iniciar fluxo" manual).
+
+Assim, não há risco de o bot continuar respondendo depois que um humano assumiu ou depois que a conversa foi fechada.
 
 ---
 
@@ -29,6 +40,7 @@ O fluxo (Sense ou Typebot) é iniciado nos seguintes casos:
 2. Crie um novo fluxo (informe só o nome) e salve.
 3. **Edite** o fluxo (os campos Typebot só aparecem na edição, não na criação).
 4. No modal **"Editar fluxo"**, preencha:
+   - **Descrição breve** (opcional): texto exibido no modal "Iniciar fluxo" no chat.
    - **Typebot Public ID**: no Typebot, aba **Share > API** — o Public ID aparece na URL ou no painel.
    - **URL base da API** (opcional): deixe vazio para usar typebot.io; para self-hosted, informe a URL base da API (ex.: `https://meutypebot.com/api/v1`).
 5. Salve. A partir daí, o fluxo passa a ser executado pelo Typebot (startChat/continueChat); as mensagens do bot são enviadas ao WhatsApp pelo Sense.

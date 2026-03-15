@@ -23,21 +23,30 @@ def get_active_flow_for_conversation(conversation: Conversation) -> Optional[Flo
     - Inbox: conversation.department_id is None, scope=inbox, department=null.
     - Departamento: conversation.department_id preenchido, scope=department, department_id igual.
     """
+    flows = get_active_flows_for_conversation(conversation)
+    return flows.first() if flows is not None else None
+
+
+def get_active_flows_for_conversation(conversation: Conversation):
+    """
+    Retorna o queryset de fluxos ativos para o escopo da conversa (Inbox ou departamento).
+    Usado para listar fluxos no modal "Iniciar fluxo" e para escolher qual iniciar.
+    """
     if not conversation or not conversation.tenant_id:
-        return None
+        return Flow.objects.none()
     if conversation.department_id is None:
         return Flow.objects.filter(
             tenant_id=conversation.tenant_id,
             scope=Flow.SCOPE_INBOX,
             is_active=True,
             department__isnull=True,
-        ).first()
+        ).order_by("name")
     return Flow.objects.filter(
         tenant_id=conversation.tenant_id,
         scope=Flow.SCOPE_DEPARTMENT,
         department_id=conversation.department_id,
         is_active=True,
-    ).first()
+    ).order_by("name")
 
 
 def get_start_node(flow: Flow) -> Optional[FlowNode]:
@@ -450,9 +459,10 @@ def process_flow_reply(conversation: Conversation, message: Message) -> bool:
         return False
 
 
-def try_send_flow_start(conversation: Conversation):
+def try_send_flow_start(conversation: Conversation, flow: Optional[Flow] = None):
     """
     Se existir fluxo ativo para o escopo da conversa, envia o nó inicial e cria estado.
+    flow: opcional; se informado, usa esse fluxo (deve ser ativo e do escopo da conversa).
     Respeita allow_meta_interactive_buttons do tenant (se desativado, não envia fluxo).
     Não envia se a conversa já estiver em um fluxo (evita reenviar nó inicial).
     Retorna (sent: bool, extra: dict). extra pode ter "messages_queued" (Typebot).
@@ -467,7 +477,13 @@ def try_send_flow_start(conversation: Conversation):
         logger.info("[FLOW] Tenant desativou botões interativos, não enviando fluxo: tenant=%s", conversation.tenant_id)
         return (False, {})
 
-    flow = get_active_flow_for_conversation(conversation)
+    if flow is not None:
+        # Validar que o fluxo é do escopo da conversa e está ativo
+        allowed = get_active_flows_for_conversation(conversation).filter(id=flow.id).exists()
+        if not allowed:
+            flow = None
+    if flow is None:
+        flow = get_active_flow_for_conversation(conversation)
     if not flow:
         return (False, {})
 
@@ -537,6 +553,8 @@ def process_incoming_message_flows(conversation: Conversation, message: Message)
     Usado pelo webhook Evolution e pelo webhook Meta (Cloud API) para manter o mesmo comportamento.
     """
     if not conversation or not message or conversation.assigned_to_id:
+        return False
+    if getattr(conversation, "status", None) == "closed":
         return False
     flow_processed = False
     try:

@@ -225,8 +225,8 @@ def continue_typebot_flow(conversation: Conversation, user_message: str) -> bool
     )
     if not state or not (state.typebot_session_id and state.flow_id):
         return False
-    flow = state.flow
-    if not _typebot_public_id(flow):
+    flow = getattr(state, "flow", None)
+    if not flow or not _typebot_public_id(flow):
         return False
     base = _typebot_base_url(flow)
     url = f"{base}/sessions/{state.typebot_session_id}/continueChat"

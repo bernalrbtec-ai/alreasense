@@ -450,7 +450,9 @@ class WelcomeMenuService:
             conversation.department = None
             conversation.assigned_to = None
             conversation.save(update_fields=['status', 'department', 'assigned_to'])
-            
+            # Parar fluxo e descartar estado ao encerrar
+            from apps.chat.models_flow import ConversationFlowState
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
             logger.info(f"✅ Conversa {conversation.id} fechada pelo cliente")
             return True
             

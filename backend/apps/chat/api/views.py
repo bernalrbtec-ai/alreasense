@@ -3102,8 +3102,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.department = None  # Voltar ao Inbox quando reabrir
         conversation.assigned_to = None  # Limpar atendente ao fechar
         conversation.save(update_fields=['status', 'department', 'assigned_to'])
-        
-        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada (departamento e atendente removidos)")
+        # Encerrar conversa: parar fluxo e descartar estado (Typebot/Sense)
+        from apps.chat.models_flow import ConversationFlowState
+        ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada (departamento, atendente e fluxo removidos)")
         
         return Response(
             ConversationSerializer(conversation).data,
@@ -4034,19 +4036,53 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             'previous': f'/chat/conversations/{pk}/messages/?limit={limit}&offset={max(0, offset-limit)}' if offset > 0 else None
         })
 
+    @action(detail=True, methods=['get'], url_path='flows')
+    def list_flows_for_conversation(self, request, pk=None):
+        """
+        Lista os fluxos ativos aplicáveis à conversa (Inbox ou departamento).
+        Usado no modal "Iniciar fluxo" para exibir nome e descrição antes de confirmar.
+        Para conversas em grupo, retorna lista vazia (fluxo por conversa individual).
+        """
+        conversation = self.get_object()
+        if getattr(conversation, "conversation_type", None) == "group":
+            return Response([], status=status.HTTP_200_OK)
+        from apps.chat.services.flow_engine import get_active_flows_for_conversation
+        from apps.chat.api.serializers_flow import FlowListSerializer
+        flows_qs = get_active_flows_for_conversation(conversation)
+        flows = list(flows_qs)
+        return Response(FlowListSerializer(flows, many=True).data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'], url_path='start-flow')
     def start_flow(self, request, pk=None):
         """
-        Dispara o fluxo (lista/botões) do escopo atual da conversa (Inbox ou departamento).
-        Se a conversa já estiver em um fluxo, reinicia do nó inicial.
-        Útil para "Enviar menu" ou "Iniciar fluxo" manualmente na conversa.
+        Dispara o fluxo (lista/botões ou Typebot) do escopo atual da conversa.
+        Body: { "flow_id": "uuid" } (opcional; se omitido, usa o primeiro fluxo ativo do escopo).
+        Se a conversa já estiver em um fluxo, reinicia do início.
         """
         conversation = self.get_object()
-        from apps.chat.services.flow_engine import try_send_flow_start
+        from apps.chat.services.flow_engine import try_send_flow_start, get_active_flows_for_conversation
         from apps.chat.models_flow import ConversationFlowState
-        # Permitir reinício: remover estado atual para try_send_flow_start criar novo
+        flow = None
+        data = request.data if isinstance(request.data, dict) else {}
+        flow_id = (data.get("flow_id") or "").strip()
+        if flow_id:
+            try:
+                from uuid import UUID
+                UUID(flow_id)
+            except (ValueError, TypeError):
+                return Response(
+                    {'success': False, 'message': 'flow_id inválido.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            allowed = get_active_flows_for_conversation(conversation).filter(id=flow_id).first()
+            if not allowed:
+                return Response(
+                    {'success': False, 'message': 'Fluxo não encontrado ou não aplicável a esta conversa.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            flow = allowed
         ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
-        sent, extra = try_send_flow_start(conversation)
+        sent, extra = try_send_flow_start(conversation, flow=flow)
         if sent:
             payload = {'success': True, 'message': 'Fluxo iniciado.'}
             if extra.get('messages_queued') is not None:

@@ -237,6 +237,7 @@ class FlowSerializer(serializers.ModelSerializer):
             "id",
             "tenant",
             "name",
+            "description",
             "scope",
             "department",
             "department_name",
@@ -264,6 +265,7 @@ class FlowListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
+            "description",
             "scope",
             "department",
             "department_name",

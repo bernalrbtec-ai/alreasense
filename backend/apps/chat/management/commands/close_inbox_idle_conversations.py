@@ -99,6 +99,8 @@ class Command(BaseCommand):
                     send_message_to_evolution.delay(str(msg.id))
                     conv.status = "closed"
                     conv.save(update_fields=["status"])
+                    from apps.chat.models_flow import ConversationFlowState
+                    ConversationFlowState.objects.filter(conversation_id=conv.id).delete()
                     closed_count += 1
                     self.stdout.write(
                         self.style.SUCCESS(

@@ -24,6 +24,13 @@ class Flow(models.Model):
         verbose_name="Tenant",
     )
     name = models.CharField(max_length=160, verbose_name="Nome do fluxo")
+    description = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        verbose_name="Descrição breve",
+        help_text="Descrição opcional exibida ao escolher o fluxo (ex.: menu de abertura de chamados).",
+    )
     scope = models.CharField(
         max_length=20,
         choices=SCOPE_CHOICES,
