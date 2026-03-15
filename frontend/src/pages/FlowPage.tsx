@@ -1,24 +1,10 @@
 /**
- * Página de Fluxos: lista/botões por Inbox ou departamento.
- * Lista fluxos, CRUD de etapas e conexões, preview e envio de teste.
+ * Página de Fluxos: integração Typebot por Inbox ou departamento.
+ * Lista fluxos, vincula Typebot (Public ID + URL base), escopo e envio de teste.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import {
-  Plus,
-  Edit,
-  Trash2,
-  MessageSquare,
-  List,
-  Building2,
-  Inbox,
-  Play,
-  X,
-  Zap,
-  Image as ImageIcon,
-  FileText,
-  Clock,
-} from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -26,7 +12,6 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
-import FlowCanvas, { FLOW_DROP_TYPE, FLOW_DROP_START } from '../components/flow/FlowCanvas'
 import { api } from '../lib/api'
 
 function getApiError(e: any): string {
@@ -112,26 +97,6 @@ type ButtonForm = { id: string; title: string }
 const defaultSections: SectionForm[] = [{ title: 'Opções', rows: [{ id: 'op1', title: 'Opção 1', description: '' }, { id: 'op2', title: 'Opção 2', description: '' }] }]
 const defaultButtons: ButtonForm[] = [{ id: 'btn1', title: 'Botão 1' }, { id: 'btn2', title: 'Botão 2' }]
 
-const PALETTE_ITEMS: { id: string; label: string; nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay'; isStart: boolean }[] = [
-  { id: 'start', label: 'Início', nodeType: 'message', isStart: true },
-  { id: 'message', label: 'Mensagem', nodeType: 'message', isStart: false },
-  { id: 'list', label: 'Lista', nodeType: 'list', isStart: false },
-  { id: 'buttons', label: 'Botões', nodeType: 'buttons', isStart: false },
-  { id: 'image', label: 'Imagem', nodeType: 'image', isStart: false },
-  { id: 'file', label: 'Arquivo', nodeType: 'file', isStart: false },
-  { id: 'delay', label: 'Timer', nodeType: 'delay', isStart: false },
-]
-
-function PaletteItemIcon({ nodeType }: { nodeType: 'message' | 'list' | 'buttons' | 'image' | 'file' | 'delay' }) {
-  const iconClass = 'h-4 w-4 shrink-0'
-  if (nodeType === 'list') return <List className={`${iconClass} text-accent-600 dark:text-accent-400`} />
-  if (nodeType === 'buttons') return <MessageSquare className={`${iconClass} text-accent-600 dark:text-accent-400`} />
-  if (nodeType === 'image') return <ImageIcon className={`${iconClass} text-gray-500 dark:text-gray-400`} />
-  if (nodeType === 'file') return <FileText className={`${iconClass} text-gray-500 dark:text-gray-400`} />
-  if (nodeType === 'delay') return <Clock className={`${iconClass} text-amber-600 dark:text-amber-400`} />
-  return <MessageSquare className={`${iconClass} text-gray-500 dark:text-gray-400`} />
-}
-
 function parseSectionsSafe(val: unknown): SectionForm[] {
   if (!Array.isArray(val) || val.length === 0) return defaultSections
   return val.slice(0, 10).map((sec) => {
@@ -184,6 +149,8 @@ export default function FlowPage() {
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
+  const [newFlowTypebotPublicId, setNewFlowTypebotPublicId] = useState('')
+  const [newFlowTypebotBaseUrl, setNewFlowTypebotBaseUrl] = useState('')
 
   // Node form (add / edit)
   const [nodeFormOpen, setNodeFormOpen] = useState(false)
@@ -281,6 +248,8 @@ export default function FlowPage() {
         scope: newFlowScope,
         department: newFlowScope === 'department' ? newFlowDepartmentId : null,
         whatsapp_instance: newFlowInstanceId || null,
+        typebot_public_id: newFlowTypebotPublicId.trim() || null,
+        typebot_base_url: newFlowTypebotBaseUrl.trim() || null,
         is_active: true,
       })
       const id = data?.id
@@ -294,6 +263,8 @@ export default function FlowPage() {
       setNewFlowScope('inbox')
       setNewFlowDepartmentId(null)
       setNewFlowInstanceId(null)
+      setNewFlowTypebotPublicId('')
+      setNewFlowTypebotBaseUrl('')
       await fetchFlows()
       setSelectedFlow({
         id: String(id),
@@ -919,6 +890,22 @@ export default function FlowPage() {
               </select>
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher, o fluxo sempre envia por essa instância.</p>
             </div>
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+              <Label className="text-accent-600 dark:text-accent-400">Typebot (fluxo executado pelo Typebot)</Label>
+              <Input
+                className="mt-1"
+                value={newFlowTypebotPublicId}
+                onChange={(e) => setNewFlowTypebotPublicId(e.target.value)}
+                placeholder="Public ID do Typebot (Share &gt; API)"
+              />
+              <Input
+                className="mt-2"
+                value={newFlowTypebotBaseUrl}
+                onChange={(e) => setNewFlowTypebotBaseUrl(e.target.value)}
+                placeholder="URL base da API (vazio = typebot.io)"
+              />
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para o fluxo ser executado pelo Typebot via API (startChat/continueChat).</p>
+            </div>
             <div className="flex gap-2">
               <Button onClick={handleCreateFlow} disabled={creatingFlow}>
                 {creatingFlow ? <LoadingSpinner size="sm" className="mr-1" /> : null}
@@ -941,7 +928,7 @@ export default function FlowPage() {
                 <Zap className="h-6 w-6 text-gray-400 dark:text-gray-500" />
               </div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nenhum fluxo ainda</p>
-              <p className="text-xs mb-4">Crie o primeiro para configurar lista e botões por Inbox ou departamento.</p>
+              <p className="text-xs mb-4">Crie o primeiro para vincular um fluxo Typebot ao Inbox ou a um departamento.</p>
               <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)} className="rounded-lg">
                 <Plus className="h-4 w-4 mr-1" /> Criar primeiro fluxo
               </Button>
@@ -1004,8 +991,8 @@ export default function FlowPage() {
               className="space-y-4"
             >
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm transition-shadow hover:shadow-md">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Canvas do fluxo</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">{flowDetail.name}</h3>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={openEditFlow} aria-label="Editar fluxo">
                       <Edit className="h-3 w-3 mr-1" /> Editar fluxo
@@ -1015,158 +1002,47 @@ export default function FlowPage() {
                     </Button>
                   </div>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                  Arraste um tipo da lista à esquerda e solte na área cinza. Depois clique na etapa para editar ou conecte pelo handle.
-                  {flowDetail?.whatsapp_instance_name ? (
-                    <span className="block mt-1 font-medium text-gray-700 dark:text-gray-300">Instância: {flowDetail.whatsapp_instance_name}</span>
+                <div className="space-y-3 text-sm">
+                  <p className="text-gray-600 dark:text-gray-400">
+                    <strong>Vinculado a:</strong>{' '}
+                    {flowDetail.scope === 'inbox' ? 'Inbox' : flowDetail.department_name ? `Departamento ${flowDetail.department_name}` : 'Departamento'}
+                  </p>
+                  {flowDetail.whatsapp_instance_name ? (
+                    <p className="text-gray-600 dark:text-gray-400"><strong>Instância WhatsApp:</strong> {flowDetail.whatsapp_instance_name}</p>
                   ) : (
-                    <span className="block mt-1 text-gray-500 dark:text-gray-400">Instância: usar da conversa</span>
+                    <p className="text-gray-500 dark:text-gray-500">Instância: usar da conversa</p>
                   )}
-                </p>
-                {(flowDetail.typebot_public_id || '').trim() ? (
-                  <div className="space-y-3">
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Este fluxo usa o <strong>Typebot</strong>. Edite o fluxo no Typebot (aba Share &gt; Iframe/API). As mensagens serão enviadas ao WhatsApp automaticamente.
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                    <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">Integração Typebot</p>
+                    <p className="text-gray-600 dark:text-gray-400">
+                      Public ID: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_public_id || '').trim() || '—'}</code>
+                      {((flowDetail.typebot_base_url || '').trim()) ? (
+                        <> · URL base: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_base_url || '').trim()}</code></>
+                      ) : (
+                        <> · URL base: <span className="text-gray-500">typebot.io</span></>
+                      )}
                     </p>
-                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900" style={{ minHeight: 520 }}>
-                      <iframe
-                        title={`Typebot ${flowDetail.name}`}
-                        src={(() => {
-                          const base = (flowDetail.typebot_base_url || '').trim().replace(/\/api\/v1\/?$/, '')
-                          const viewerBase = base || 'https://typebot.io'
-                          return `${viewerBase}/embed/${(flowDetail.typebot_public_id || '').trim()}`
-                        })()}
-                        width="100%"
-                        height={520}
-                        className="border-0 w-full"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                <div className="flex gap-4">
-                  <div className="flex flex-col gap-1.5 shrink-0 w-40 py-2">
-                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-0.5">Arraste para o canvas</span>
-                    {PALETTE_ITEMS.map((item) => (
-                      <div
-                        key={item.id}
-                        draggable
-                        aria-label={`Arrastar etapa ${item.label} para o canvas`}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('text/plain', item.nodeType)
-                          e.dataTransfer.setData(FLOW_DROP_TYPE, item.nodeType)
-                          e.dataTransfer.setData(FLOW_DROP_START, item.isStart ? '1' : '0')
-                          e.dataTransfer.effectAllowed = 'copy'
-                          setIsDraggingFromPalette(true)
-                        }}
-                        onDragEnd={() => setIsDraggingFromPalette(false)}
-                        className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing select-none hover:border-accent-300 dark:hover:border-accent-600 hover:bg-accent-50/50 dark:hover:bg-accent-900/20 transition-colors"
-                      >
-                        <PaletteItemIcon nodeType={item.nodeType} />
-                        <span className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">{item.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col">
-                    <FlowCanvas
-                      nodes={flowDetail.nodes ?? []}
-                      onNodeClick={handleCanvasNodeClick}
-                      onNodeDragStop={handleCanvasNodeDragStop}
-                      onConnect={handleCanvasConnect}
-                      onDrop={openAddNodeFromDrop}
-                      height={520}
-                      isDraggingFromPalette={isDraggingFromPalette}
-                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      A edição do fluxo é feita no Typebot. As mensagens são enviadas ao WhatsApp automaticamente (startChat/continueChat).
+                    </p>
                   </div>
                 </div>
-                )}
               </Card>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Preview (texto)</h3>
-                  <pre className="text-xs bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg overflow-auto max-h-32 border border-gray-100 dark:border-gray-800">
-                    {previewLines.length ? previewLines.join('\n') : 'Nenhuma etapa ainda.'}
-                  </pre>
-                </Card>
-                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Enviar passo inicial (teste)</h3>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="5511999999999"
-                      value={testPhone}
-                      onChange={(e) => setTestPhone(e.target.value)}
-                      className="flex-1 min-w-0"
-                    />
-                    <Button onClick={handleSendTest} disabled={sendingTest} size="sm">
-                      {sendingTest ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4 mr-1" />}
-                      Enviar teste
-                    </Button>
-                  </div>
-                </Card>
-              </div>
-              {!(flowDetail.typebot_public_id || '').trim() && (
               <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Etapas ({flowDetail.nodes?.length || 0})</h3>
-                  <Button size="sm" onClick={openAddNode} className="rounded-lg transition-all duration-200 hover:scale-[1.02]">
-                    <Plus className="h-4 w-4 mr-1" /> Adicionar etapa
+                <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Enviar passo inicial (teste)</h3>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="5511999999999"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    className="flex-1 min-w-0"
+                  />
+                  <Button onClick={handleSendTest} disabled={sendingTest} size="sm">
+                    {sendingTest ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4 mr-1" />}
+                    Enviar teste
                   </Button>
                 </div>
-                <ul className="space-y-3">
-                  {(flowDetail.nodes || []).map((n) => (
-                    <li key={n.id} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3 transition-colors duration-200 hover:border-gray-300 dark:hover:border-gray-600 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2">
-                          {n.node_type === 'list' && <List className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
-                          {n.node_type === 'buttons' && <MessageSquare className="h-4 w-4 text-accent-600 dark:text-accent-400 shrink-0" />}
-                          {n.node_type === 'delay' && <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />}
-                          {(n.node_type === 'message' || !['list', 'buttons', 'image', 'file', 'delay'].includes(n.node_type)) && <MessageSquare className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
-                          {n.node_type === 'image' && <ImageIcon className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
-                          {n.node_type === 'file' && <FileText className="h-4 w-4 text-gray-500 dark:text-gray-400 shrink-0" />}
-                          <span className="font-medium text-gray-900 dark:text-gray-100">{n.name}</span>
-                          {n.is_start && <span className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200 px-2 py-0.5 rounded-full font-medium">início</span>}
-                        </span>
-                        <div className="flex gap-1">
-                          <Button size="sm" variant="outline" onClick={() => openEditNode(n)} aria-label={`Editar etapa ${n.name}`} className="rounded-lg transition-opacity hover:opacity-90"><Edit className="h-3 w-3" /></Button>
-                          <Button size="sm" variant="outline" onClick={() => handleDeleteNodeClick(n)} disabled={deletingId === n.id} aria-label={`Excluir etapa ${n.name}`} className="rounded-lg text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="h-3 w-3" /></Button>
-                        </div>
-                      </div>
-                      <div className="mt-2 pl-6">
-                        <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Tomadas de decisão (opção → destino)</div>
-                        <p className="text-xs text-gray-500 dark:text-gray-500 mb-1.5">Cada opção pode levar à próxima etapa, transferir para departamento ou encerrar.</p>
-                        {(n.edges_out || []).length === 0 ? (
-                          <span className="text-sm text-gray-400">Nenhuma decisão configurada. Use &quot;Conectar&quot; para definir.</span>
-                        ) : (
-                          <ul className="space-y-1">
-                            {(n.edges_out || []).map((e) => (
-                              <li key={e.id} className="flex items-center justify-between text-sm">
-                                <span>
-                                  <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{e.option_id}</code>
-                                  {' → '}
-                                  {e.target_action === 'transfer'
-                                    ? (e.target_department_name ? `Transferir: ${e.target_department_name}` : 'Transferir')
-                                    : e.target_action === 'end'
-                                      ? 'Encerrar'
-                                      : e.to_node_name
-                                        ? `Próxima: ${e.to_node_name}`
-                                        : 'Próxima etapa'}
-                                </span>
-                                <div className="flex gap-2">
-                                  <button type="button" onClick={() => openEditEdge(e)} className="text-accent-600 dark:text-accent-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80">Editar</button>
-                                  <button type="button" onClick={() => handleDeleteEdgeClick(e)} disabled={deletingId === e.id} className="text-red-600 dark:text-red-400 hover:underline text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50">Excluir</button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        <Button size="sm" variant="outline" className="mt-1" onClick={() => openAddEdge(n.id)}>
-                          <Plus className="h-3 w-3 mr-1" /> Conectar (próxima etapa / transferir / encerrar)
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
               </Card>
-              )}
             </motion.div>
           )}
           </AnimatePresence>
@@ -1182,7 +1058,7 @@ export default function FlowPage() {
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um fluxo</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                  Escolha um fluxo na lista ao lado para ver o canvas, editar etapas e conexões, ou crie um novo.
+                  Escolha um fluxo na lista ao lado para ver os dados da integração Typebot e enviar teste, ou crie um novo.
                 </p>
               </Card>
             </motion.div>
@@ -1494,7 +1370,7 @@ export default function FlowPage() {
       <ConfirmDialog
         show={!!confirmDeleteFlow}
         title="Excluir fluxo"
-        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? Todas as etapas e conexões serão removidas.` : ''}
+        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? O vínculo com o Typebot será removido.` : ''}
         confirmText="Excluir"
         variant="danger"
         onConfirm={handleDeleteFlowConfirm}
@@ -1586,7 +1462,7 @@ export default function FlowPage() {
                 <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher uma instância, o fluxo sempre envia por ela.</p>
               </div>
               <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                <Label className="text-accent-600 dark:text-accent-400">Typebot (substitui etapas por fluxo no Typebot)</Label>
+                <Label className="text-accent-600 dark:text-accent-400">Typebot</Label>
                 <Input
                   className="mt-1"
                   value={editTypebotPublicId}
@@ -1599,13 +1475,8 @@ export default function FlowPage() {
                   onChange={(e) => setEditTypebotBaseUrl(e.target.value)}
                   placeholder="URL base da API (vazio = typebot.io)"
                 />
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp.</p>
+                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Preencha o Public ID para usar o Typebot como fluxo. O fluxo será executado via API (startChat/continueChat) e as mensagens enviadas ao WhatsApp. A edição do fluxo é feita no Typebot.</p>
               </div>
-              {!editTypebotPublicId.trim() && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700 pt-3 mt-1">
-                  Tomadas de decisão e transferência: na lista &quot;Etapas&quot; abaixo, use &quot;Conectar&quot; em cada etapa para definir para onde leva cada opção (próxima etapa, transferir para departamento ou encerrar).
-                </p>
-              )}
             </div>
             <div className="flex gap-2 mt-4">
               <Button onClick={handleSaveFlow} disabled={savingFlow}>
