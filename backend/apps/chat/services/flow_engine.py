@@ -527,3 +527,38 @@ def try_send_flow_start(conversation: Conversation):
     _auto_advance_message_chain(conversation, state)
     logger.info("[FLOW] Fluxo iniciado conversation=%s flow=%s", conversation.id, flow.name)
     return (True, {})
+
+
+def process_incoming_message_flows(conversation: Conversation, message: Message) -> bool:
+    """
+    Processa fluxo para mensagem incoming: Typebot (continueChat), fluxo Sense (lista/botão) ou menu de boas-vindas.
+    Só roda se a conversa não estiver atribuída a um humano (assigned_to_id).
+    Retorna True se algum fluxo foi processado.
+    Usado pelo webhook Evolution e pelo webhook Meta (Cloud API) para manter o mesmo comportamento.
+    """
+    if not conversation or not message or conversation.assigned_to_id:
+        return False
+    flow_processed = False
+    try:
+        state = ConversationFlowState.objects.filter(conversation_id=conversation.id).first()
+        if state and ((getattr(state, "typebot_session_id", None) or "").strip()):
+            from apps.chat.services.typebot_flow_service import continue_typebot_flow
+            msg_content = (getattr(message, "content", None) or "").strip()
+            if msg_content and continue_typebot_flow(conversation, msg_content):
+                flow_processed = True
+                logger.info("[FLOW] Resposta Typebot processada conversation=%s", conversation.id)
+        if not flow_processed:
+            flow_processed = process_flow_reply(conversation, message)
+            if flow_processed:
+                logger.info("[FLOW] Resposta do fluxo processada conversation=%s", conversation.id)
+        if flow_processed:
+            conversation.refresh_from_db()
+        if not flow_processed:
+            from apps.chat.services.welcome_menu_service import WelcomeMenuService
+            if WelcomeMenuService.process_menu_response(conversation, message):
+                flow_processed = True
+                conversation.refresh_from_db()
+                logger.info("[FLOW] Resposta do menu de boas-vindas processada conversation=%s", conversation.id)
+    except Exception as e:
+        logger.exception("[FLOW] Erro ao processar resposta do fluxo: %s", e)
+    return flow_processed

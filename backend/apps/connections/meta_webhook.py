@@ -529,6 +529,18 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                         logger.exception("[META WEBHOOK] Erro ao disparar BIA: %s", e)
                 transaction.on_commit(_dispatch_bia_after_commit)
 
+            # Fluxo: Typebot (continueChat), fluxo Sense (lista/botão) ou menu de boas-vindas (mesmo comportamento do webhook Evolution)
+            try:
+                from apps.chat.services.flow_engine import process_incoming_message_flows
+                if process_incoming_message_flows(conversation, new_msg):
+                    logger.info(
+                        "[META WEBHOOK] Fluxo processado para conversation_id=%s message_id=%s (provider=meta)",
+                        str(conversation.id),
+                        str(new_msg.id),
+                    )
+            except Exception as e:
+                logger.exception("[META WEBHOOK] Erro ao processar fluxo (Typebot/flow/menu): %s", e)
+
             # Mídia Meta: criar placeholder (se possível) e sempre enfileirar download via Graph API
             if msg_type in ('image', 'video', 'document', 'audio') and metadata_extra.get('meta_media_id'):
                 media_id = metadata_extra['meta_media_id']
