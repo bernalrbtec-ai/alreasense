@@ -105,6 +105,34 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
     }
     if conversation.department_id:
         prefilled["department_id"] = str(conversation.department_id)
+    # Alinhar com cadastro de contato: enviar NomeContato, NumeroFone, email se o contato estiver cadastrado
+    try:
+        from django.db.models import Q
+        from apps.contacts.models import Contact
+        from apps.contacts.signals import normalize_phone_for_search
+        phone_norm = normalize_phone_for_search(conversation.contact_phone or "")
+        if phone_norm and conversation.tenant_id:
+            contact = Contact.objects.filter(
+                Q(tenant_id=conversation.tenant_id) & (Q(phone=phone_norm) | Q(phone=conversation.contact_phone))
+            ).first()
+            if contact:
+                if "NomeContato" not in prefilled:
+                    prefilled["NomeContato"] = (contact.name or conversation.contact_name or "").strip() or "Contato"
+                if "NumeroFone" not in prefilled:
+                    prefilled["NumeroFone"] = (contact.phone or conversation.contact_phone or "").strip()
+                if "number" not in prefilled:
+                    prefilled["number"] = (contact.phone or conversation.contact_phone or "").strip()
+                if "pushName" not in prefilled:
+                    prefilled["pushName"] = (contact.name or conversation.contact_name or "").strip() or ""
+                if contact.email and "email" not in prefilled:
+                    prefilled["email"] = (contact.email or "").strip()
+    except Exception as e:
+        logger.debug("[TYPEBOT] Contato não encontrado ou erro ao buscar: %s", e)
+    # Garantir nomes padrão se ainda não definidos
+    if "NomeContato" not in prefilled:
+        prefilled["NomeContato"] = prefilled.get("contact_name") or "Contato"
+    if "NumeroFone" not in prefilled:
+        prefilled["NumeroFone"] = prefilled.get("contact_phone") or ""
     extra = getattr(flow, "typebot_prefilled_extra", None)
     if isinstance(extra, dict) and extra:
         for k, v in extra.items():

@@ -72,6 +72,10 @@ O que existe no código hoje:
 - **FlowPage** (`frontend/src/pages/FlowPage.tsx`): modal "Editar fluxo" com campos Typebot Public ID e URL base. Quando `flowDetail.typebot_public_id` existe, exibe iframe do Typebot (`{viewerBase}/embed/{publicId}`) em vez do canvas e oculta a lista "Etapas".
 - **ChatWindow** (`frontend/src/modules/chat/components/ChatWindow.tsx`): botão "Iniciar fluxo" no menu da conversa (três pontos), que chama o endpoint `start-flow`.
 
+### Alinhamento com cadastro de contato
+- **Ao iniciar o fluxo (startChat)**: o Sense busca um **Contact** pelo tenant e pelo telefone normalizado da conversa. Se existir, envia nas variáveis pré-preenchidas: `NomeContato`, `NumeroFone`, `number`, `pushName` e `email` (quando o contato tiver email). Assim o Typebot já recebe nome, telefone e email quando o contato estiver cadastrado.
+- **No webhook do Typebot** (`POST /api/chat/webhooks/typebot/`): após salvar as variáveis em `ConversationFlowState` e `Conversation.metadata`, o Sense atualiza ou cria o **Contact** com os dados enviados pelo Typebot. Variáveis reconhecidas: `NomeContato`, `name`, `nome` → nome do contato; `email` → email; `NumeroFone`, `number` → telefone. Se o contato já existir (tenant + telefone), é atualizado; se não existir e houver telefone na conversa, um novo contato é criado com nome/email vindos do Typebot. Assim, dados coletados no fluxo (ex.: formulário) ficam alinhados ao cadastro de contatos.
+
 ---
 
 ## 4. Cenários desejados

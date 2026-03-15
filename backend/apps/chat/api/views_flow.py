@@ -394,5 +394,52 @@ def typebot_webhook(request):
             "updated_at": timezone.now().isoformat(),
         }
         conversation.save(update_fields=["metadata"])
+        # Alinhar com cadastro de contato: atualizar ou criar Contact com nome/telefone/email do Typebot
+        try:
+            from django.db.models import Q
+            from apps.contacts.models import Contact
+            from apps.contacts.signals import normalize_phone_for_search
+            phone_norm = normalize_phone_for_search(conversation.contact_phone or "")
+            if not phone_norm or not conversation.tenant_id:
+                pass
+            else:
+                contact = Contact.objects.filter(
+                    Q(tenant_id=conversation.tenant_id) & (Q(phone=phone_norm) | Q(phone=conversation.contact_phone))
+                ).first()
+                name_val = (
+                    vars_simple.get("NomeContato") or vars_simple.get("name") or vars_simple.get("nome") or ""
+                ).strip()
+                email_val = (vars_simple.get("email") or "").strip()
+                phone_val = (
+                    vars_simple.get("NumeroFone") or vars_simple.get("number") or conversation.contact_phone or ""
+                ).strip()
+                if contact:
+                    updated = False
+                    if name_val and contact.name != name_val:
+                        contact.name = name_val
+                        updated = True
+                    if email_val is not None and contact.email != email_val:
+                        contact.email = email_val
+                        updated = True
+                    if phone_val and contact.phone != phone_val:
+                        contact.phone = normalize_phone_for_search(phone_val) or phone_val
+                        updated = True
+                    if updated:
+                        contact.save()
+                        logger.info("[TYPEBOT WEBHOOK] Contato atualizado contact=%s", contact.id)
+                else:
+                    if name_val or email_val or conversation.contact_phone:
+                        new_name = name_val or conversation.contact_name or "Contato"
+                        new_phone = normalize_phone_for_search(phone_val or conversation.contact_phone) or (conversation.contact_phone or "").strip()
+                        if new_phone:
+                            Contact.objects.create(
+                                tenant_id=conversation.tenant_id,
+                                phone=new_phone,
+                                name=new_name,
+                                email=email_val or "",
+                            )
+                            logger.info("[TYPEBOT WEBHOOK] Contato criado para conversation=%s", conversation.id)
+        except Exception as e:
+            logger.warning("[TYPEBOT WEBHOOK] Erro ao sincronizar contato: %s", e, exc_info=True)
     logger.info("[TYPEBOT WEBHOOK] Variáveis salvas conversation=%s keys=%s", state.conversation_id, list(vars_simple.keys()))
     return Response({"ok": True, "saved_keys": list(vars_simple.keys())}, status=status.HTTP_200_OK)
