@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap } from 'lucide-react'
+import { Plus, Edit, Trash2, Building2, Inbox, Play, X, Zap, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
