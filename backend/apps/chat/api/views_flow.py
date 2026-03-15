@@ -148,6 +148,42 @@ class FlowViewSet(viewsets.ModelViewSet):
         _auto_advance_message_chain(conversation, state)
         return Response({"message_id": str(message.id), "conversation_id": str(conversation.id)})
 
+    @action(detail=False, methods=["post"], url_path="validate_typebot")
+    def validate_typebot(self, request):
+        """
+        Valida se o Typebot está acessível com o Public ID e URL base informados.
+        Body: { "typebot_public_id": "...", "typebot_base_url": "..." (opcional) }
+        Chama startChat com payload mínimo; se retornar sessionId, considera válido.
+        """
+        import requests
+        typebot_public_id = (request.data.get("typebot_public_id") or "").strip()
+        typebot_base_url = (request.data.get("typebot_base_url") or "").strip().rstrip("/")
+        if not typebot_public_id:
+            return Response(
+                {"valid": False, "detail": "Public ID do Typebot é obrigatório."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        base = typebot_base_url or "https://typebot.io"
+        if "/api/v1" not in base:
+            base = f"{base.rstrip('/')}/api/v1"
+        url = f"{base}/typebots/{typebot_public_id}/startChat"
+        try:
+            r = requests.post(url, json={"prefilledVariables": {}}, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("sessionId"):
+                    return Response({"valid": True})
+            return Response(
+                {"valid": False, "detail": f"Typebot não respondeu corretamente (HTTP {r.status_code}). Verifique o Public ID e a URL base."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except requests.RequestException as e:
+            logger.warning("[FLOW] validate_typebot request failed: %s", e)
+            return Response(
+                {"valid": False, "detail": "Não foi possível conectar ao Typebot. Verifique a URL base e se o Typebot está acessível."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
 
 class FlowNodeViewSet(viewsets.ModelViewSet):
     """CRUD de nós de um fluxo. Filtro: flow_id."""

@@ -34,6 +34,35 @@ function getApiError(e: any): string {
   return parts.length ? parts.join(' ') : 'Erro na requisição.'
 }
 
+function isValidHttpUrl(s: string): boolean {
+  const t = (s || '').trim()
+  if (!t) return false
+  try {
+    const u = new URL(t)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+async function validateTypebotConfig(api: any, typebot_public_id: string, typebot_base_url: string): Promise<{ valid: boolean; detail?: string }> {
+  const pid = (typebot_public_id || '').trim()
+  const base = (typebot_base_url || '').trim()
+  if (!pid) return { valid: false, detail: 'Public ID do Typebot é obrigatório.' }
+  if (base && !isValidHttpUrl(base)) return { valid: false, detail: 'URL base do Typebot deve ser uma URL válida (ex: https://typebot.co).' }
+  try {
+    const { data, status: resStatus } = await api.post('/chat/flows/validate_typebot/', {
+      typebot_public_id: pid,
+      typebot_base_url: base || undefined,
+    })
+    if (resStatus >= 200 && resStatus < 300 && data?.valid === true) return { valid: true }
+    return { valid: false, detail: (data?.detail as string) || 'Typebot não pôde ser validado.' }
+  } catch (e: any) {
+    const detail = e?.response?.data?.detail ?? getApiError(e)
+    return { valid: false, detail }
+  }
+}
+
 interface WhatsAppInstanceOption {
   id: string
   friendly_name: string
@@ -241,15 +270,31 @@ export default function FlowPage() {
       toast.error('Selecione o departamento')
       return
     }
+    const pid = newFlowTypebotPublicId.trim()
+    const base = newFlowTypebotBaseUrl.trim()
+    if (!pid) {
+      toast.error('Public ID do Typebot é obrigatório')
+      return
+    }
+    if (base && !isValidHttpUrl(base)) {
+      toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
+      return
+    }
     setCreatingFlow(true)
     try {
+      const validation = await validateTypebotConfig(api, pid, base)
+      if (!validation.valid) {
+        toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+        setCreatingFlow(false)
+        return
+      }
       const { data } = await api.post('/chat/flows/', {
         name: newFlowName.trim(),
         scope: newFlowScope,
         department: newFlowScope === 'department' ? newFlowDepartmentId : null,
         whatsapp_instance: newFlowInstanceId || null,
-        typebot_public_id: newFlowTypebotPublicId.trim() || null,
-        typebot_base_url: newFlowTypebotBaseUrl.trim() || null,
+        typebot_public_id: pid || null,
+        typebot_base_url: base || null,
         is_active: true,
       })
       const id = data?.id
@@ -307,15 +352,31 @@ export default function FlowPage() {
       toast.error('Selecione o departamento')
       return
     }
+    const pid = editTypebotPublicId.trim()
+    const base = editTypebotBaseUrl.trim()
+    if (!pid) {
+      toast.error('Public ID do Typebot é obrigatório')
+      return
+    }
+    if (base && !isValidHttpUrl(base)) {
+      toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
+      return
+    }
     setSavingFlow(true)
     try {
+      const validation = await validateTypebotConfig(api, pid, base)
+      if (!validation.valid) {
+        toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+        setSavingFlow(false)
+        return
+      }
       const { data } = await api.patch(`/chat/flows/${selectedFlow.id}/`, {
         name,
         scope: editFlowScope,
         department: editFlowScope === 'department' ? editFlowDepartmentId : null,
         whatsapp_instance: editFlowInstanceId || null,
-        typebot_public_id: editTypebotPublicId.trim() || null,
-        typebot_base_url: editTypebotBaseUrl.trim() || null,
+        typebot_public_id: pid || null,
+        typebot_base_url: base || null,
       })
       toast.success('Fluxo atualizado')
       setEditFlowOpen(false)
