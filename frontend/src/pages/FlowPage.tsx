@@ -50,7 +50,6 @@ function isValidHttpUrl(s: string): boolean {
 async function validateTypebotConfig(api: any, typebot_public_id: string, typebot_base_url: string): Promise<{ valid: boolean; detail?: string }> {
   const pid = (typebot_public_id || '').trim()
   const base = (typebot_base_url || '').trim()
-  if (!pid) return { valid: false, detail: 'Public ID do Typebot é obrigatório.' }
   if (base && !isValidHttpUrl(base)) return { valid: false, detail: 'URL base do Typebot deve ser uma URL válida (ex: https://typebot.co).' }
   try {
     const { data, status: resStatus } = await api.post('/chat/flows/validate_typebot/', {
@@ -299,21 +298,19 @@ export default function FlowPage() {
     }
     const pid = newFlowTypebotPublicId.trim()
     const base = newFlowTypebotBaseUrl.trim()
-    if (!pid) {
-      toast.error('Public ID do Typebot é obrigatório')
-      return
-    }
     if (base && !isValidHttpUrl(base)) {
       toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
       return
     }
     setCreatingFlow(true)
     try {
-      const validation = await validateTypebotConfig(api, pid, base)
-      if (!validation.valid) {
-        toast.error(validation.detail ?? 'Typebot não pôde ser validado')
-        setCreatingFlow(false)
-        return
+      if (pid) {
+        const validation = await validateTypebotConfig(api, pid, base)
+        if (!validation.valid) {
+          toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+          setCreatingFlow(false)
+          return
+        }
       }
       let prefilledExtra: Record<string, string> = {}
       try {
@@ -346,7 +343,7 @@ export default function FlowPage() {
         toast.error('Resposta inválida ao criar fluxo')
         return
       }
-      toast.success('Fluxo criado')
+      toast.success('Fluxo criado. Vamos preparar o bot Typebot…')
       setCreateOpen(false)
       setNewFlowName('')
       setNewFlowScope('inbox')
@@ -356,7 +353,7 @@ export default function FlowPage() {
       setNewFlowTypebotBaseUrl('')
       setNewFlowTypebotPrefilledExtra('')
       await fetchFlows()
-      setSelectedFlow({
+      const createdFlow: Flow = {
         id: String(id),
         name: data?.name ?? '',
         scope: data?.scope ?? 'inbox',
@@ -368,9 +365,13 @@ export default function FlowPage() {
         typebot_base_url: data?.typebot_base_url ?? null,
         typebot_prefilled_extra: data?.typebot_prefilled_extra ?? null,
         is_active: data?.is_active ?? true,
-      })
+      }
+      setSelectedFlow(createdFlow)
       selectedFlowIdRef.current = String(id)
-      fetchFlowDetail(String(id))
+      // Recarregar detalhes após pequeno atraso para dar tempo do backend criar o bot Typebot automaticamente
+      setTimeout(() => {
+        fetchFlowDetail(String(id))
+      }, 1200)
     } catch (e: any) {
       toast.error(getApiError(e))
     } finally {
@@ -414,21 +415,19 @@ export default function FlowPage() {
     }
     const pid = editTypebotPublicId.trim()
     const base = editTypebotBaseUrl.trim()
-    if (!pid) {
-      toast.error('Public ID do Typebot é obrigatório')
-      return
-    }
     if (base && !isValidHttpUrl(base)) {
       toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
       return
     }
     setSavingFlow(true)
     try {
-      const validation = await validateTypebotConfig(api, pid, base)
-      if (!validation.valid) {
-        toast.error(validation.detail ?? 'Typebot não pôde ser validado')
-        setSavingFlow(false)
-        return
+      if (pid) {
+        const validation = await validateTypebotConfig(api, pid, base)
+        if (!validation.valid) {
+          toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+          setSavingFlow(false)
+          return
+        }
       }
       let prefilledExtra: Record<string, string> | null = null
       try {

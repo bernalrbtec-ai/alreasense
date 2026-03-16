@@ -132,6 +132,16 @@ O que existe no código hoje:
 4. **Multi-tenant** — ✅ **Feito** — ✅ **Feito**  
    - Cada tenant pode ter sua própria URL base do Typebot (self-hosted por cliente) ou usar um Typebot cloud com `publicId` por fluxo/departamento; o Sense só guarda `typebot_public_id` (e opcionalmente base URL) por Flow, já isolado por tenant.
 
+5. **Workspaces e bots automáticos (self-host)** — ✅ **Feito**  
+   - Ao criar um fluxo no Sense, não é mais obrigatório informar o `Public ID` do Typebot na primeira tela.  
+   - O backend garante, de forma transparente:
+     - **Workspace por tenant**: modelo `TypebotWorkspace` (`apps/tenancy/models.py`) e serviço `get_or_create_typebot_workspace(tenant)` (`apps/tenancy/services.py`) chamam a API admin do Typebot (`POST {TYPEBOT_API_BASE}/../v1/workspaces`) usando `TYPEBOT_ADMIN_API_KEY`.  
+     - **Bot por fluxo**: serviço `ensure_typebot_bot_for_flow(flow)` (`apps/chat/services/typebot_flow_service.py`) cria um bot dentro desse workspace (`POST /v1/workspaces/{workspace_id}/typebots`), guarda `typebot_public_id`, `typebot_internal_id` e preenche `typebot_base_url` com a base self-host (`TYPEBOT_API_BASE` sem `/api/v1`).  
+   - O `FlowViewSet.perform_create` (`apps/chat/api/views_flow.py`) chama `ensure_typebot_bot_for_flow(flow)` logo após salvar o fluxo; qualquer falha é apenas logada (não quebra o request).  
+   - No frontend (`frontend/src/pages/FlowPage.tsx`), após criar o fluxo:
+     - A UI seleciona o fluxo recém-criado, mostra sucesso (“Fluxo criado. Vamos preparar o bot Typebot…”) e faz um `fetchFlowDetail` com pequeno atraso (1.2s) para permitir que o backend crie e associe o bot.  
+     - Assim que `typebot_public_id` estiver preenchido, o iframe do builder (usando `VITE_TYPEBOT_BUILDER_BASE`) é habilitado automaticamente.
+
 **Opcional / futuro:** token de API do Typebot (se exigido); suporte a imagem/áudio nas respostas do Typebot; limpeza de sessão ao fim do fluxo.
 
 ---

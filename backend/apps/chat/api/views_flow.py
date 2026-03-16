@@ -45,7 +45,14 @@ class FlowViewSet(viewsets.ModelViewSet):
         return FlowSerializer
 
     def perform_create(self, serializer):
-        serializer.save(tenant=self.request.user.tenant)
+        flow = serializer.save(tenant=self.request.user.tenant)
+        # Criação assíncrona/tolerante de bot Typebot associado ao fluxo (se APIs estiverem configuradas)
+        try:
+            from apps.chat.services.typebot_flow_service import ensure_typebot_bot_for_flow
+
+            ensure_typebot_bot_for_flow(flow)
+        except Exception as e:
+            logger.warning("[FLOW] Erro ao agendar criação de bot Typebot para flow=%s: %s", getattr(flow, "id", None), e, exc_info=True)
 
     @action(detail=False, methods=["get"])
     def available_departments(self, request):

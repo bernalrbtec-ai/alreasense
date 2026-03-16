@@ -17,6 +17,7 @@ from django.db import transaction
 from apps.chat.models import Conversation, Message
 from apps.chat.models_flow import Flow, ConversationFlowState
 from apps.chat.redis_streams import enqueue_send_message_batch, enqueue_send_message
+from apps.tenancy.services import get_or_create_typebot_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,154 @@ def _typebot_base_url(flow: Flow) -> str:
 def _typebot_public_id(flow: Flow) -> Optional[str]:
     pid = (getattr(flow, "typebot_public_id", None) or "").strip()
     return pid or None
+
+
+def _get_typebot_admin_base() -> Optional[str]:
+    """
+    Base da API admin do Typebot (raiz), derivada de settings.TYPEBOT_API_BASE.
+    Ex.: https://typebot.alrea.ai/api/v1 -> https://typebot.alrea.ai
+    """
+    base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip().rstrip("/")
+    if not base:
+        return None
+    return base[: -len("/api/v1")] if base.endswith("/api/v1") else base
+
+
+def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
+    """
+    Garante que o Flow tenha um bot Typebot associado:
+    - Se já existir typebot_public_id, não faz nada.
+    - Senão, tenta criar workspace (get_or_create_typebot_workspace) e depois
+      criar um bot via API admin do Typebot, salvando publicId/internalId.
+    Em qualquer erro, apenas loga e retorna o Flow sem quebrar o request.
+    """
+    if not flow or not getattr(flow, "tenant_id", None):
+        return flow
+    # Já tem bot vinculado
+    if (getattr(flow, "typebot_public_id", None) or "").strip():
+        return flow
+
+    admin_base = _get_typebot_admin_base()
+    api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
+    if not admin_base or not api_key:
+        logger.info(
+            "[TYPEBOT][BOT] Admin base ou API key não configuradas; "
+            "não será criado bot automático para flow=%s tenant=%s",
+            getattr(flow, "id", None),
+            getattr(flow, "tenant_id", None),
+        )
+        return flow
+
+    try:
+        tenant = getattr(flow, "tenant", None)
+        if not tenant:
+            from apps.tenancy.models import Tenant
+
+            tenant = Tenant.objects.filter(id=flow.tenant_id).first()
+        if not tenant:
+            return flow
+        workspace = get_or_create_typebot_workspace(tenant)
+    except Exception as e:
+        logger.warning(
+            "[TYPEBOT][BOT] Erro ao garantir workspace para flow=%s tenant=%s: %s",
+            getattr(flow, "id", None),
+            getattr(flow, "tenant_id", None),
+            e,
+            exc_info=True,
+        )
+        return flow
+
+    if not workspace:
+        return flow
+
+    url = f"{admin_base}/v1/workspaces/{workspace.workspace_id}/typebots"
+    display_name = (flow.name or "Fluxo Sense").strip()
+    try:
+        from apps.authn.models import Department
+
+        dept_name = None
+        if getattr(flow, "department_id", None):
+            dept = Department.objects.filter(id=flow.department_id).first()
+            if dept:
+                dept_name = dept.name
+        if dept_name:
+            display_name = f"{display_name} - {dept_name}"
+    except Exception:
+        # Qualquer erro aqui é apenas cosmético no nome
+        pass
+
+    payload: dict[str, Any] = {
+        "name": display_name[:80] or "Fluxo Sense",
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json() or {}
+        public_id = (data.get("publicId") or data.get("public_id") or "").strip()
+        internal_id = (data.get("id") or data.get("_id") or "").strip()
+        if not public_id:
+            logger.warning(
+                "[TYPEBOT][BOT] Resposta sem publicId ao criar bot flow=%s workspace=%s data_keys=%s",
+                getattr(flow, "id", None),
+                workspace.workspace_id,
+                list(data.keys()),
+            )
+            return flow
+    except requests.RequestException as e:
+        logger.warning(
+            "[TYPEBOT][BOT] Falha ao criar bot para flow=%s workspace=%s: %s",
+            getattr(flow, "id", None),
+            workspace.workspace_id,
+            e,
+        )
+        return flow
+    except Exception as e:
+        logger.warning(
+            "[TYPEBOT][BOT] Erro inesperado ao criar bot para flow=%s workspace=%s: %s",
+            getattr(flow, "id", None),
+            workspace.workspace_id,
+            e,
+            exc_info=True,
+        )
+        return flow
+
+    # Persistir IDs no Flow
+    try:
+        flow.typebot_public_id = public_id
+        if internal_id:
+            flow.typebot_internal_id = internal_id
+        if not getattr(flow, "typebot_base_url", None):
+            # Usar sempre a base self-host como padrão
+            base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip()
+            if base.endswith("/api/v1"):
+                base = base[: -len("/api/v1")]
+            flow.typebot_base_url = base
+        flow.save(
+            update_fields=[
+                "typebot_public_id",
+                "typebot_internal_id",
+                "typebot_base_url",
+            ],
+        )
+        logger.info(
+            "[TYPEBOT][BOT] Bot criado e associado ao flow=%s tenant=%s workspace=%s publicId=%s",
+            flow.id,
+            flow.tenant_id,
+            workspace.workspace_id,
+            public_id,
+        )
+    except Exception as e:
+        logger.warning(
+            "[TYPEBOT][BOT] Erro ao salvar IDs do bot para flow=%s: %s",
+            getattr(flow, "id", None),
+            e,
+            exc_info=True,
+        )
+    return flow
 
 
 def _extract_text_from_messages(data: dict) -> List[str]:

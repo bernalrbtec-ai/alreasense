@@ -276,3 +276,41 @@ class Tenant(models.Model):
         """Compatibilidade: verifica se pode adicionar conexão"""
         limit = self.plan_limits['connections']
         return limit == -1 or current_count < limit
+
+
+class TypebotWorkspace(models.Model):
+    """
+    Workspace Typebot associado a um tenant.
+    Criado via API admin do Typebot (POST /v1/workspaces) quando necessário.
+    Tabela criada via SQL: backend/apps/tenancy/migrations/tenancy_typebot_workspace.sql
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="typebot_workspace",
+        db_column="tenant_id",
+    )
+    workspace_id = models.CharField(
+        max_length=100,
+        unique=True,
+        help_text="ID do workspace no Typebot (API admin).",
+    )
+    name = models.CharField(
+        max_length=160,
+        blank=True,
+        default="",
+        help_text="Nome do workspace no Typebot (opcional, para exibição).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "tenancy_typebot_workspace"
+        managed = False
+        verbose_name = "Workspace Typebot"
+        verbose_name_plural = "Workspaces Typebot"
+
+    def __str__(self) -> str:
+        return f"{self.tenant.name} / {self.workspace_id}"
