@@ -11,6 +11,7 @@ import logging
 from typing import Any, List, Optional, Tuple
 
 import requests
+from django.conf import settings
 from django.db import transaction
 
 from apps.chat.models import Conversation, Message
@@ -19,7 +20,12 @@ from apps.chat.redis_streams import enqueue_send_message_batch, enqueue_send_mes
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TYPEBOT_BASE = "https://typebot.io/api/v1"
+# Base default da API Typebot:
+# - Se o Flow definir typebot_base_url, ela prevalece (_typebot_base_url).
+# - Caso contrário, usamos TYPEBOT_API_BASE das settings (self-host) quando definido.
+# - Se nenhuma das duas estiver definida, caímos em um default seguro (typebot.io),
+#   apenas para não quebrar ambientes onde o Typebot ainda não foi configurado.
+DEFAULT_TYPEBOT_BASE = getattr(settings, "TYPEBOT_API_BASE", None) or "https://typebot.io/api/v1"
 MAX_INSTRUCTION_JSON_LENGTH = 500
 CLOSE_KEYS = ("closeTicket", "encerrar", "closeConversation")
 TRANSFER_KEYS = ("transferTo", "transferToDepartment")
@@ -68,8 +74,16 @@ def _find_matching_brace(text: str, open_pos: int) -> int:
 
 
 def _typebot_base_url(flow: Flow) -> str:
+    """
+    Resolve a URL base da API do Typebot para um fluxo:
+    - Se Flow.typebot_base_url estiver preenchido, ela é usada (normalizada com /api/v1).
+    - Caso contrário, usa TYPEBOT_API_BASE das settings (self-host) quando definida.
+    - Em último caso, usa DEFAULT_TYPEBOT_BASE (typebot.io) como fallback.
+    """
     base = (getattr(flow, "typebot_base_url", None) or "").strip().rstrip("/")
     if base:
+        # Se o campo armazenar a URL raiz (ex.: https://typebot.alrea.ai), acrescenta /api/v1
+        # Se já vier com /api/v1, respeita.
         return f"{base}/api/v1" if "/api/v1" not in base else base
     return DEFAULT_TYPEBOT_BASE
 

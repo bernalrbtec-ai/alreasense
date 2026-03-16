@@ -162,6 +162,17 @@ if not DEBUG:
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ============================================================================
+# Typebot (self-host) integration
+# ============================================================================
+# Todas as URLs e a API key vêm de variáveis de ambiente (Railway).
+# Não deixar valores hardcoded aqui; em ambientes sem Typebot, basta
+# não definir as envs e não usar os recursos de fluxo Typebot.
+TYPEBOT_API_BASE = config('TYPEBOT_API_BASE', default=None)
+TYPEBOT_VIEWER_BASE = config('TYPEBOT_VIEWER_BASE', default=None)
+TYPEBOT_BUILDER_BASE = config('TYPEBOT_BUILDER_BASE', default=None)
+TYPEBOT_ADMIN_API_KEY = config('TYPEBOT_ADMIN_API_KEY', default=None)
+
 # Upload/Request Settings
 # Aumentado para suportar webhooks do Evolution com mídia em base64
 DATA_UPLOAD_MAX_MEMORY_SIZE = config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=52428800, cast=int)  # 50MB

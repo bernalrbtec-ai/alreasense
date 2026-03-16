@@ -14,6 +14,8 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { api } from '../lib/api'
 
+const TYPEBOT_BUILDER_BASE = (import.meta as any).env.VITE_TYPEBOT_BUILDER_BASE as string | undefined
+
 function getApiError(e: any): string {
   const data = e?.response?.data
   if (!data) return e?.message || 'Erro inesperado.'
@@ -1194,6 +1196,22 @@ export default function FlowPage() {
                   </Button>
                 </div>
               </Card>
+              {TYPEBOT_BUILDER_BASE && (flowDetail.typebot_public_id || '').trim() && (
+                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editar fluxo no Typebot</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    O construtor abaixo é carregado a partir do Typebot self-host ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
+                  </p>
+                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
+                    <iframe
+                      title="Construtor Typebot"
+                      src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
+                      className="w-full h-[520px] border-0"
+                      allow="clipboard-read; clipboard-write; microphone; camera"
+                    />
+                  </div>
+                </Card>
+              )}
             </motion.div>
           )}
           </AnimatePresence>
