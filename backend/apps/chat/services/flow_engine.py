@@ -489,16 +489,25 @@ def try_send_flow_start(conversation: Conversation, flow: Optional[Flow] = None)
         return (False, {})
 
     # Typebot: quando o fluxo tem typebot_public_id, executar via Typebot em vez de nós/arestas
+    # Criar estado ANTES de chamar a API (evita race: webhook não dispara fluxo de novo enquanto isso)
     typebot_public_id = (getattr(flow, "typebot_public_id", None) or "").strip()
     if typebot_public_id:
         try:
+            state, created = ConversationFlowState.objects.get_or_create(
+                conversation_id=conversation.id,
+                defaults={"flow_id": flow.id, "current_node_id": None, "typebot_session_id": ""},
+            )
+            if not created:
+                return (False, {})
             from apps.chat.services.typebot_flow_service import start_typebot_flow
             ok, messages_queued = start_typebot_flow(conversation, flow)
             if ok:
                 logger.info("[FLOW] Fluxo Typebot iniciado: conversation=%s flow=%s messages_queued=%s", conversation.id, flow.name, messages_queued)
                 return (True, {"messages_queued": messages_queued})
+            state.delete()
         except Exception as e:
             logger.exception("[FLOW] Erro ao iniciar Typebot: %s", e)
+            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
         return (False, {})
 
     start_node = get_start_node(flow)

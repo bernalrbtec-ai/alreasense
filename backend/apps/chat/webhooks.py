@@ -2450,16 +2450,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"✅ [ROUTING] Department forçado após criação: {conversation.department.name}")
                 
                 # ✅ Enviar fluxo (lista/botões) ou menu de boas-vindas para conversa nova
+                # Não iniciar se já existir estado (evita race com outro request)
                 if not from_me:
                     try:
+                        from apps.chat.models_flow import ConversationFlowState
                         from apps.chat.services.flow_engine import try_send_flow_start
                         from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        sent_flow, _ = try_send_flow_start(conversation)
-                        if sent_flow:
-                            logger.info("📋 [FLOW] Fluxo enviado para nova conversa: %s", conversation.id)
-                        elif WelcomeMenuService.should_send_menu(conversation):
-                            logger.info("📋 [WELCOME MENU] Enviando menu para nova conversa: %s", conversation.id)
-                            WelcomeMenuService.send_welcome_menu(conversation)
+                        if ConversationFlowState.objects.filter(conversation_id=conversation.id).exists():
+                            logger.info("📋 [FLOW] Nova conversa já tem fluxo ativo (race), não reenviando: %s", conversation.id)
+                        else:
+                            sent_flow, _ = try_send_flow_start(conversation)
+                            if sent_flow:
+                                logger.info("📋 [FLOW] Fluxo enviado para nova conversa: %s", conversation.id)
+                            elif WelcomeMenuService.should_send_menu(conversation):
+                                logger.info("📋 [WELCOME MENU] Enviando menu para nova conversa: %s", conversation.id)
+                                WelcomeMenuService.send_welcome_menu(conversation)
                     except Exception as e:
                         logger.error("❌ [FLOW/WELCOME MENU] Erro ao enviar para nova conversa: %s", e, exc_info=True)
         
@@ -2907,16 +2912,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"   📋 Departamento: {old_department} → {status_str}")
                     
                     # ✅ Enviar fluxo ou menu APÓS salvar (já verificamos antes de mudar o status)
+                    # Não iniciar fluxo se já existir estado (evita duplicar menu após "Iniciar fluxo" + mensagem)
                     if should_send_menu_for_closed:
                         try:
+                            from apps.chat.models_flow import ConversationFlowState
                             from apps.chat.services.flow_engine import try_send_flow_start
                             from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                            sent_flow, _ = try_send_flow_start(conversation)
-                            if sent_flow:
-                                logger.info("📋 [FLOW] Fluxo enviado para conversa reaberta: %s", conversation.id)
+                            if ConversationFlowState.objects.filter(conversation_id=conversation.id).exists():
+                                logger.info("📋 [FLOW] Conversa reaberta já tem fluxo ativo, não reenviando: %s", conversation.id)
                             else:
-                                logger.info("📋 [WELCOME MENU] Enviando menu para conversa reaberta: %s", conversation.id)
-                                WelcomeMenuService.send_welcome_menu(conversation)
+                                sent_flow, _ = try_send_flow_start(conversation)
+                                if sent_flow:
+                                    logger.info("📋 [FLOW] Fluxo enviado para conversa reaberta: %s", conversation.id)
+                                else:
+                                    logger.info("📋 [WELCOME MENU] Enviando menu para conversa reaberta: %s", conversation.id)
+                                    WelcomeMenuService.send_welcome_menu(conversation)
                         except Exception as e:
                             logger.error("❌ [FLOW/WELCOME MENU] Erro para conversa reaberta: %s", e, exc_info=True)
             

@@ -602,14 +602,21 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
         return (False, 0)
     try:
         with transaction.atomic():
-            state, created = ConversationFlowState.objects.update_or_create(
-                conversation_id=conversation.id,
-                defaults={
-                    "flow_id": flow.id,
-                    "current_node_id": None,
-                    "typebot_session_id": session_id,
-                },
-            )
+            state = ConversationFlowState.objects.filter(conversation_id=conversation.id).first()
+            if not state:
+                state, _ = ConversationFlowState.objects.update_or_create(
+                    conversation_id=conversation.id,
+                    defaults={
+                        "flow_id": flow.id,
+                        "current_node_id": None,
+                        "typebot_session_id": session_id,
+                    },
+                )
+            else:
+                state.flow_id = flow.id
+                state.current_node_id = None
+                state.typebot_session_id = session_id
+                state.save(update_fields=["flow_id", "current_node_id", "typebot_session_id"])
             result_id = (data.get("resultId") or "").strip()
             if result_id:
                 if state.metadata is None:
