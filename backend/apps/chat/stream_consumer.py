@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -12,6 +13,7 @@ from apps.chat.redis_streams import (
     decode_entry,
     enqueue_mark_as_read_async,
     enqueue_send_message_async,
+    enqueue_send_message_batch,
     ensure_stream_setup_async,
     get_stream_async_client,
     push_to_dead_letter,
@@ -135,6 +137,69 @@ async def _process_send_entry(
     logger.critical(f"   Payload: {payload}")
     logger.critical(f"   Retry: {retry}")
     
+    message_ids_batch = payload.get('message_ids')
+    if isinstance(message_ids_batch, str):
+        try:
+            message_ids_batch = json.loads(message_ids_batch)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            message_ids_batch = None
+    if isinstance(message_ids_batch, list) and message_ids_batch:
+        # Batch Typebot: enviar mensagens na ordem; sucesso parcial + retry do que falhou
+        extra = payload.get('extra')
+        if not isinstance(extra, dict):
+            extra = {}
+        try:
+            for i, mid in enumerate(message_ids_batch):
+                if not mid:
+                    continue
+                try:
+                    await handle_send_message(str(mid), retry_count=retry, extra=extra)
+                except InstanceTemporarilyUnavailable as exc:
+                    # Reenfileirar o restante do batch (esta mensagem + seguintes) para retry
+                    next_retry = retry + 1
+                    if next_retry > settings.CHAT_STREAM_MAX_RETRIES:
+                        logger.error(
+                            "❌ [CHAT STREAM] Batch Typebot: instância indisponível (max retries) | entry=%s msg_index=%s",
+                            entry_id,
+                            i,
+                        )
+                        break
+                    remaining = [str(m) for m in message_ids_batch[i:] if m]
+                    if remaining:
+                        await asyncio.to_thread(enqueue_send_message_batch, remaining, next_retry)
+                        logger.warning(
+                            "⏳ [CHAT STREAM] Batch Typebot: reenfileirado a partir do índice %s (%s msgs) retry=%s",
+                            i,
+                            len(remaining),
+                            next_retry,
+                        )
+                    break
+                except Exception as exc:
+                    logger.exception(
+                        "❌ [CHAT STREAM] Batch Typebot: falha ao enviar msg índice %s (id=%s), continuando com as demais: %s",
+                        i,
+                        mid,
+                        exc,
+                    )
+                    try:
+                        await enqueue_send_message_async(str(mid), retry=retry + 1, extra={**extra, "last_error": str(exc)})
+                    except Exception:
+                        logger.exception("❌ [CHAT STREAM] Falha ao reenfileirar mensagem do batch")
+            await _ack(client, settings.CHAT_STREAM_SEND_NAME, settings.CHAT_STREAM_CONSUMER_GROUP, entry_id)
+            update_worker_heartbeat(SEND_QUEUE_KEY, worker_id)
+            logger.info(
+                "✅ [CHAT STREAM] Batch processado (ordem preservada) | %s mensagens (worker=%s)",
+                len(message_ids_batch),
+                worker_id,
+            )
+        except Exception as exc:
+            await _ack(client, settings.CHAT_STREAM_SEND_NAME, settings.CHAT_STREAM_CONSUMER_GROUP, entry_id)
+            logger.exception(
+                "❌ [CHAT STREAM] Erro ao processar batch Typebot | entry=%s: %s",
+                entry_id,
+                exc,
+            )
+        return
     message_id = payload.get('message_id')
     if not message_id:
         logger.error("❌ [CHAT STREAM] Payload inválido (send): %s", payload)

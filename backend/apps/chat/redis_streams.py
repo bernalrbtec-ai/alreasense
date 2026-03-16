@@ -177,8 +177,6 @@ def enqueue_send_message(message_id: str, retry: int = 0, extra: Optional[Dict[s
     logger.critical(f"   Retry: {retry}")
     logger.critical(f"   Payload: {fields}")
     return entry_id
-    logger.info("   Payload: %s", fields)
-    return entry_id
 
 
 def enqueue_mark_as_read(conversation_id: str, message_id: str, retry: int = 0) -> str:
@@ -226,6 +224,37 @@ async def enqueue_send_message_async(message_id: str, retry: int = 0, extra: Opt
         approximate=True,
     )
     logger.debug("📥 [CHAT STREAM] Mensagem enfileirada (async send): %s -> %s", message_id, entry_id)
+    return entry_id
+
+
+def enqueue_send_message_batch(message_ids: list, retry: int = 0) -> str:
+    """
+    Enfileira envio de várias mensagens em ordem (uma única entrada no stream).
+    Usado pelo Typebot para garantir que as mensagens cheguem ao WhatsApp na ordem do fluxo.
+    """
+    if not message_ids:
+        raise ValueError("message_ids não pode ser vazio")
+    ensure_stream_setup()
+    client = get_stream_sync_client()
+    fields = _build_fields(
+        {
+            "message_ids": message_ids,
+            "retry": retry,
+            "enqueued_at": timezone.now().isoformat(),
+            "extra": {},
+        }
+    )
+    entry_id = client.xadd(
+        settings.CHAT_STREAM_SEND_NAME,
+        fields,
+        maxlen=settings.CHAT_STREAM_MAXLEN,
+        approximate=True,
+    )
+    logger.info(
+        "📥 [CHAT STREAM] Batch enfileirado (send): %s mensagens -> %s",
+        len(message_ids),
+        entry_id,
+    )
     return entry_id
 
 
@@ -302,7 +331,7 @@ def decode_entry(fields: Dict[str, Any]) -> Dict[str, Any]:
             except (TypeError, ValueError):
                 decoded[key] = 0
             continue
-        if key in {"extra", "payload", "state", "error_payload"}:
+        if key in {"extra", "payload", "state", "error_payload", "message_ids"}:
             try:
                 decoded[key] = json.loads(value)
             except (TypeError, ValueError, json.JSONDecodeError):

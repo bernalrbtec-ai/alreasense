@@ -1,7 +1,7 @@
 """
 Integração com Typebot: execução de fluxos via API (startChat / continueChat).
 Quando Flow.typebot_public_id está preenchido, o fluxo é executado pelo Typebot;
-as mensagens retornadas pela API são enviadas ao WhatsApp via Message + send_message_to_evolution.
+as mensagens retornadas pela API são enviadas ao WhatsApp via Message + enqueue_send_message_batch (ordem preservada).
 
 Instruções no texto: trechos #{"chave": valor} são interpretados (closeTicket, transferTo),
 executados e removidos antes de enviar ao cliente.
@@ -15,7 +15,7 @@ from django.db import transaction
 
 from apps.chat.models import Conversation, Message
 from apps.chat.models_flow import Flow, ConversationFlowState
-from apps.chat.tasks import send_message_to_evolution
+from apps.chat.redis_streams import enqueue_send_message_batch, enqueue_send_message
 
 logger = logging.getLogger(__name__)
 
@@ -135,16 +135,20 @@ def _rich_text_to_plain(rt: Any) -> str:
 
 
 def _send_texts_to_whatsapp(conversation: Conversation, texts: List[str], metadata: Optional[dict] = None) -> None:
-    """Cria uma Message por texto e enfileira envio para Evolution/Meta."""
+    """
+    Cria uma Message por texto e enfileira envio para Evolution/Meta.
+    Usa um único batch (message_ids em ordem) para preservar a ordem das mensagens do Typebot no WhatsApp.
+    """
     if not conversation or not texts:
         return
     meta = dict(metadata or {})
     meta["flow_engine"] = "typebot"
-    for content in texts:
-        if not (content and str(content).strip()):
-            continue
-        try:
-            with transaction.atomic():
+    try:
+        with transaction.atomic():
+            message_ids: List[str] = []
+            for content in texts:
+                if not (content and str(content).strip()):
+                    continue
                 message = Message.objects.create(
                     conversation=conversation,
                     sender=None,
@@ -154,10 +158,26 @@ def _send_texts_to_whatsapp(conversation: Conversation, texts: List[str], metada
                     is_internal=False,
                     metadata=meta,
                 )
-                transaction.on_commit(lambda msg_id=message.id: send_message_to_evolution.delay(str(msg_id)))
-            logger.info("[TYPEBOT] Mensagem enfileirada conversation=%s", conversation.id)
-        except Exception as e:
-            logger.exception("[TYPEBOT] Erro ao criar/enfileirar mensagem: %s", e)
+                message_ids.append(str(message.id))
+            if message_ids:
+                def _enqueue_after_commit(ids: List[str]) -> None:
+                    try:
+                        enqueue_send_message_batch(ids)
+                    except Exception as e:
+                        logger.warning(
+                            "[TYPEBOT] Batch enqueue falhou (%s), enfileirando mensagens uma a uma (ordem pode variar): %s",
+                            e,
+                            ids[:3],
+                        )
+                        for mid in ids:
+                            try:
+                                enqueue_send_message(str(mid))
+                            except Exception as e2:
+                                logger.exception("[TYPEBOT] Erro ao enfileirar mensagem %s: %s", mid, e2)
+                transaction.on_commit(lambda: _enqueue_after_commit(message_ids))
+        logger.info("[TYPEBOT] Batch enfileirado conversation=%s messages=%s", conversation.id, len(message_ids))
+    except Exception as e:
+        logger.exception("[TYPEBOT] Erro ao criar/enfileirar mensagens: %s", e)
 
 
 def close_conversation_from_typebot(conversation: Conversation) -> bool:
@@ -388,11 +408,13 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
                     prefilled["email"] = (contact.email or "").strip()
     except Exception as e:
         logger.debug("[TYPEBOT] Contato não encontrado ou erro ao buscar: %s", e)
-    # Garantir nomes padrão se ainda não definidos
+    # Garantir nomes padrão se ainda não definidos (evitar variável vazia no Typebot, ex.: ", vou precisar...")
     if "NomeContato" not in prefilled:
         prefilled["NomeContato"] = prefilled.get("contact_name") or "Contato"
     if "NumeroFone" not in prefilled:
         prefilled["NumeroFone"] = prefilled.get("contact_phone") or ""
+    if "pushName" not in prefilled or not (prefilled.get("pushName") or "").strip():
+        prefilled["pushName"] = prefilled.get("contact_name") or "Contato"
     extra = getattr(flow, "typebot_prefilled_extra", None)
     if isinstance(extra, dict) and extra:
         for k, v in extra.items():
