@@ -154,7 +154,6 @@ export function ConversationList() {
       setTabLoadError(null);
       const fetchMyConversations = async () => {
         try {
-          setLoading(true);
           const params: any = { ordering: '-last_message_at', assigned_to_me: 'true' };
           const response = await api.get('/chat/conversations/', { params });
           const convs = response.data.results || response.data;
@@ -175,7 +174,7 @@ export function ConversationList() {
           toast.error(msg);
           setTabLoadError(msg);
         } finally {
-          setLoading(false);
+          // Não bloquear a lista ao trocar de aba; fetch em background
         }
       };
       
@@ -189,7 +188,6 @@ export function ConversationList() {
       setTabLoadError(null);
       const fetchGroups = async () => {
         try {
-          setLoading(true);
           const params: Record<string, string> = {
             ordering: '-last_message_at',
             conversation_type: 'group',
@@ -210,7 +208,7 @@ export function ConversationList() {
           toast.error(msg);
           setTabLoadError(msg);
         } finally {
-          setLoading(false);
+          // Não bloquear a lista ao trocar de aba; fetch em background
         }
       };
       fetchGroups();
@@ -444,7 +442,7 @@ export function ConversationList() {
         className="flex-1 overflow-y-auto custom-scrollbar"
         aria-label={activeDepartment?.id === 'groups' ? 'Lista de grupos' : 'Lista de conversas'}
       >
-        {loading ? (
+        {loading && !hasLoaded ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="flex gap-2 mb-3">
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
