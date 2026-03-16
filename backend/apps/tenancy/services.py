@@ -10,18 +10,15 @@ from apps.tenancy.models import Tenant, TypebotWorkspace
 logger = logging.getLogger(__name__)
 
 
-def _get_typebot_admin_base() -> Optional[str]:
+def _get_typebot_admin_api_base() -> Optional[str]:
     """
-    Retorna a base da API admin do Typebot a partir de TYPEBOT_API_BASE.
-    Ex.: https://typebot.alrea.ai/api/v1 -> https://typebot.alrea.ai
+    Retorna a base da API (admin) do Typebot com sufixo /api/v1.
+    Ex.: https://typebot.alrea.ai -> https://typebot.alrea.ai/api/v1
     """
     base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip().rstrip("/")
     if not base:
         return None
-    # Remover sufixo /api/v1 se presente
-    if base.endswith("/api/v1"):
-        return base[: -len("/api/v1")]
-    return base
+    return base if base.endswith("/api/v1") else f"{base}/api/v1"
 
 
 def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace]:
@@ -42,9 +39,9 @@ def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace
     if isinstance(existing, TypebotWorkspace):
         return existing
 
-    admin_base = _get_typebot_admin_base()
+    admin_api_base = _get_typebot_admin_api_base()
     api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
-    if not admin_base or not api_key:
+    if not admin_api_base or not api_key:
         logger.info(
             "[TYPEBOT][WORKSPACE] Admin base ou API key não configuradas; "
             "não será criado workspace automático para tenant=%s",
@@ -52,7 +49,7 @@ def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace
         )
         return None
 
-    url = f"{admin_base}/v1/workspaces"
+    url = f"{admin_api_base}/workspaces"
     payload = {
         "name": tenant.name[:120] if tenant.name else "Workspace Sense",
     }

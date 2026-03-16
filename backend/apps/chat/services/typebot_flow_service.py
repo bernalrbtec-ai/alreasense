@@ -96,13 +96,13 @@ def _typebot_public_id(flow: Flow) -> Optional[str]:
 
 def _get_typebot_admin_base() -> Optional[str]:
     """
-    Base da API admin do Typebot (raiz), derivada de settings.TYPEBOT_API_BASE.
-    Ex.: https://typebot.alrea.ai/api/v1 -> https://typebot.alrea.ai
+    Base da API admin do Typebot com sufixo /api/v1, derivada de settings.TYPEBOT_API_BASE.
+    Ex.: https://typebot.alrea.ai -> https://typebot.alrea.ai/api/v1
     """
     base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip().rstrip("/")
     if not base:
         return None
-    return base[: -len("/api/v1")] if base.endswith("/api/v1") else base
+    return base if base.endswith("/api/v1") else f"{base}/api/v1"
 
 
 def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
@@ -152,7 +152,7 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     if not workspace:
         return flow
 
-    url = f"{admin_base}/v1/workspaces/{workspace.workspace_id}/typebots"
+    url = f"{admin_base}/workspaces/{workspace.workspace_id}/typebots"
     display_name = (flow.name or "Fluxo Sense").strip()
     try:
         from apps.authn.models import Department

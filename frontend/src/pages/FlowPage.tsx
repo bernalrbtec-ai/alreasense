@@ -1204,7 +1204,7 @@ export default function FlowPage() {
                   <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
                     <iframe
                       title="Construtor Typebot"
-                      src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
+                      src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/typebots/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
                       className="w-full h-[520px] border-0"
                       allow="clipboard-read; clipboard-write; microphone; camera"
                     />
