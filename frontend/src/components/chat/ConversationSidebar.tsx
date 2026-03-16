@@ -1,23 +1,19 @@
 /**
  * Sidebar de conversas (presentacional).
- * Lista virtualizada com avatar (foto ou iniciais), preview, tempo, badge unread e sentimento.
+ * Lista simples (sem virtualização) com avatar (foto ou iniciais), preview, tempo, badge unread.
+ * Mantemos a lista sem virtualização por estabilidade em todos os browsers/tenants.
  */
 
-import React, { useRef, useState, useCallback } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Plus } from 'lucide-react';
 import type { ConversationSidebarConversation } from './adapters';
 import { formatTimeAgo } from '@/utils/formatTime';
 
-const ROW_HEIGHT = 72;
-
 function getMediaProxyUrl(externalUrl: string): string {
   const API_BASE_URL = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL || 'http://localhost:8000';
   return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
 }
-/** Abaixo deste tamanho não usamos virtualização, para evitar bug com container sem altura (só 1 item visível). */
-const USE_VIRTUAL_THRESHOLD = 25;
 
 export interface ConversationSidebarProps {
   conversations: ConversationSidebarConversation[];
@@ -40,29 +36,11 @@ export function ConversationSidebar({
   searchPlaceholder = 'Buscar ou iniciar conversa',
   onNewConversation,
 }: ConversationSidebarProps) {
-  const parentRef = useRef<HTMLDivElement>(null);
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
-  const useVirtual = conversations.length > USE_VIRTUAL_THRESHOLD;
 
   const handleAvatarError = useCallback((id: string) => {
     setFailedImageIds((prev) => new Set(prev).add(id));
   }, []);
-
-  const rowVirtualizer = useVirtualizer({
-    count: useVirtual ? conversations.length : 0,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => ROW_HEIGHT,
-    overscan: 8,
-  });
-
-  const virtualItems = rowVirtualizer.getVirtualItems();
-
-  const itemsToRender = useVirtual
-    ? virtualItems.map((virtualRow) => ({ item: conversations[virtualRow.index], virtualRow }))
-    : conversations.map((conv, index) => ({
-        item: conv,
-        virtualRow: { index, start: index * ROW_HEIGHT, size: ROW_HEIGHT } as const,
-      }));
 
   return (
     <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
@@ -96,23 +74,11 @@ export function ConversationSidebar({
       )}
 
       <div
-        ref={parentRef}
         className="flex-1 overflow-y-auto custom-scrollbar min-h-0"
         aria-label="Lista de conversas"
       >
-        <div
-          style={
-            useVirtual
-              ? {
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  width: '100%',
-                  position: 'relative' as const,
-                }
-              : undefined
-          }
-          className={useVirtual ? '' : 'flex flex-col'}
-        >
-          {itemsToRender.map(({ item, virtualRow }) => {
+        <div className="flex flex-col">
+          {conversations.map((item) => {
             const isActive = activeId !== null && String(item.id) === String(activeId);
 
             return (
@@ -130,25 +96,13 @@ export function ConversationSidebar({
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
-                style={
-                  useVirtual
-                    ? {
-                        position: 'absolute' as const,
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                      }
-                    : undefined
-                }
                 className={`
                   w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 flex-shrink-0
                   hover:bg-chat-sidebar dark:hover:bg-gray-700 active:scale-[0.99]
-                  transition-colors duration-150 ease-out transition-transform duration-150 ease-out
+                  transition-colors duration-150 ease-out transition-transform
                   border-b border-gray-100 dark:border-gray-700
                   cursor-pointer
-                  ${useVirtual ? '' : 'min-h-[72px]'}
+                  min-h-[72px]
                   ${isActive ? 'bg-chat-sidebar dark:bg-gray-700 ring-inset ring-2 ring-chat-ring' : ''}
                 `}
               >
