@@ -230,6 +230,8 @@ class FlowSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True)
     whatsapp_instance_name = serializers.CharField(source="whatsapp_instance.friendly_name", read_only=True, allow_null=True)
     nodes = FlowNodeSerializer(many=True, read_only=True)
+    typebot_public_id = serializers.CharField(required=False, allow_blank=True, allow_null=True, default="")
+    typebot_base_url = serializers.URLField(required=False, allow_blank=True, allow_null=True, default="")
 
     class Meta:
         model = Flow
