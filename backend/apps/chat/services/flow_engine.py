@@ -8,6 +8,7 @@ import threading
 import time
 from typing import Optional, Dict, Any
 
+from django.core.cache import cache
 from django.db import transaction
 
 from apps.chat.models import Conversation, Message
@@ -545,12 +546,46 @@ def try_send_flow_start(conversation: Conversation, flow: Optional[Flow] = None)
     return (True, {})
 
 
+TYPEBOT_LOCK_KEY_PREFIX = "typebot_flow_lock:"
+TYPEBOT_LOCK_TTL_SECONDS = 30
+TYPEBOT_LOCK_WAIT_INTERVAL = 0.5
+TYPEBOT_LOCK_MAX_WAIT = 55
+
+
+def _run_typebot_continue_with_lock(conversation: Conversation, msg_content: str) -> bool:
+    """
+    Serializa chamadas ao Typebot (continueChat) por conversa para preservar ordem das mensagens.
+    Quando o usuário envia várias mensagens seguidas, o webhook pode processar em paralelo;
+    sem o lock, o Typebot pode receber as mensagens fora de ordem e o fluxo se perde.
+    """
+    from apps.chat.services.typebot_flow_service import continue_typebot_flow
+    lock_key = f"{TYPEBOT_LOCK_KEY_PREFIX}{conversation.id}"
+    deadline = time.monotonic() + TYPEBOT_LOCK_MAX_WAIT
+    while True:
+        if cache.add(lock_key, "1", timeout=TYPEBOT_LOCK_TTL_SECONDS):
+            try:
+                return continue_typebot_flow(conversation, msg_content)
+            finally:
+                try:
+                    cache.delete(lock_key)
+                except Exception:
+                    pass
+        if time.monotonic() >= deadline:
+            logger.warning(
+                "[FLOW] Timeout aguardando lock Typebot conversation=%s; mensagem não enviada ao Typebot.",
+                conversation.id,
+            )
+            return False
+        time.sleep(TYPEBOT_LOCK_WAIT_INTERVAL)
+
+
 def process_incoming_message_flows(conversation: Conversation, message: Message) -> bool:
     """
     Processa fluxo para mensagem incoming: Typebot (continueChat), fluxo Sense (lista/botão) ou menu de boas-vindas.
     Só roda se a conversa não estiver atribuída a um humano (assigned_to_id).
     Retorna True se algum fluxo foi processado.
     Usado pelo webhook Evolution e pelo webhook Meta (Cloud API) para manter o mesmo comportamento.
+    Chamadas ao Typebot são serializadas por conversa (lock em cache) para preservar a ordem das mensagens.
     """
     if not conversation or not message or conversation.assigned_to_id:
         return False
@@ -560,9 +595,8 @@ def process_incoming_message_flows(conversation: Conversation, message: Message)
     try:
         state = ConversationFlowState.objects.filter(conversation_id=conversation.id).first()
         if state and ((getattr(state, "typebot_session_id", None) or "").strip()):
-            from apps.chat.services.typebot_flow_service import continue_typebot_flow
             msg_content = (getattr(message, "content", None) or "").strip()
-            if msg_content and continue_typebot_flow(conversation, msg_content):
+            if msg_content and _run_typebot_continue_with_lock(conversation, msg_content):
                 flow_processed = True
                 logger.info("[FLOW] Resposta Typebot processada conversation=%s", conversation.id)
         if not flow_processed:

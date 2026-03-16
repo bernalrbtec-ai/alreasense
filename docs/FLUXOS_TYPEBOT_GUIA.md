@@ -34,6 +34,12 @@ Assim, não há risco de o bot continuar respondendo depois que um humano assumi
 
 ---
 
+## Ordem das mensagens (Typebot)
+
+Quando o usuário envia **várias mensagens seguidas** (ex.: e-mail, depois descrição, depois "1"), o webhook pode receber e processar as requisições em paralelo. Para evitar que o Typebot receba as mensagens **fora de ordem** (o que bagunça o fluxo), o Sense **serializa** as chamadas ao continueChat por conversa: usa um lock em cache (Redis em produção). Assim, uma mensagem só é enviada ao Typebot depois que a anterior da mesma conversa terminou de ser processada. Em ambiente com **Redis** configurado (`REDIS_URL`), o lock é compartilhado entre todos os workers; sem Redis (ex.: LocMemCache em desenvolvimento), a ordem só é garantida dentro do mesmo processo.
+
+---
+
 ## Como configurar um fluxo Typebot
 
 1. Acesse **Configurações > Fluxos**.
