@@ -257,6 +257,14 @@ class FlowSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id", "tenant", "created_at", "updated_at"]
 
+    def create(self, validated_data):
+        # Garantir que campos Typebot nunca sejam persistidos como NULL no banco.
+        if validated_data.get("typebot_public_id") is None:
+            validated_data["typebot_public_id"] = ""
+        if validated_data.get("typebot_base_url") is None:
+            validated_data["typebot_base_url"] = ""
+        return super().create(validated_data)
+
 
 class FlowListSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source="department.name", read_only=True, allow_null=True)
