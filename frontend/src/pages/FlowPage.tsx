@@ -1199,22 +1199,31 @@ export default function FlowPage() {
                   </Button>
                 </div>
               </Card>
-              {TYPEBOT_BUILDER_BASE && (flowDetail.typebot_public_id || '').trim() && (
-                <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                  <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editar fluxo no Typebot</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    O construtor abaixo é carregado a partir do Typebot self-host ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
-                  </p>
-                  <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
-                    <iframe
-                      title="Construtor Typebot"
-                      src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/typebots/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
-                      className="w-full h-[520px] border-0"
-                      allow="clipboard-read; clipboard-write; microphone; camera"
-                    />
-                  </div>
-                </Card>
-              )}
+              {(flowDetail.typebot_public_id || '').trim() ? (
+                TYPEBOT_BUILDER_BASE ? (
+                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                    <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editar fluxo no Typebot</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      O construtor abaixo é carregado a partir do Typebot self-host ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
+                    </p>
+                    <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
+                      <iframe
+                        title="Construtor Typebot"
+                        src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/typebots/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
+                        className="w-full h-[520px] border-0"
+                        allow="clipboard-read; clipboard-write; microphone; camera"
+                      />
+                    </div>
+                  </Card>
+                ) : (
+                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20">
+                    <h3 className="font-medium mb-1 text-gray-900 dark:text-gray-100 text-sm">Construtor Typebot</h3>
+                    <p className="text-xs text-amber-800 dark:text-amber-200">
+                      Para exibir o construtor aqui, configure <code className="bg-white/80 dark:bg-gray-800 px-1 rounded">VITE_TYPEBOT_BUILDER_BASE</code> no ambiente do frontend (ex.: https://typebot.alrea.ai).
+                    </p>
+                  </Card>
+                )
+              ) : null}
             </motion.div>
           )}
           </AnimatePresence>
@@ -1671,6 +1680,9 @@ export default function FlowPage() {
                       <Label className="mb-1 block text-gray-700 dark:text-gray-300">URL base da API</Label>
                       <Input value={editTypebotBaseUrl} onChange={(e) => setEditTypebotBaseUrl(e.target.value)} placeholder="Vazio = typebot.io" className="rounded-lg font-mono text-sm" />
                     </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Após salvar, o construtor do Typebot aparece na tela de detalhes do fluxo (à direita), abaixo de &quot;Enviar passo inicial&quot;.
+                    </p>
                   </div>
 
                   {/* Variáveis: bloco recolhível */}
