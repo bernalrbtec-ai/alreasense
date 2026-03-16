@@ -176,6 +176,7 @@ export default function FlowPage() {
   const [creatingFlow, setCreatingFlow] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const selectedFlowIdRef = useRef<string | null>(null)
+  const typebotIframeCardRef = useRef<HTMLDivElement | null>(null)
 
   // Confirm delete
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<FlowNode | null>(null)
@@ -478,6 +479,9 @@ export default function FlowPage() {
       })
       selectedFlowIdRef.current = selectedFlow.id
       await fetchFlowDetail(selectedFlow.id)
+      if (pid) {
+        setTimeout(() => typebotIframeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300)
+      }
     } catch (e: any) {
       toast.error(getApiError(e))
     } finally {
@@ -1196,7 +1200,7 @@ export default function FlowPage() {
                 </div>
               </Card>
               {TYPEBOT_BUILDER_BASE && (flowDetail.typebot_public_id || '').trim() && (
-                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                   <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editar fluxo no Typebot</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                     O construtor abaixo é carregado a partir do Typebot self-host ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.

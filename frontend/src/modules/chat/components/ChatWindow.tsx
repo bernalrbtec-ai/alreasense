@@ -1156,8 +1156,17 @@ export function ChatWindow() {
                 </div>
               ) : flowsForStart.length === 0 ? (
                 <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
-                  <p>Nenhum fluxo ativo para o Inbox ou departamento desta conversa.</p>
-                  <p className="text-xs">Configure um fluxo em <strong>Configurações &gt; Fluxos</strong> e vincule ao Inbox ou ao departamento.</p>
+                  <p>
+                    Nenhum fluxo ativo para {(() => {
+                      const conv = activeConversation;
+                      const deptName = conv?.department_name || (typeof conv?.department === 'object' && conv?.department != null ? (conv.department as { name?: string }).name : null);
+                      if (conv?.department != null && conv.department !== '' && deptName) return <>o departamento <strong>{deptName}</strong></>;
+                      return <>o <strong>Inbox</strong></>;
+                    })()} desta conversa.
+                  </p>
+                  <p className="text-xs">
+                    Em <strong>Configurações &gt; Fluxos</strong>, crie ou edite um fluxo e vincule ao mesmo escopo (Inbox ou ao departamento desta conversa).
+                  </p>
                 </div>
               ) : (
                 <ul className="space-y-3">
