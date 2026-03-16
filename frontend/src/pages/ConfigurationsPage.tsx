@@ -2088,7 +2088,7 @@ export default function ConfigurationsPage() {
               className="py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
             >
               <List className="h-4 w-4 inline mr-2" />
-              Fluxos (lista/botões)
+              Fluxos
             </button>
           )}
         </nav>
