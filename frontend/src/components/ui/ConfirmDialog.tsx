@@ -60,8 +60,8 @@ export default function ConfirmDialog({
   const styles = getVariantStyles()
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md border-l-4 ${styles.border}`}>
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md border-l-4 ${styles.border} animate-scale-in`}>
         <div className="p-6">
           <div className="flex items-start">
             <div className="flex-shrink-0">

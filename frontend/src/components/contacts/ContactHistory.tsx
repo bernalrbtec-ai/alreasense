@@ -251,7 +251,7 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
               type="text"
               value={noteTitle}
               onChange={(e) => setNoteTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-ring dark:bg-gray-800 dark:text-gray-100"
               placeholder="Ex: Cliente interessado em produto X"
             />
           </div>
@@ -263,7 +263,7 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
               value={noteDescription}
               onChange={(e) => setNoteDescription(e.target.value)}
               rows={3}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-ring dark:bg-gray-800 dark:text-gray-100"
               placeholder="Detalhes da anotação..."
             />
           </div>

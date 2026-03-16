@@ -112,11 +112,13 @@ button, a, input, textarea, select {
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
-    --chat-bg: #fafafa;
+    --chat-bg: #f0f2f5;
+    --chat-sidebar: #f0f2f5;
+    --chat-panel: #efeae2;
     --chat-bubble-in: #ffffff;
     --chat-bubble-out: #2563eb;
     --chat-border: #e4e4e7;
-    --chat-sidebar: #ffffff;
+    --chat-ring: #00a884;
   }
 
   .dark {
@@ -139,11 +141,13 @@ button, a, input, textarea, select {
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
-    --chat-bg: #18181b;
+    --chat-bg: #111827;
+    --chat-sidebar: #1f2937;
+    --chat-panel: #111827;
     --chat-bubble-in: #27272a;
     --chat-bubble-out: #2563eb;
-    --chat-border: #3f3f46;
-    --chat-sidebar: #27272a;
+    --chat-border: #374151;
+    --chat-ring: #00a884;
   }
 }
 

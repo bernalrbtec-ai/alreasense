@@ -192,7 +192,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                       createTag()
                     }
                   }}
-                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent"
                 />
                 <input
                   type="color"
@@ -374,7 +374,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                               <select
                                 value={migrateToTagId}
                                 onChange={(e) => setMigrateToTagId(e.target.value)}
-                                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-ring focus:border-transparent text-sm"
                                 required
                               >
                                 <option value="">Selecione uma tag...</option>

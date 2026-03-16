@@ -77,7 +77,7 @@ export function ConversationSidebar({
                 placeholder={searchPlaceholder}
                 value={searchValue}
                 onChange={(e) => onSearchChange(e.target.value)}
-                className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
+                className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-chat-sidebar dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-chat-ring focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
               />
             </div>
           )}
@@ -144,11 +144,12 @@ export function ConversationSidebar({
                 }
                 className={`
                   w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 flex-shrink-0
-                  hover:bg-[#f0f2f5] dark:hover:bg-gray-700 active:scale-[0.99]
-                  transition-colors border-b border-gray-100 dark:border-gray-700
+                  hover:bg-chat-sidebar dark:hover:bg-gray-700 active:scale-[0.99]
+                  transition-colors duration-150 ease-out transition-transform duration-150 ease-out
+                  border-b border-gray-100 dark:border-gray-700
                   cursor-pointer
                   ${useVirtual ? '' : 'min-h-[72px]'}
-                  ${isActive ? 'bg-[#f0f2f5] dark:bg-gray-700 ring-inset ring-2 ring-blue-500' : ''}
+                  ${isActive ? 'bg-chat-sidebar dark:bg-gray-700 ring-inset ring-2 ring-chat-ring' : ''}
                 `}
               >
                 <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-white font-medium text-sm">

@@ -470,7 +470,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                   <select
                     value={config.auto_tag_id || ''}
                     onChange={(e) => setConfig({ ...config, auto_tag_id: e.target.value || null })}
-                    className="w-full px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 text-sm border rounded focus:ring-2 focus:ring-ring focus:border-transparent"
                     required
                   >
                     <option value="">Selecione uma tag...</option>
@@ -501,7 +501,7 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                         value={newTagName}
                         onChange={(e) => setNewTagName(e.target.value)}
                         placeholder="Nome da nova tag"
-                        className="flex-1 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-2 py-1 text-sm border rounded focus:ring-2 focus:ring-ring"
                         onKeyPress={(e) => e.key === 'Enter' && handleCreateTag()}
                       />
                       <Button type="button" size="sm" onClick={handleCreateTag}>

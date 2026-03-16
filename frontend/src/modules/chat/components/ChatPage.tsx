@@ -20,7 +20,7 @@ export function ChatPage() {
   const showBanner = instanceStatusAlert && connectionState !== 'open' && connectionState !== '';
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-[#f0f2f5] dark:bg-gray-900">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-chat-bg dark:bg-gray-900">
       {/* Aviso bem visível quando WhatsApp está conectando ou desconectado */}
       {showBanner && instanceStatusAlert && (
         <div

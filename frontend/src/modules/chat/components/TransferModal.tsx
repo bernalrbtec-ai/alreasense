@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { Conversation, Department, User } from '../types';
 import { X, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/Button';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -162,17 +163,14 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
-      <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
+      <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800 animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <h2 id="transfer-modal-title" className="text-lg font-semibold text-white">Transferir Conversa</h2>
-          <button
-            onClick={onClose}
-            className="p-1 hover:bg-gray-700 rounded transition-colors"
-          >
-            <X className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-          </button>
+          <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={onClose} className="rounded-full text-gray-400 dark:text-gray-500 hover:text-white">
+            <X className="w-5 h-5" />
+          </Button>
         </div>
 
         {/* Body */}
@@ -202,7 +200,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
                 setSelectedDepartment(e.target.value);
                 setSelectedAgent('');
               }}
-              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">Manter no mesmo departamento</option>
               {departments.map((dept) => (
@@ -222,7 +220,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
               value={selectedAgent}
               onChange={(e) => setSelectedAgent(e.target.value)}
               disabled={!effectiveDeptId || !canSeeAgents}
-              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 disabled:opacity-50"
+              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
             >
               <option value="">
                 {!effectiveDeptId
@@ -249,7 +247,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
               onChange={(e) => setReason(e.target.value)}
               placeholder="Ex: Cliente solicitou falar com financeiro"
               rows={3}
-              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-green-600"
+              className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 resize-none focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>

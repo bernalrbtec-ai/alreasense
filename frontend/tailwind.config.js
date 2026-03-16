@@ -64,6 +64,15 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        chat: {
+          bg: "var(--chat-bg)",
+          sidebar: "var(--chat-sidebar)",
+          panel: "var(--chat-panel)",
+          border: "var(--chat-border)",
+          "bubble-in": "var(--chat-bubble-in)",
+          "bubble-out": "var(--chat-bubble-out)",
+          ring: "var(--chat-ring)",
+        },
         // Cores personalizadas baseadas no gradiente verde-azul
         brand: {
           50: '#f0fdf4',   // Verde muito claro

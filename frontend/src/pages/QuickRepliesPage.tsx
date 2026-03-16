@@ -145,7 +145,7 @@ export default function QuickRepliesPage() {
             onChange={(e) => setOrdering(e.target.value as any)}
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
                      bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                     focus:outline-none focus:ring-2 focus:ring-[#00a884]"
+                     focus:outline-none focus:ring-2 focus:ring-chat-ring"
           >
             <option value="-use_count,title">Mais usadas</option>
             <option value="title">Título (A-Z)</option>
@@ -261,7 +261,7 @@ export default function QuickRepliesPage() {
                     maxLength={4000}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg 
                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                             focus:outline-none focus:ring-2 focus:ring-[#00a884] resize-none"
+                             focus:outline-none focus:ring-2 focus:ring-chat-ring resize-none"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     {formData.content.length}/4000 caracteres

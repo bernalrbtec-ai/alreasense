@@ -130,7 +130,7 @@ export function InstanceHealthModal({ open, onClose, instance }: InstanceHealthM
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-gray-800"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 flex-shrink-0 ml-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-ring dark:focus:ring-offset-gray-800"
             aria-label="Fechar"
           >
             <X className="h-5 w-5" />

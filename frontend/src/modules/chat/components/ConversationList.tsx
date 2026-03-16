@@ -422,7 +422,7 @@ export function ConversationList() {
               placeholder="Buscar ou iniciar conversa"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
+              className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-chat-sidebar dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-chat-ring focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
             />
           </div>
           <button
@@ -584,10 +584,11 @@ export function ConversationList() {
               }}
               className={`
                 w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
-                hover:bg-[#f0f2f5] dark:hover:bg-gray-700 active:scale-[0.98] 
-                transition-all duration-150 border-b border-gray-100 dark:border-gray-700
+                hover:bg-chat-sidebar dark:hover:bg-gray-700 active:scale-[0.98] 
+                transition-colors duration-150 ease-out transition-transform duration-150 ease-out
+                border-b border-gray-100 dark:border-gray-700
                 animate-fade-in cursor-pointer
-                ${activeConversation?.id === conversationItem.id ? 'bg-[#f0f2f5] dark:bg-gray-700 shadow-sm' : ''}
+                ${activeConversation?.id === conversationItem.id ? 'bg-chat-sidebar dark:bg-gray-700 shadow-sm' : ''}
               `}
               style={{ animationDelay: `${index * 30}ms` }}
             >

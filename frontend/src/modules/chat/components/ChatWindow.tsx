@@ -1,8 +1,8 @@
 /**
  * Janela de chat principal - Estilo WhatsApp Web
  */
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowLeft, MoreVertical, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -15,6 +15,7 @@ import { usePollingFallback } from '../hooks/usePollingFallback';
 import ContactModal from '@/components/contacts/ContactModal';
 import ContactHistory from '@/components/contacts/ContactHistory';
 import { useAuthStore } from '@/stores/authStore';
+import { Button } from '@/components/ui/Button';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -764,7 +765,7 @@ export function ChatWindow() {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
     if (activeConversation && activeConversation.id && conversationId) {
       return (
-        <div ref={chatPanelRef} className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
+        <div ref={chatPanelRef} className="flex-1 flex flex-col items-center justify-center bg-chat-bg dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversa...</p>
@@ -774,7 +775,7 @@ export function ChatWindow() {
     }
     
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
+      <div className="flex-1 flex flex-col items-center justify-center bg-chat-bg dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
         <div className="max-w-md text-center">
           <div className="w-64 h-64 mx-auto mb-8 opacity-20">
             <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400 dark:text-gray-500">
@@ -792,22 +793,25 @@ export function ChatWindow() {
   }
 
   return (
-    <div ref={chatPanelRef} className="flex h-full w-full bg-[#efeae2] dark:bg-gray-900 animate-fade-in overflow-hidden">
+    <div ref={chatPanelRef} className="flex h-full w-full bg-chat-panel dark:bg-gray-900 animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
       <div className="flex flex-col flex-1 min-w-0 transition-all duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 bg-chat-sidebar dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Voltar"
             onClick={() => setActiveConversation(null)}
-            className="md:hidden p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
-            title="Voltar"
+            className="md:hidden rounded-full"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          </button>
+          </Button>
 
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 overflow-hidden flex-shrink-0 relative">
@@ -953,33 +957,40 @@ export function ChatWindow() {
           {/* Botão Histórico (apenas se contato existir) */}
           {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
           {existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Histórico do Contato"
               onClick={() => setShowHistory(!showHistory)}
-              className={`p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
-                showHistory ? 'bg-gray-200 dark:bg-gray-700' : ''
-              }`}
-              title="Histórico do Contato"
+              className={`rounded-full ${showHistory ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
             >
               <Clock className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            </button>
+            </Button>
           )}
           
-          <button 
-            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
-            title="Buscar"
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Buscar"
+            className="rounded-full"
           >
             <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-          </button>
+          </Button>
           
           {/* Menu 3 pontos */}
           <div className="relative" ref={menuRef}>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Menu"
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
-              title="Menu"
+              className="rounded-full"
             >
               <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-            </button>
+            </Button>
 
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50 animate-scale-in">
@@ -1133,14 +1144,9 @@ export function ChatWindow() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
               <h2 id="start-flow-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Iniciar fluxo</h2>
-              <button
-                type="button"
-                onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
-                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400"
-                aria-label="Fechar"
-              >
+              <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }} className="rounded-full">
                 <X className="w-5 h-5" />
-              </button>
+              </Button>
             </div>
             <div className="p-4 overflow-y-auto flex-1">
               {loadingFlows ? (
@@ -1257,15 +1263,9 @@ export function ChatWindow() {
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
               <h2 id="group-info-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações do Grupo</h2>
-              <button
-                onClick={() => {
-                  setShowGroupInfo(false);
-                  setGroupInfo(null);
-                }}
-                className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
-              >
+              <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={() => { setShowGroupInfo(false); setGroupInfo(null); }} className="rounded-full">
                 <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-              </button>
+              </Button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4">

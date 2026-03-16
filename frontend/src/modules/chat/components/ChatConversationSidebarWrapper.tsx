@@ -248,7 +248,7 @@ export function ChatConversationSidebarWrapper() {
                 placeholder="Buscar ou iniciar conversa"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm text-gray-900 dark:text-white"
+                className="w-full pl-8 pr-3 py-2 bg-chat-sidebar dark:bg-gray-800 rounded-lg text-sm text-gray-900 dark:text-white"
               />
             </div>
             <button

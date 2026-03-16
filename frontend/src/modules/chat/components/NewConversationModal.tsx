@@ -436,8 +436,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col animate-scale-in">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Nova Conversa</h2>
