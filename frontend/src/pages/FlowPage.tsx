@@ -198,7 +198,7 @@ export default function FlowPage() {
   const [typebotVariableValues, setTypebotVariableValues] = useState<Record<string, string>>({})
   const [loadingTypebotVariables, setLoadingTypebotVariables] = useState(false)
   const [editFlowVarsExpanded, setEditFlowVarsExpanded] = useState(false)
-  const [editFlowFaqExpanded, setEditFlowFaqExpanded] = useState(false)
+  const [flowFaqExpanded, setFlowFaqExpanded] = useState(false)
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
@@ -1214,6 +1214,27 @@ export default function FlowPage() {
               </Card>
             </motion.div>
           )}
+
+          {/* FAQ Typebot – visível na tela inicial para consulta */}
+          <Card className="rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm overflow-hidden">
+            <button type="button" onClick={() => setFlowFaqExpanded((v) => !v)} className="flex items-center justify-between w-full p-4 text-left text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+              <span className="flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-accent-600 dark:text-accent-400" />
+                Perguntas frequentes – Typebot no Sense
+              </span>
+              {flowFaqExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </button>
+            {flowFaqExpanded && (
+              <ul className="px-4 pb-4 pt-0 space-y-3 text-sm text-gray-600 dark:text-gray-400 border-t border-gray-100 dark:border-gray-700/80">
+                {(FLOW_TYPEBOT_FAQ || []).map((item, i) => (
+                  <li key={i} className="pt-3 first:pt-3">
+                    <p className="font-medium text-gray-800 dark:text-gray-200">{item.pergunta}</p>
+                    <p className="mt-0.5">{item.resposta}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
       </div>
 
@@ -1666,27 +1687,6 @@ export default function FlowPage() {
                       </div>
                     )}
                   </div>
-                </section>
-
-                {/* FAQ Typebot */}
-                <section className="space-y-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
-                  <button type="button" onClick={() => setEditFlowFaqExpanded((v) => !v)} className="flex items-center justify-between w-full py-1.5 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
-                    <span className="flex items-center gap-2">
-                      <HelpCircle className="h-4 w-4" />
-                      Perguntas frequentes – Typebot no Sense
-                    </span>
-                    {editFlowFaqExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                  {editFlowFaqExpanded && (
-                    <ul className="mt-3 space-y-3 text-xs text-gray-600 dark:text-gray-400">
-                      {(FLOW_TYPEBOT_FAQ || []).map((item, i) => (
-                        <li key={i}>
-                          <p className="font-medium text-gray-700 dark:text-gray-300">{item.pergunta}</p>
-                          <p className="mt-0.5">{item.resposta}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </section>
               </div>
 
