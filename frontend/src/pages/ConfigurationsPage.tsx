@@ -1683,7 +1683,9 @@ export default function ConfigurationsPage() {
     }
     setDifySavingKey('catalog_create')
     try {
-      await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      // C15: usar resposta do POST diretamente — atualização otimista sem refetch
+      const { data: created } = await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      setDifyCatalog(prev => [created, ...prev])
       setNewDifyDisplayName('')
       setNewDifyDescription('')
       setNewDifyPublicUrl('')
@@ -1691,8 +1693,7 @@ export default function ConfigurationsPage() {
       setNewDifyDefaultDepartmentId('')
       setNewDifyWaInstanceId('')
       setDifyCreateOpen(false)
-      showSuccessToast('Agente cadastrado')
-      await fetchDifyCatalog()
+      showSuccessToast(created.warning ? `Agente cadastrado (⚠️ ${created.warning})` : 'Agente cadastrado')
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao adicionar item')
     } finally {
@@ -1704,8 +1705,9 @@ export default function ConfigurationsPage() {
     if (!itemId) return
     setDifySavingKey(`catalog_${itemId}`)
     try {
-      await api.patch('/ai/dify/catalog/', { id: itemId, is_active: isActive })
-      await fetchDifyCatalog()
+      // C16: atualização otimista local — sem refetch desnecessário
+      const { data: updated } = await api.patch('/ai/dify/catalog/', { id: itemId, is_active: isActive })
+      setDifyCatalog(prev => prev.map(x => x.id === itemId ? { ...x, ...updated } : x))
       showSuccessToast(isActive ? 'Item ativado' : 'Item desativado')
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao atualizar item')
@@ -1746,11 +1748,12 @@ export default function ConfigurationsPage() {
       if (editDifyApiKey.trim()) {
         payload.api_key = editDifyApiKey.trim()
       }
-      await api.patch('/ai/dify/catalog/', payload)
-      showSuccessToast('Agente atualizado')
+      // C15: usar resposta do PATCH diretamente — atualização otimista sem refetch
+      const { data: updated } = await api.patch('/ai/dify/catalog/', payload)
+      setDifyCatalog(prev => prev.map(x => x.id === editingDifyItemId ? { ...x, ...updated } : x))
+      showSuccessToast(updated.warning ? `Agente atualizado (⚠️ ${updated.warning})` : 'Agente atualizado')
       setEditDifyOpen(false)
       setEditingDifyItemId(null)
-      await fetchDifyCatalog()
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao salvar agente')
     } finally {
@@ -3153,11 +3156,11 @@ export default function ConfigurationsPage() {
                           <button
                             type="button"
                             onClick={() => openEditDifyItem(it)}
-                            className="w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/80 text-gray-700 dark:text-gray-300"
+                            className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/80 ${it.is_active ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 opacity-60'}`}
                           >
                             <span className="block truncate font-medium">{it.display_name || it.dify_app_id}</span>
                             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                              {!it.is_active && <span className="text-xs text-amber-600 dark:text-amber-400">(inativo)</span>}
+                              {!it.is_active && <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">● inativo — não aparece no chat</span>}
                               {dept && (
                                 <span className="text-xs text-violet-600 dark:text-violet-400 truncate max-w-[120px]">
                                   🏢 {dept.name}

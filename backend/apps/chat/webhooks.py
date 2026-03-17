@@ -4074,10 +4074,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 DifyMessageStub,
                             )
                             from apps.chat.models import Conversation as _Conv
-                            from apps.tenancy.models import Tenant as _Tenant
+                            # D4: select_related('tenant') evita query extra para recarregar o tenant
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
-                            _tenant = _Tenant.objects.filter(id=_tenant_id).first()
-                            if _conv and _tenant:
+                            if _conv and _conv.tenant_id:
+                                _tenant = _conv.tenant  # já carregado pelo select_related
                                 # Recarregar wa_instance com conexão fresca da thread
                                 _wa_inst = None
                                 if _wa_instance_id:

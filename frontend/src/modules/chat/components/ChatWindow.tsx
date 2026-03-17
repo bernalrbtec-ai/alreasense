@@ -715,15 +715,23 @@ export function ChatWindow() {
 
   // Badge permanente: buscar estado ativo Dify ao carregar/trocar de conversa
   useEffect(() => {
-    if (!conversationId) { setDifyHeaderState(null); return; }
+    // C13: zerar imediatamente ao trocar de conversa para evitar badge stale da conversa anterior
+    setDifyHeaderState(null);
+    setDifyActiveState(null);
+    if (!conversationId) return;
     let cancelled = false;
     api.get(`/chat/conversations/${conversationId}/dify-agents/`)
       .then((res) => {
         if (cancelled) return;
-        const active = (res?.data as any)?.active_state;
+        const data = res?.data as any;
+        const active = data?.active_state;
         setDifyHeaderState(active?.status === 'active' ? { display_name: active.display_name || 'Dify' } : null);
+        // Pré-popular difyActiveState para quando o modal abrir (evita fetch extra se estado não mudou)
+        if (active?.status === 'active') {
+          setDifyActiveState(active);
+        }
       })
-      .catch(() => { if (!cancelled) setDifyHeaderState(null); });
+      .catch(() => { if (!cancelled) { setDifyHeaderState(null); setDifyActiveState(null); } });
     return () => { cancelled = true; };
   }, [conversationId]);
 

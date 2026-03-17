@@ -4155,6 +4155,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         """
         conversation = self.get_object()
         tenant = conversation.tenant
+        # E4: Dify takeover só funciona em conversas individuais (webhook ignora grupos)
+        if getattr(conversation, 'conversation_type', 'individual') != 'individual':
+            return Response(
+                {'success': False, 'message': 'Agentes Dify só podem ser ativados em conversas individuais.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         data = request.data if isinstance(request.data, dict) else {}
         catalog_id_raw = (data.get('catalog_id') or '').strip()
         if not catalog_id_raw:
@@ -4209,13 +4215,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Para o agente Dify ativo na conversa.
         """
         conversation = self.get_object()
+        tenant = conversation.tenant  # C8: usar objeto carregado (tenant_id FK pode ser None em dados corrompidos)
         try:
             from django.db import connection as _conn, transaction
             with transaction.atomic(), _conn.cursor() as cur:
                 cur.execute(
                     "UPDATE ai_dify_conversation_state SET status = 'stopped', updated_at = now() "
                     "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active'",
-                    [str(conversation.id), str(conversation.tenant_id)]
+                    [str(conversation.id), str(tenant.id)]
                 )
                 affected = cur.rowcount
         except Exception as exc:

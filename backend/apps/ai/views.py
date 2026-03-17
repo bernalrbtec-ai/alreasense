@@ -3314,6 +3314,7 @@ def dify_catalog(request):
 
         # Auto-binding por departamento (opcional): se default_department_id foi definido,
         # faz upsert do vínculo do departamento para este catálogo.
+        _binding_warning = None
         try:
             if item.default_department_id:
                 DifyAssignment.objects.update_or_create(
@@ -3322,11 +3323,9 @@ def dify_catalog(request):
                     scope_id=item.default_department_id,
                     defaults={"catalog": item},
                 )
-            else:
-                # Se não há dept padrão, não cria vínculo automaticamente.
-                pass
         except Exception as e:
-            logger.warning("DifyAssignment auto-binding (POST) falhou: %s", e)
+            logger.error("DifyAssignment auto-binding (POST) falhou para agente %s: %s", item.id, e)
+            _binding_warning = "Agente criado, mas o vínculo com o departamento não pôde ser salvo."
         _dify_audit(
             tenant,
             request.user,
@@ -3339,21 +3338,21 @@ def dify_catalog(request):
                 "default_department_id": str(dept_uuid) if dept_uuid else None,
             },
         )
-        return Response(
-            {
-                "id": str(item.id),
-                "dify_app_id": item.dify_app_id,
-                "display_name": item.display_name,
-                "description": item.description or "",
-                "public_url": item.public_url or "",
-                "is_active": bool(item.is_active),
-                "has_api_key": True,
-                "default_department_id": str(item.default_department_id) if item.default_department_id else None,
-                "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
-                "metadata": item.metadata or {},
-            },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )
+        resp_data = {
+            "id": str(item.id),
+            "dify_app_id": item.dify_app_id,
+            "display_name": item.display_name,
+            "description": item.description or "",
+            "public_url": item.public_url or "",
+            "is_active": bool(item.is_active),
+            "has_api_key": True,
+            "default_department_id": str(item.default_department_id) if item.default_department_id else None,
+            "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
+            "metadata": item.metadata or {},
+        }
+        if _binding_warning:
+            resp_data["warning"] = _binding_warning
+        return Response(resp_data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     # PATCH
     item_id = _parse_uuid(data.get("id"))
@@ -3369,6 +3368,12 @@ def dify_catalog(request):
         item.description = str(data.get("description") or "").strip()
     if "public_url" in data:
         new_public_url = str(data.get("public_url") or "").strip()
+        # E8: replicar validação do POST — /chat/ obrigatório para extrair dify_app_id correto
+        if new_public_url and "/chat/" not in new_public_url:
+            return Response(
+                {"error": "A URL pública deve conter /chat/<app_id>. Exemplo: https://dify.domain.com/chat/WjOslU"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         item.public_url = new_public_url
         # EC-B10: reatualizar dify_app_id quando public_url é alterada
         if new_public_url:
@@ -3433,7 +3438,10 @@ def dify_catalog(request):
                     defaults={"catalog": item},
                 )
     except Exception as e:
-        logger.warning("DifyAssignment auto-binding (PATCH) falhou: %s", e)
+        logger.error("DifyAssignment auto-binding (PATCH) falhou para agente %s: %s", item.id, e)
+        _patch_binding_warning = "Agente atualizado, mas o vínculo com o departamento não pôde ser salvo."
+    else:
+        _patch_binding_warning = None
     _dify_audit(
         tenant,
         request.user,
@@ -3441,8 +3449,7 @@ def dify_catalog(request):
         catalog_id=item.id,
         payload={"display_name": item.display_name, "is_active": bool(item.is_active)},
     )
-    return Response(
-        {
+    patch_resp = {
         "id": str(item.id),
         "dify_app_id": item.dify_app_id,
         "display_name": item.display_name,
@@ -3453,8 +3460,10 @@ def dify_catalog(request):
         "default_department_id": str(item.default_department_id) if item.default_department_id else None,
         "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
         "metadata": item.metadata or {},
-        }
-    )
+    }
+    if _patch_binding_warning:
+        patch_resp["warning"] = _patch_binding_warning
+    return Response(patch_resp)
 
 
 @api_view(["GET", "PUT"])

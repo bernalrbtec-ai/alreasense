@@ -70,8 +70,10 @@ def _update_dify_conversation_id(state_id: str, dify_conversation_id: str) -> bo
     Persiste o dify_conversation_id para manter continuidade da sessão.
     Retorna True se bem-sucedido.
     """
+    from django.db import transaction
     try:
-        with _conn.cursor() as cur:
+        # C2: transaction.atomic() garante commit explícito
+        with transaction.atomic(), _conn.cursor() as cur:
             cur.execute(
                 "UPDATE ai_dify_conversation_state "
                 "SET dify_conversation_id = %s, updated_at = now() "
@@ -98,8 +100,12 @@ def maybe_handle_dify_takeover(
     Verifica se há um agente Dify ativo para a conversa e, se houver,
     encaminha a mensagem do cliente ao Dify e envia a resposta ao WhatsApp.
 
-    Usa SELECT FOR UPDATE via transaction.atomic() para serializar execuções
-    por conversation_id entre múltiplos workers (substitui lock in-memory).
+    Fluxo de execução (otimizado para minimizar tempo de lock):
+    1. Validações rápidas (sem I/O)
+    2. transaction.atomic() + SELECT FOR UPDATE SKIP LOCKED → obtém state_id + catalog_id
+       O lock é liberado IMEDIATAMENTE após sair do bloco (apenas leitura do estado)
+    3. Fora do lock: busca agente ORM + resolve instância WA + chama Dify HTTP
+    4. Persiste dify_conversation_id em transaction curta separada
 
     Retorna True se o takeover foi tratado, False caso contrário.
     """
@@ -108,7 +114,7 @@ def maybe_handle_dify_takeover(
     conv_id = str(conversation.id)
     tenant_id = str(tenant.id)
 
-    # Texto da mensagem
+    # Validações rápidas antes de qualquer I/O
     msg_content = (message.content or '').strip()
     if not msg_content:
         return False
@@ -122,66 +128,67 @@ def maybe_handle_dify_takeover(
         )
         return False
 
-    # Usar transaction.atomic() + SELECT FOR UPDATE para serializar entre workers (C1/C7)
-    # Se outro worker já está processando esta conversa, SKIP LOCKED retorna None imediatamente
+    # ── Fase 1: lock curto — apenas ler o estado ativo ──────────────────────────
+    # SELECT FOR UPDATE SKIP LOCKED serializa entre workers. O bloco é propositalmente
+    # mínimo: só busca o state_id e catalog_id, sem ORM adicional nem I/O externo.
     with transaction.atomic():
         state = _get_active_dify_state(conv_id, tenant_id)
         if not state:
             return False
+        # Capturar tudo que precisamos DENTRO do lock antes de sair da transaction
+        state_id = state['state_id']
+        catalog_id = state['catalog_id']
+        prev_dify_conv_id = state.get('dify_conversation_id')
 
-        try:
-            from apps.ai.models import DifyAppCatalogItem
-            agent = DifyAppCatalogItem.objects.get(
-                id=state['catalog_id'],
-                tenant=tenant,
-                is_active=True,
-            )
-        except Exception as exc:
-            logger.warning("Dify takeover: agente não encontrado (%s)", exc)
-            return False
-
-        # Base URL extraída via urlparse
-        base_url = _extract_dify_base_url(agent.public_url or '')
-        if not base_url:
-            logger.warning("Dify takeover: public_url inválida para agente %s", agent.id)
-            return False
-
-        # Ler a api_key (django-cryptography descriptografa ao acessar o campo)
-        api_key = (agent.api_key_encrypted or '').strip()
-        if not api_key:
-            logger.warning("Dify takeover: api_key vazia para agente %s", agent.id)
-            return False
-
-        # EC-B05: resolver instância WA ANTES de chamar o Dify
-        # (se não houver instância, abortar sem gastar créditos)
-        effective_instance = _resolve_wa_instance(agent, tenant, wa_instance, conversation)
-        if not effective_instance:
-            logger.warning(
-                "Dify takeover: nenhuma instância WA disponível para conversa %s — abortando antes do Dify",
-                conv_id
-            )
-            return False
-
-        # Payload para /v1/chat-messages
-        payload: dict = {
-            'inputs': {},
-            'query': msg_content,
-            'response_mode': 'blocking',
-            'user': f"sense-{conv_id}",
-        }
-        if state.get('dify_conversation_id'):
-            payload['conversation_id'] = state['dify_conversation_id']
-
-    # Chamada HTTP ao Dify FORA da transaction (evita segurar o lock do banco por 30s)
-    dify_answer, new_dify_conv_id = _call_dify_api(base_url, api_key, payload, agent.id)
-
-    if dify_answer is None:
-        # Erro na chamada — já logado em _call_dify_api
+    # ── Fase 2: fora do lock — buscar agente e resolver instância WA ─────────────
+    # D1+D2: ORM query e _resolve_wa_instance fora da transaction para não estender o lock
+    try:
+        from apps.ai.models import DifyAppCatalogItem
+        agent = DifyAppCatalogItem.objects.get(
+            id=catalog_id,
+            tenant=tenant,
+            is_active=True,
+        )
+    except Exception as exc:
+        logger.warning("Dify takeover: agente não encontrado (%s)", exc)
         return False
 
-    # Persistir conversation_id (nova transaction curta)
-    if new_dify_conv_id and new_dify_conv_id != state.get('dify_conversation_id'):
-        _update_dify_conversation_id(state['state_id'], new_dify_conv_id)
+    base_url = _extract_dify_base_url(agent.public_url or '')
+    if not base_url:
+        logger.warning("Dify takeover: public_url inválida para agente %s", agent.id)
+        return False
+
+    api_key = (agent.api_key_encrypted or '').strip()
+    if not api_key:
+        logger.warning("Dify takeover: api_key vazia para agente %s", agent.id)
+        return False
+
+    # EC-B05: resolver instância WA antes de chamar Dify (evita gastar créditos sem destino)
+    effective_instance = _resolve_wa_instance(agent, tenant, wa_instance, conversation)
+    if not effective_instance:
+        logger.warning(
+            "Dify takeover: nenhuma instância WA disponível para conversa %s — abortando antes do Dify",
+            conv_id
+        )
+        return False
+
+    # ── Fase 3: chamada HTTP ao Dify ─────────────────────────────────────────────
+    payload: dict = {
+        'inputs': {},
+        'query': msg_content,
+        'response_mode': 'blocking',
+        'user': f"sense-{conv_id}",
+    }
+    if prev_dify_conv_id:
+        payload['conversation_id'] = prev_dify_conv_id
+
+    dify_answer, new_dify_conv_id = _call_dify_api(base_url, api_key, payload, agent.id)
+    if dify_answer is None:
+        return False
+
+    # ── Fase 4: persistir dify_conversation_id (transaction curta) ───────────────
+    if new_dify_conv_id and new_dify_conv_id != prev_dify_conv_id:
+        _update_dify_conversation_id(state_id, new_dify_conv_id)
 
     if not dify_answer:
         logger.warning(
@@ -191,7 +198,7 @@ def maybe_handle_dify_takeover(
         )
         return True  # takeover tratou a mensagem, mas sem resposta ao cliente
 
-    # Enviar resposta via Evolution API
+    # ── Fase 5: enviar resposta via Evolution API ─────────────────────────────────
     return _send_wa_reply(effective_instance, contact_phone, dify_answer, agent.dify_app_id, conv_id)
 
 
