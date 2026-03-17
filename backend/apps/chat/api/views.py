@@ -4116,15 +4116,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 }
                 for a in agents_qs
             ]
-        except Exception:
+        except Exception as exc:
+            logger.warning("list_dify_agents: erro ao buscar agentes: %s", exc)
             agents = []
 
         active_state = None
         try:
             from django.db import connection as _conn
             with _conn.cursor() as cur:
-                # M7: incluir display_name no join para que o frontend mostre o nome correto
-                # mesmo antes da lista de agentes terminar de carregar
                 cur.execute(
                     "SELECT s.catalog_id, s.dify_conversation_id, s.status, "
                     "COALESCE(c.display_name, c.dify_app_id, '') "
@@ -4141,8 +4140,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         'status': row[2],
                         'display_name': row[3] or '',
                     }
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("list_dify_agents: erro ao buscar active_state: %s", exc)
 
         return Response({'agents': agents, 'active_state': active_state}, status=status.HTTP_200_OK)
 
@@ -4222,7 +4221,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'message': 'Erro ao parar agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if affected == 0:
-            return Response({'success': False, 'message': 'Nenhum agente ativo nesta conversa.'}, status=status.HTTP_200_OK)
+            return Response({'success': False, 'message': 'Nenhum agente ativo nesta conversa.'}, status=status.HTTP_404_NOT_FOUND)
         return Response({'success': True, 'message': 'Agente parado.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])

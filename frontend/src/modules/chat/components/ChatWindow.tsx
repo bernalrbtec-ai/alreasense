@@ -1338,10 +1338,14 @@ export function ChatWindow() {
                           if (!conversationId) return;
                           setStopDifyLoading(true);
                           try {
-                            await api.post(`/chat/conversations/${conversationId}/stop-dify-agent/`);
-                            toast.success('Agente parado.');
-                            setDifyActiveState(null);
-                            setSelectedDifyAgentId(null);
+                            const res = await api.post(`/chat/conversations/${conversationId}/stop-dify-agent/`);
+                            if (res?.data?.success) {
+                              toast.success('Agente parado.');
+                              setDifyActiveState(null);
+                              setSelectedDifyAgentId(null);
+                            } else {
+                              toast.error(res?.data?.message || 'Erro ao parar agente.');
+                            }
                           } catch (e: any) {
                             toast.error(e?.response?.data?.message || 'Erro ao parar agente.');
                           } finally {
@@ -1402,7 +1406,7 @@ export function ChatWindow() {
                   </button>
                   <button
                     type="button"
-                    disabled={loadingDifyAgents || difyAgents.length === 0 || !selectedDifyAgentId || startDifyLoading || difyActiveState?.status === 'active'}
+                    disabled={loadingDifyAgents || difyAgents.length === 0 || !selectedDifyAgentId || startDifyLoading}
                     onClick={async () => {
                       if (!selectedDifyAgentId || !conversationId) return;
                       setStartDifyLoading(true);
@@ -1424,7 +1428,11 @@ export function ChatWindow() {
                     }}
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    {startDifyLoading ? 'Iniciando...' : difyActiveState?.status === 'active' ? 'Agente já ativo' : 'Ativar agente'}
+                    {startDifyLoading
+                      ? 'Iniciando...'
+                      : difyActiveState?.status === 'active' && selectedDifyAgentId !== difyActiveState.catalog_id
+                        ? 'Trocar agente'
+                        : 'Ativar agente'}
                   </button>
                 </div>
               </>

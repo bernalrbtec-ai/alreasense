@@ -3172,14 +3172,20 @@ def dify_settings(request):
     enabled = _normalize_bool(enabled_raw)
     if enabled is None:
         enabled = bool(settings_obj.enabled)
-    base_url = str(data.get("base_url") or "").strip()
-    if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
-        return Response({"error": "base_url deve iniciar com http:// ou https://."}, status=status.HTTP_400_BAD_REQUEST)
 
+    update_fields = ["enabled", "updated_at"]
     settings_obj.enabled = enabled
-    settings_obj.base_url = base_url
+
+    # PATCH semântico: só atualiza base_url se explicitamente enviada
+    if "base_url" in data:
+        base_url = str(data.get("base_url") or "").strip()
+        if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
+            return Response({"error": "base_url deve iniciar com http:// ou https://."}, status=status.HTTP_400_BAD_REQUEST)
+        settings_obj.base_url = base_url
+        update_fields.append("base_url")
+
     settings_obj.updated_at = timezone.now()
-    settings_obj.save(update_fields=["enabled", "base_url", "updated_at"])
+    settings_obj.save(update_fields=update_fields)
     _dify_audit(tenant, request.user, "settings_update", payload={"enabled": enabled, "base_url": base_url})
 
     return Response(
@@ -3197,10 +3203,11 @@ def dify_catalog(request):
     """GET: lista catálogo; POST: cria item; PATCH: atualizar/ativar/desativar (soft-delete)."""
     from django.db.utils import ProgrammingError, OperationalError
 
-    _TABLE_MISSING_RESPONSE = Response(
-        {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
-        status=status.HTTP_503_SERVICE_UNAVAILABLE,
-    )
+    def _table_missing_response():
+        return Response(
+            {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
 
     tenant = request.user.tenant
     try:
@@ -3226,14 +3233,14 @@ def dify_catalog(request):
                 )
             return Response(out)
     except (ProgrammingError, OperationalError):
-        return _TABLE_MISSING_RESPONSE
+        return _table_missing_response()
 
     data = request.data or {}
-    # M6: proteger POST e PATCH contra tabela inexistente também
+    # Proteger POST e PATCH contra tabela inexistente
     try:
         DifyAppCatalogItem.objects.filter(tenant=tenant).exists()
     except (ProgrammingError, OperationalError):
-        return _TABLE_MISSING_RESPONSE
+        return _table_missing_response()
     if request.method == "POST":
         display_name = str(data.get("display_name") or "").strip()
         public_url = str(data.get("public_url") or "").strip()
@@ -3375,23 +3382,14 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
+    patch_fields = ["display_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
     api_key_raw = data.get("api_key")
     if api_key_raw is not None and str(api_key_raw).strip():
-        # C3: só atualiza se vier uma chave não-vazia (evita apagar a chave existente acidentalmente)
+        # Só atualiza a chave se vier uma string não-vazia (evita apagar chave existente)
         item.api_key_encrypted = str(api_key_raw).strip()
+        patch_fields.append("api_key_encrypted")
     item.updated_at = timezone.now()
-    item.save(
-        update_fields=[
-            "display_name",
-            "description",
-            "public_url",
-            "is_active",
-            "default_department_id",
-            "whatsapp_instance_id",
-            "api_key_encrypted",
-            "updated_at",
-        ]
-    )
+    item.save(update_fields=patch_fields)
 
     # Auto-binding por departamento (PATCH):
     # - Se setou dept padrão => upsert do vínculo desse dept

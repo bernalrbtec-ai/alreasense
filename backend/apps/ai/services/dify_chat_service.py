@@ -5,11 +5,25 @@ e envia a resposta de volta via WhatsApp.
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlparse
+
 import httpx
 
 from django.db import connection as _conn
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_dify_base_url(public_url: str) -> str:
+    """
+    Extrai a base URL da URL pública do agente Dify.
+    Ex: https://dify.domain.com/chat/WjOslUArZI8QkGRn → https://dify.domain.com
+    Usa urlparse para garantir robustez independente do path completo.
+    """
+    parsed = urlparse(public_url.strip())
+    if not parsed.scheme or not parsed.netloc:
+        return ''
+    return f"{parsed.scheme}://{parsed.netloc}"
 
 
 def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
@@ -75,20 +89,16 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
     if not msg_content:
         return False
 
-    # Base URL extraída da public_url (https://dify.domain.com/chat/APP_ID → https://dify.domain.com)
-    public_url = (agent.public_url or '').strip().rstrip('/')
-    # Obtém base URL removendo o path /chat/<app_id>
-    parts = public_url.split('/chat/')
-    base_url = parts[0].rstrip('/')
+    # Base URL extraída via urlparse (robusto para qualquer estrutura de path)
+    base_url = _extract_dify_base_url(agent.public_url or '')
     if not base_url:
         logger.warning("Dify takeover: public_url inválida para agente %s", agent.id)
         return False
 
-    # API key descriptografada
-    try:
-        api_key = str(agent.api_key_encrypted)
-    except Exception:
-        logger.warning("Dify takeover: erro ao decriptar api_key para agente %s", agent.id)
+    # Ler a api_key (django-cryptography descriptografa ao acessar o campo)
+    api_key = (agent.api_key_encrypted or '').strip()
+    if not api_key:
+        logger.warning("Dify takeover: api_key vazia para agente %s", agent.id)
         return False
 
     # Payload Dify /v1/chat-messages
@@ -127,12 +137,13 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
         logger.error("Dify takeover: erro na chamada Dify (%s)", exc, exc_info=True)
         return False
 
-    if not dify_answer:
-        return False
-
-    # Persistir conversation_id do Dify para próximas mensagens
+    # Persistir conversation_id mesmo que resposta seja vazia (mantém sessão)
     if new_dify_conv_id and new_dify_conv_id != state.get('dify_conversation_id'):
         _update_dify_conversation_id(state['state_id'], new_dify_conv_id)
+
+    if not dify_answer:
+        logger.info("Dify takeover: resposta vazia do agente %s (conversa %s)", agent.id, conversation.id)
+        return True  # takeover tratado, mas sem mensagem para enviar
 
     # Determinar instância WA para enviar a resposta
     effective_instance = None
