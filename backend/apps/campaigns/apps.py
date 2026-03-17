@@ -153,20 +153,22 @@ class CampaignsConfig(AppConfig):
                 from django.utils import timezone
                 from datetime import timedelta
                 
-                logger.info("=" * 60)
-                logger.info("⏰ [SCHEDULER] Iniciando verificador de campanhas agendadas")
-                logger.info("🔔 [SCHEDULER] Verificador de notificações de tarefas integrado")
-                logger.info("=" * 60)
+                # Evitar poluir logs em produção: logar início apenas em DEBUG
+                logger.debug("⏰ [SCHEDULER] Iniciando verificador de campanhas agendadas")
+                logger.debug("🔔 [SCHEDULER] Verificador de notificações de tarefas integrado")
                 
                 while True:
                     try:
                         now = timezone.now()
                         
-                        # ✅ DEBUG: Log a cada ciclo para garantir que está rodando
-                        # Log apenas a cada 30 segundos para não poluir muito
+                        # Heartbeat do scheduler: manter apenas em DEBUG (muito ruído em produção)
                         current_second = int(time.time()) % 60
                         if current_second == 0 or current_second == 30:
-                            logger.info(f'🔄 [SCHEDULER] Ciclo de verificação - Hora: {now.strftime("%H:%M:%S")} (UTC) / {timezone.localtime(now).strftime("%H:%M:%S")} (Local)')
+                            logger.debug(
+                                '🔄 [SCHEDULER] Ciclo de verificação - Hora: %s (UTC) / %s (Local)',
+                                now.strftime("%H:%M:%S"),
+                                timezone.localtime(now).strftime("%H:%M:%S"),
+                            )
                         
                         # ========== VERIFICAR CAMPANHAS AGENDADAS ==========
                         # Buscar campanhas agendadas que chegaram na hora
@@ -179,13 +181,16 @@ class CampaignsConfig(AppConfig):
                         scheduled_count = scheduled_campaigns.count()
                         
                         if scheduled_count > 0:
-                            logger.info(f"⏰ [SCHEDULER] Encontradas {scheduled_count} campanha(s) agendada(s) para iniciar")
+                            logger.info("⏰ [SCHEDULER] Encontradas %s campanha(s) agendada(s) para iniciar", scheduled_count)
                             
                             consumer = get_rabbitmq_consumer()
                             
                             for campaign in scheduled_campaigns:
                                 try:
-                                    logger.info(f"🚀 [SCHEDULER] Iniciando campanha agendada: {campaign.id} - {campaign.name} (agendada para {campaign.scheduled_at})")
+                                    logger.info(
+                                        "🚀 [SCHEDULER] Iniciando campanha agendada: %s - %s (agendada para %s)",
+                                        campaign.id, campaign.name, campaign.scheduled_at,
+                                    )
                                     
                                     # Iniciar campanha (muda status para 'running')
                                     campaign.start()

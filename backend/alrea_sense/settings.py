@@ -283,15 +283,17 @@ REDIS_HOST = config('REDISHOST', default='localhost')
 REDIS_PORT = config('REDISPORT', default='6379')
 REDIS_USER = config('REDISUSER', default='default')
 
-# Debug das variáveis de ambiente
-print(f"[DEBUG] REDIS_URL env: {os.environ.get('REDIS_URL', 'Not set')}")
-print(f"[DEBUG] REDISHOST env: {os.environ.get('REDISHOST', 'Not set')}")
-print(f"[DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD') else 'Not set'}")
+# Debug das variáveis de ambiente (evitar poluir logs em produção)
+if DEBUG:
+    print(f"[DEBUG] REDIS_URL env: {os.environ.get('REDIS_URL', 'Not set')}")
+    print(f"[DEBUG] REDISHOST env: {os.environ.get('REDISHOST', 'Not set')}")
+    print(f"[DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD') else 'Not set'}")
 
 # Usar REDIS_URL se disponível, senão construir a partir das variáveis
 if REDIS_URL and REDIS_URL != '':
     # Usar REDIS_URL diretamente do Railway
-    print("[OK] [REDIS] Usando REDIS_URL diretamente")
+    if DEBUG:
+        print("[OK] [REDIS] Usando REDIS_URL diretamente")
     
     # Extrair informações da REDIS_URL para as variáveis individuais
     try:
@@ -305,19 +307,23 @@ if REDIS_URL and REDIS_URL != '':
             REDIS_USER = parsed.username
         if parsed.password:
             REDIS_PASSWORD = parsed.password
-        print(f"[CONFIG] [REDIS] Extraído da URL - Host: {REDIS_HOST}, Port: {REDIS_PORT}, User: {REDIS_USER}")
+        if DEBUG:
+            print(f"[CONFIG] [REDIS] Extraído da URL - Host: {REDIS_HOST}, Port: {REDIS_PORT}, User: {REDIS_USER}")
     except Exception as e:
-        print(f"[WARN] [REDIS] Erro ao extrair info da URL: {e}")
+        if DEBUG:
+            print(f"[WARN] [REDIS] Erro ao extrair info da URL: {e}")
         
 else:
     # Construir URL do Redis a partir das variáveis individuais
     if REDIS_HOST and REDIS_HOST != 'localhost':
         if REDIS_PASSWORD:
             REDIS_URL = f"redis://{REDIS_USER}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
-            print("[OK] [REDIS] Construindo URL com password")
+            if DEBUG:
+                print("[OK] [REDIS] Construindo URL com password")
         else:
             REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
-            print("[OK] [REDIS] Construindo URL sem password")
+            if DEBUG:
+                print("[OK] [REDIS] Construindo URL sem password")
     else:
         # Se não conseguir construir a URL, usar fallback localhost apenas em DEBUG
         if DEBUG:
@@ -325,13 +331,14 @@ else:
             print("[WARN] [REDIS] Usando localhost como fallback (DEBUG mode)")
         else:
             REDIS_URL = ''
-            print("[ERROR] [REDIS] Erro: Redis não configurado em produção!")
+            # Não usar print em produção (ruído); deixar falhar via checks/health se necessário.
 
-print(f"[CONFIG] [SETTINGS] REDIS_URL: {REDIS_URL[:50]}..." if REDIS_URL else "[CONFIG] [SETTINGS] REDIS_URL: Not configured...")
-print(f"[CONFIG] [SETTINGS] REDIS_HOST: {REDIS_HOST}")
-print(f"[CONFIG] [SETTINGS] REDIS_PORT: {REDIS_PORT}")
-print(f"[CONFIG] [SETTINGS] REDIS_USER: {REDIS_USER}")
-print(f"[CONFIG] [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
+if DEBUG:
+    print(f"[CONFIG] [SETTINGS] REDIS_URL: {REDIS_URL[:50]}..." if REDIS_URL else "[CONFIG] [SETTINGS] REDIS_URL: Not configured...")
+    print(f"[CONFIG] [SETTINGS] REDIS_HOST: {REDIS_HOST}")
+    print(f"[CONFIG] [SETTINGS] REDIS_PORT: {REDIS_PORT}")
+    print(f"[CONFIG] [SETTINGS] REDIS_USER: {REDIS_USER}")
+    print(f"[CONFIG] [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
 
 # ✅ IMPROVEMENT: Django Cache Configuration (Redis)
 # Usa database /2 para não conflitar com Channels (/1) e Chat Streams (/3)
@@ -346,7 +353,8 @@ if REDIS_URL:
             'TIMEOUT': 300,  # 5 minutos default
         }
     }
-    print(f"[OK] [CACHE] Configurado com Redis: {CACHES['default']['LOCATION'][:50]}...")
+    if DEBUG:
+        print(f"[OK] [CACHE] Configurado com Redis: {CACHES['default']['LOCATION'][:50]}...")
 else:
     # Fallback para cache local em desenvolvimento (sem Redis)
     CACHES = {
@@ -355,7 +363,8 @@ else:
             'LOCATION': 'unique-snowflake',
         }
     }
-    print("[WARN] [CACHE] Redis não configurado, usando cache local (LocMemCache)")
+    if DEBUG:
+        print("[WARN] [CACHE] Redis não configurado, usando cache local (LocMemCache)")
 
 # Redis Streams (Chat Send Pipeline)
 CHAT_STREAM_REDIS_URL = config(
@@ -381,11 +390,13 @@ CHAT_STREAM_RECLAIM_IDLE_MS = config('CHAT_STREAM_RECLAIM_IDLE_MS', default=6000
 CHAT_STREAM_BLOCK_TIMEOUT_MS = config('CHAT_STREAM_BLOCK_TIMEOUT_MS', default=5000, cast=int)  # 5s
 
 if CHAT_STREAM_REDIS_URL:
-    print(f"[OK] [CHAT STREAM] URL configurada: {CHAT_STREAM_REDIS_URL[:60]}...")
-    print(f"[OK] [CHAT STREAM] Grupo: {CHAT_STREAM_CONSUMER_GROUP}")
-    print(f"[OK] [CHAT STREAM] Stream send: {CHAT_STREAM_SEND_NAME}")
+    if DEBUG:
+        print(f"[OK] [CHAT STREAM] URL configurada: {CHAT_STREAM_REDIS_URL[:60]}...")
+        print(f"[OK] [CHAT STREAM] Grupo: {CHAT_STREAM_CONSUMER_GROUP}")
+        print(f"[OK] [CHAT STREAM] Stream send: {CHAT_STREAM_SEND_NAME}")
 else:
-    print("[WARN] [CHAT STREAM] CHAT_STREAM_REDIS_URL não configurada. Fluxo de envio usará Redis padrão.")
+    if DEBUG:
+        print("[WARN] [CHAT STREAM] CHAT_STREAM_REDIS_URL não configurada. Fluxo de envio usará Redis padrão.")
 
 # Channels - Using Redis URL
 CHANNEL_LAYERS = {

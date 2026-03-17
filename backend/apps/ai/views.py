@@ -1194,11 +1194,11 @@ def secretary_profile(request):
 
     if 'form_data' in data:
         fd = data.get('form_data')
+        # Evitar logar conteúdo completo (pode conter PII); manter apenas chaves/tamanho em INFO.
         logger.info(
-            "[SECRETARY PROFILE PUT] Recebido form_data: keys=%s, tamanho=%s, dados=%s",
+            "[SECRETARY PROFILE PUT] Recebido form_data: keys=%s, tamanho=%s",
             list(fd.keys()) if isinstance(fd, dict) else 'N/A',
             len(str(fd)) if fd else 0,
-            fd  # Log completo dos dados recebidos
         )
         sanitized, err = _validate_secretary_form_data(fd)
         if err:
@@ -1206,18 +1206,16 @@ def secretary_profile(request):
             logger.warning("[SECRETARY PROFILE PUT] Erro na validação: %s", err)
         else:
             logger.info(
-                "[SECRETARY PROFILE PUT] form_data sanitizado: keys=%s, tamanho=%s, dados=%s",
+                "[SECRETARY PROFILE PUT] form_data sanitizado: keys=%s, tamanho=%s",
                 list(sanitized.keys()) if isinstance(sanitized, dict) else 'N/A',
                 len(str(sanitized)) if sanitized else 0,
-                sanitized  # Log completo dos dados sanitizados
             )
-            # ✅ LOG ESPECÍFICO: Verificar se email e business_area estão presentes
-            if isinstance(sanitized, dict):
-                logger.info(
-                    "[SECRETARY PROFILE PUT] Campos específicos: email=%s, business_area=%s",
-                    sanitized.get('email', 'NÃO ENVIADO'),
-                    sanitized.get('business_area', 'NÃO ENVIADO')
-                )
+            # Se precisar inspecionar valores, use DEBUG localmente; em produção isso polui e pode expor PII.
+            logger.debug(
+                "[SECRETARY PROFILE PUT] Campos específicos: email=%s, business_area=%s",
+                sanitized.get('email', 'NÃO ENVIADO') if isinstance(sanitized, dict) else 'N/A',
+                sanitized.get('business_area', 'NÃO ENVIADO') if isinstance(sanitized, dict) else 'N/A',
+            )
             profile.form_data = sanitized
 
     if 'prompt' in data:
