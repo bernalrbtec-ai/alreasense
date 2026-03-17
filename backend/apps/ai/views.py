@@ -3375,14 +3375,20 @@ def dify_assignments(request):
     tenant = request.user.tenant
     if request.method == "GET":
         try:
-            assignments = (
+            qs = (
                 DifyAssignment.objects.select_related("catalog")
                 .filter(tenant=tenant)
                 .order_by("scope_type", "scope_id")
             )
+            # Forçar avaliação dentro do try para capturar "relation does not exist"
+            assignments = list(qs)
         except (ProgrammingError, OperationalError):
             return Response([])
-        dept_ids = [a.scope_id for a in assignments if a.scope_type == DifyAssignment.SCOPE_DEPARTMENT and a.scope_id]
+        dept_ids = [
+            a.scope_id
+            for a in assignments
+            if a.scope_type == DifyAssignment.SCOPE_DEPARTMENT and a.scope_id
+        ]
         dept_map = {}
         if dept_ids:
             for d in Department.objects.filter(id__in=dept_ids):
