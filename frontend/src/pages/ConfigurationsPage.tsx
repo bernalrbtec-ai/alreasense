@@ -222,6 +222,28 @@ interface AiSettings {
   n8n_models_webhook_url: string
 }
 
+interface DifySettings {
+  enabled: boolean
+  base_url: string
+  api_key_source?: string
+}
+
+interface DifyCatalogItem {
+  id: string
+  dify_app_id: string
+  display_name: string
+  is_active: boolean
+}
+
+interface DifyAssignment {
+  id: string
+  scope_type: 'inbox' | 'department'
+  scope_id: string | null
+  catalog_id: string
+  catalog?: DifyCatalogItem | null
+  department_name?: string | null
+}
+
 interface SecretaryProfile {
   form_data: Record<string, unknown>
   prompt: string
@@ -299,7 +321,7 @@ export default function ConfigurationsPage() {
   const isTenantAdmin = Boolean(user?.is_admin || user?.role === 'admin' || user?.is_superuser)
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'flow' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'agentes' | 'rag-memories' | 'auditoria-ia'>('config')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'agentes' | 'dify' | 'rag-memories' | 'auditoria-ia'>('config')
   // Estados para sub-tab Agentes (LibreChat)
   const [librechatAgents, setLibrechatAgents] = useState<Array<{ id: string; name: string }>>([])
   const [librechatAvailable, setLibrechatAvailable] = useState(false)
@@ -317,6 +339,17 @@ export default function ConfigurationsPage() {
   const [assignmentSaving, setAssignmentSaving] = useState<string | null>(null)
   const [assignmentDeleting, setAssignmentDeleting] = useState<string | null>(null)
   const [assignmentToDelete, setAssignmentToDelete] = useState<{ id: string; scopeLabel: string } | null>(null)
+
+  // Estados para sub-tab Dify (catálogo + vínculo por depto)
+  const [difySettings, setDifySettings] = useState<DifySettings | null>(null)
+  const [difySettingsLoading, setDifySettingsLoading] = useState(false)
+  const [difyCatalog, setDifyCatalog] = useState<DifyCatalogItem[]>([])
+  const [difyCatalogLoading, setDifyCatalogLoading] = useState(false)
+  const [difyAssignments, setDifyAssignments] = useState<DifyAssignment[]>([])
+  const [difyAssignmentsLoading, setDifyAssignmentsLoading] = useState(false)
+  const [difySavingKey, setDifySavingKey] = useState<string | null>(null)
+  const [newDifyAppId, setNewDifyAppId] = useState('')
+  const [newDifyDisplayName, setNewDifyDisplayName] = useState('')
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -680,6 +713,11 @@ export default function ConfigurationsPage() {
     if (activeTab === 'ai' && aiSubTab === 'agentes' && isTenantAdmin) {
       loadLibrechatAgents()
       loadAgentAssignments()
+    }
+    if (activeTab === 'ai' && aiSubTab === 'dify' && isTenantAdmin) {
+      fetchDifySettings()
+      fetchDifyCatalog()
+      fetchDifyAssignments()
     }
     if (activeTab === 'instances') {
       fetchMetaTemplates()
@@ -1597,6 +1635,106 @@ export default function ConfigurationsPage() {
       }
     } finally {
       setSecretaryProfileLoading(false)
+    }
+  }
+
+  const fetchDifySettings = async () => {
+    try {
+      setDifySettingsLoading(true)
+      const res = await api.get<DifySettings>('/ai/dify/settings/')
+      setDifySettings(res.data)
+    } catch (e: any) {
+      setDifySettings(null)
+      if (e.response?.status === 403) showErrorToast('Apenas administradores podem acessar esta configuração')
+      else showErrorToast(e.response?.data?.error || 'Erro ao carregar configurações do Dify')
+    } finally {
+      setDifySettingsLoading(false)
+    }
+  }
+
+  const saveDifySettings = async () => {
+    if (!difySettings) return
+    const toastId = showLoadingToast('salvar', 'Dify')
+    try {
+      const payload = { enabled: difySettings.enabled, base_url: difySettings.base_url }
+      const res = await api.patch<DifySettings>('/ai/dify/settings/', payload)
+      setDifySettings(res.data)
+      updateToastSuccess(toastId, 'salvar', 'Dify')
+    } catch (e: any) {
+      updateToastError(toastId, 'salvar', 'Dify', e)
+    }
+  }
+
+  const fetchDifyCatalog = async () => {
+    try {
+      setDifyCatalogLoading(true)
+      const res = await api.get<DifyCatalogItem[]>('/ai/dify/catalog/')
+      setDifyCatalog(Array.isArray(res.data) ? res.data : [])
+    } catch (e: any) {
+      setDifyCatalog([])
+      showErrorToast(e.response?.data?.error || 'Erro ao carregar catálogo Dify')
+    } finally {
+      setDifyCatalogLoading(false)
+    }
+  }
+
+  const createDifyCatalogItem = async () => {
+    const dify_app_id = newDifyAppId.trim()
+    const display_name = newDifyDisplayName.trim()
+    if (!dify_app_id) return
+    setDifySavingKey('catalog_create')
+    try {
+      await api.post('/ai/dify/catalog/', { dify_app_id, display_name })
+      setNewDifyAppId('')
+      setNewDifyDisplayName('')
+      showSuccessToast('Item adicionado ao catálogo')
+      await fetchDifyCatalog()
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao adicionar item')
+    } finally {
+      setDifySavingKey(null)
+    }
+  }
+
+  const setDifyCatalogItemActive = async (itemId: string, isActive: boolean) => {
+    if (!itemId) return
+    setDifySavingKey(`catalog_${itemId}`)
+    try {
+      await api.patch('/ai/dify/catalog/', { id: itemId, is_active: isActive })
+      await fetchDifyCatalog()
+      showSuccessToast(isActive ? 'Item ativado' : 'Item desativado')
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao atualizar item')
+    } finally {
+      setDifySavingKey(null)
+    }
+  }
+
+  const fetchDifyAssignments = async () => {
+    try {
+      setDifyAssignmentsLoading(true)
+      const res = await api.get<DifyAssignment[]>('/ai/dify/assignments/')
+      setDifyAssignments(Array.isArray(res.data) ? res.data : [])
+    } catch (e: any) {
+      setDifyAssignments([])
+      showErrorToast(e.response?.data?.error || 'Erro ao carregar vínculos Dify')
+    } finally {
+      setDifyAssignmentsLoading(false)
+    }
+  }
+
+  const saveDifyAssignment = async (scopeType: 'department' | 'inbox', scopeId: string | null, catalogId: string) => {
+    if (!catalogId) return
+    const key = scopeType === 'inbox' ? 'dify_inbox' : `dify_${scopeId ?? ''}`
+    setDifySavingKey(key)
+    try {
+      await api.put('/ai/dify/assignments/', { scope_type: scopeType, scope_id: scopeId, catalog_id: catalogId })
+      showSuccessToast('Vínculo salvo')
+      await fetchDifyAssignments()
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao salvar vínculo')
+    } finally {
+      setDifySavingKey(null)
     }
   }
 
@@ -2703,6 +2841,14 @@ export default function ConfigurationsPage() {
             </button>
             <button
               type="button"
+              onClick={() => setAiSubTab('dify')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'dify' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+            >
+              <Sparkles className="h-4 w-4" />
+              Dify
+            </button>
+            <button
+              type="button"
               onClick={() => setAiSubTab('rag-memories')}
               className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
             >
@@ -2862,6 +3008,156 @@ export default function ConfigurationsPage() {
                   />
                 </>
               )}
+            </div>
+          ) : aiSubTab === 'dify' ? (
+            <div className="space-y-6">
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Dify</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Catálogo manual de apps/agentes e vínculo por departamento. A API key é lida do produto <span className="font-mono">dify</span> no billing.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fetchDifySettings()
+                      fetchDifyCatalog()
+                      fetchDifyAssignments()
+                    }}
+                    disabled={difySettingsLoading || difyCatalogLoading || difyAssignmentsLoading}
+                  >
+                    {difySettingsLoading || difyCatalogLoading || difyAssignmentsLoading ? 'Atualizando...' : 'Atualizar'}
+                  </Button>
+                </div>
+
+                {difySettingsLoading && !difySettings ? (
+                  <div className="flex items-center justify-center h-24">
+                    <LoadingSpinner />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="dify_enabled"
+                        type="checkbox"
+                        checked={Boolean(difySettings?.enabled)}
+                        onChange={(e) =>
+                          setDifySettings((prev) => ({ ...(prev || { enabled: false, base_url: '' }), enabled: e.target.checked }))
+                        }
+                      />
+                      <Label htmlFor="dify_enabled">Habilitar Dify</Label>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="dify_base_url">Base URL</Label>
+                      <Input
+                        id="dify_base_url"
+                        value={difySettings?.base_url ?? ''}
+                        onChange={(e) =>
+                          setDifySettings((prev) => ({ ...(prev || { enabled: false, base_url: '' }), base_url: e.target.value }))
+                        }
+                        placeholder="https://seu-dify.exemplo"
+                      />
+                      {difySettings?.api_key_source && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">API key: {difySettings.api_key_source}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Button type="button" onClick={() => void saveDifySettings()} disabled={!difySettings}>
+                        <Save className="h-4 w-4 mr-1" />
+                        Salvar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Catálogo</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div>
+                    <Label htmlFor="dify_new_app_id">App ID</Label>
+                    <Input id="dify_new_app_id" value={newDifyAppId} onChange={(e) => setNewDifyAppId(e.target.value)} placeholder="app_id do Dify" />
+                  </div>
+                  <div>
+                    <Label htmlFor="dify_new_display_name">Nome</Label>
+                    <Input id="dify_new_display_name" value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                  </div>
+                  <div className="flex items-end">
+                    <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create' || !newDifyAppId.trim()}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      {difySavingKey === 'catalog_create' ? 'Adicionando...' : 'Adicionar'}
+                    </Button>
+                  </div>
+                </div>
+
+                {difyCatalogLoading && difyCatalog.length === 0 ? (
+                  <div className="flex items-center justify-center h-24">
+                    <LoadingSpinner />
+                  </div>
+                ) : difyCatalog.length === 0 ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum item no catálogo.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {difyCatalog.map((it) => (
+                      <li key={it.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div className="min-w-[220px]">
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                            {it.display_name || it.dify_app_id}{' '}
+                            {!it.is_active && <span className="text-xs text-amber-700 dark:text-amber-300">(inativo)</span>}
+                          </div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{it.dify_app_id}</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => void setDifyCatalogItemActive(it.id, !it.is_active)} disabled={difySavingKey === `catalog_${it.id}`}>
+                            {difySavingKey === `catalog_${it.id}` ? 'Salvando...' : it.is_active ? 'Desativar' : 'Ativar'}
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Vínculo por departamento</h3>
+                {departments.length === 0 ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum departamento. Crie em Equipe / Departamentos.</p>
+                ) : (
+                  <ul className="space-y-3">
+                    {departments.map((dept) => {
+                      const assignment = difyAssignments.find((a) => a.scope_type === 'department' && a.scope_id === dept.id)
+                      const selectedCatalogId = assignment?.catalog_id ?? ''
+                      const activeCatalog = difyCatalog.filter((c) => c.is_active)
+                      return (
+                        <li key={dept.id} className="flex flex-wrap items-end gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                          <span className="w-32 font-medium text-gray-700 dark:text-gray-300 truncate">{dept.name}</span>
+                          <select
+                            value={selectedCatalogId}
+                            onChange={(e) => {
+                              const v = e.target.value
+                              if (v) void saveDifyAssignment('department', dept.id, v)
+                            }}
+                            disabled={difySavingKey === `dify_${dept.id}`}
+                            className="flex-1 min-w-[220px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm disabled:opacity-60"
+                          >
+                            <option value="">{activeCatalog.length ? 'Selecione um item…' : 'Catálogo vazio'}</option>
+                            {activeCatalog.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.display_name || c.dify_app_id}
+                              </option>
+                            ))}
+                          </select>
+                          {difySavingKey === `dify_${dept.id}` ? <span className="text-sm text-gray-500 dark:text-gray-400">Salvando...</span> : null}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </Card>
             </div>
           ) : aiSubTab === 'auditoria-ia' ? (
             <Card className="p-6">

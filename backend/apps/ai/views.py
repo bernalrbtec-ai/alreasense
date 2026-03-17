@@ -32,6 +32,10 @@ from apps.ai.models import (
     AiTranscriptionDailyMetric,
     ConversationSummary,
     ConsolidationRecord,
+    DifySettings,
+    DifyAppCatalogItem,
+    DifyAssignment,
+    DifyAuditLog,
 )
 from apps.tenancy.models import Tenant
 from apps.connections.webhook_cache import get_redis_client
@@ -3114,3 +3118,279 @@ def agent_assignment_delete(request, assignment_id):
         return Response({"error": "Tabela de associações não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     assignment.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _dify_audit(
+    tenant,
+    user,
+    action: str,
+    scope_type: str | None = None,
+    scope_id: uuid.UUID | None = None,
+    catalog_id: uuid.UUID | None = None,
+    payload: dict | None = None,
+) -> None:
+    try:
+        DifyAuditLog.objects.create(
+            tenant=tenant,
+            user_id=(getattr(user, "id", None) if user else None),
+            action=action,
+            scope_type=scope_type,
+            scope_id=scope_id,
+            catalog_id=catalog_id,
+            payload=payload or {},
+        )
+    except Exception:
+        pass
+
+
+@api_view(["GET", "PUT", "PATCH"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def dify_settings(request):
+    """GET/PATCH: settings do Dify por tenant (enabled/base_url)."""
+    from django.db.utils import ProgrammingError, OperationalError
+
+    tenant = request.user.tenant
+    try:
+        settings_obj, _ = DifySettings.objects.get_or_create(tenant=tenant)
+    except (ProgrammingError, OperationalError):
+        return Response(
+            {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    if request.method == "GET":
+        return Response(
+            {
+                "enabled": bool(getattr(settings_obj, "enabled", False)),
+                "base_url": (getattr(settings_obj, "base_url", "") or ""),
+                "api_key_source": "billing_tenant_product.api_key(slug=dify)",
+            }
+        )
+
+    data = request.data or {}
+    enabled_raw = data.get("enabled")
+    enabled = _normalize_bool(enabled_raw)
+    if enabled is None:
+        enabled = bool(settings_obj.enabled)
+    base_url = str(data.get("base_url") or "").strip()
+    if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return Response({"error": "base_url deve iniciar com http:// ou https://."}, status=status.HTTP_400_BAD_REQUEST)
+
+    settings_obj.enabled = enabled
+    settings_obj.base_url = base_url
+    settings_obj.updated_at = timezone.now()
+    settings_obj.save(update_fields=["enabled", "base_url", "updated_at"])
+    _dify_audit(tenant, request.user, "settings_update", payload={"enabled": enabled, "base_url": base_url})
+
+    return Response(
+        {
+            "enabled": bool(settings_obj.enabled),
+            "base_url": settings_obj.base_url or "",
+            "api_key_source": "billing_tenant_product.api_key(slug=dify)",
+        }
+    )
+
+
+@api_view(["GET", "POST", "PATCH"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def dify_catalog(request):
+    """GET: lista catálogo; POST: cria item; PATCH: atualizar/ativar/desativar (soft-delete)."""
+    from django.db.utils import ProgrammingError, OperationalError
+
+    tenant = request.user.tenant
+    try:
+        if request.method == "GET":
+            items = DifyAppCatalogItem.objects.filter(tenant=tenant).order_by("-created_at")
+            out = []
+            for it in items:
+                out.append(
+                    {
+                        "id": str(it.id),
+                        "dify_app_id": it.dify_app_id,
+                        "display_name": it.display_name,
+                        "is_active": bool(it.is_active),
+                        "metadata": it.metadata or {},
+                        "created_at": it.created_at.isoformat() if it.created_at else None,
+                        "updated_at": it.updated_at.isoformat() if it.updated_at else None,
+                    }
+                )
+            return Response(out)
+    except (ProgrammingError, OperationalError):
+        return Response(
+            {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    data = request.data or {}
+    if request.method == "POST":
+        dify_app_id = str(data.get("dify_app_id") or "").strip()
+        display_name = str(data.get("display_name") or "").strip()
+        if not dify_app_id:
+            return Response({"error": "dify_app_id é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+        if not display_name:
+            display_name = dify_app_id
+        item, created = DifyAppCatalogItem.objects.update_or_create(
+            tenant=tenant,
+            dify_app_id=dify_app_id,
+            defaults={"display_name": display_name, "is_active": True},
+        )
+        item.updated_at = timezone.now()
+        item.save(update_fields=["updated_at"])
+        _dify_audit(
+            tenant,
+            request.user,
+            "catalog_create" if created else "catalog_update",
+            catalog_id=item.id,
+            payload={"dify_app_id": dify_app_id, "display_name": display_name},
+        )
+        return Response(
+            {
+                "id": str(item.id),
+                "dify_app_id": item.dify_app_id,
+                "display_name": item.display_name,
+                "is_active": bool(item.is_active),
+                "metadata": item.metadata or {},
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    # PATCH
+    item_id = _parse_uuid(data.get("id"))
+    if not item_id:
+        return Response({"error": "id (UUID) é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+    item = DifyAppCatalogItem.objects.filter(id=item_id, tenant=tenant).first()
+    if not item:
+        return Response({"error": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    if "display_name" in data:
+        item.display_name = str(data.get("display_name") or "").strip()
+    if "is_active" in data:
+        b = _normalize_bool(data.get("is_active"))
+        if b is None:
+            return Response({"error": "is_active inválido."}, status=status.HTTP_400_BAD_REQUEST)
+        item.is_active = b
+    item.updated_at = timezone.now()
+    item.save(update_fields=["display_name", "is_active", "updated_at"])
+    _dify_audit(
+        tenant,
+        request.user,
+        "catalog_deactivate" if not item.is_active else "catalog_update",
+        catalog_id=item.id,
+        payload={"display_name": item.display_name, "is_active": bool(item.is_active)},
+    )
+    return Response(
+        {
+            "id": str(item.id),
+            "dify_app_id": item.dify_app_id,
+            "display_name": item.display_name,
+            "is_active": bool(item.is_active),
+            "metadata": item.metadata or {},
+        }
+    )
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def dify_assignments(request):
+    """GET: lista vínculos; PUT: upsert por (scope_type, scope_id)."""
+    from django.db.utils import ProgrammingError, OperationalError
+    from apps.authn.models import Department
+
+    tenant = request.user.tenant
+    if request.method == "GET":
+        try:
+            assignments = (
+                DifyAssignment.objects.select_related("catalog")
+                .filter(tenant=tenant)
+                .order_by("scope_type", "scope_id")
+            )
+        except (ProgrammingError, OperationalError):
+            return Response([])
+        dept_ids = [a.scope_id for a in assignments if a.scope_type == DifyAssignment.SCOPE_DEPARTMENT and a.scope_id]
+        dept_map = {}
+        if dept_ids:
+            for d in Department.objects.filter(id__in=dept_ids):
+                dept_map[str(d.id)] = d.name
+        out = []
+        for a in assignments:
+            out.append(
+                {
+                    "id": str(a.id),
+                    "scope_type": a.scope_type,
+                    "scope_id": str(a.scope_id) if a.scope_id else None,
+                    "catalog_id": str(a.catalog_id),
+                    "catalog": {
+                        "id": str(a.catalog_id),
+                        "dify_app_id": a.catalog.dify_app_id,
+                        "display_name": a.catalog.display_name,
+                        "is_active": bool(a.catalog.is_active),
+                    }
+                    if a.catalog_id and a.catalog
+                    else None,
+                    "department_name": (dept_map.get(str(a.scope_id)) if a.scope_id else None),
+                    "created_at": a.created_at.isoformat() if a.created_at else None,
+                    "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+                }
+            )
+        return Response(out)
+
+    data = request.data or {}
+    scope_type = str(data.get("scope_type") or "").strip().lower()
+    if scope_type not in (DifyAssignment.SCOPE_INBOX, DifyAssignment.SCOPE_DEPARTMENT):
+        return Response({"error": "scope_type deve ser 'inbox' ou 'department'."}, status=status.HTTP_400_BAD_REQUEST)
+    scope_id = None
+    if scope_type == DifyAssignment.SCOPE_DEPARTMENT:
+        scope_id = _parse_uuid(data.get("scope_id"))
+        if not scope_id:
+            return Response({"error": "scope_id obrigatório para department."}, status=status.HTTP_400_BAD_REQUEST)
+        if not Department.objects.filter(id=scope_id, tenant=tenant).exists():
+            return Response({"error": "Departamento não encontrado ou não pertence ao tenant."}, status=status.HTTP_400_BAD_REQUEST)
+
+    catalog_id = _parse_uuid(data.get("catalog_id"))
+    if not catalog_id:
+        return Response({"error": "catalog_id (UUID) é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+    catalog = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
+    if not catalog:
+        return Response({"error": "Item do catálogo não encontrado."}, status=status.HTTP_400_BAD_REQUEST)
+    if not getattr(catalog, "is_active", False):
+        return Response({"error": "Item do catálogo está inativo."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        assignment, created = DifyAssignment.objects.update_or_create(
+            tenant=tenant,
+            scope_type=scope_type,
+            scope_id=scope_id if scope_type == DifyAssignment.SCOPE_DEPARTMENT else None,
+            defaults={"catalog": catalog},
+        )
+        assignment.updated_at = timezone.now()
+        assignment.save(update_fields=["updated_at"])
+    except (ProgrammingError, OperationalError) as e:
+        logger.warning("DifyAssignment upsert erro DB: %s", e)
+        return Response(
+            {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    _dify_audit(
+        tenant,
+        request.user,
+        "assignment_upsert",
+        scope_type=scope_type,
+        scope_id=scope_id,
+        catalog_id=catalog.id,
+        payload={"catalog_id": str(catalog.id), "dify_app_id": catalog.dify_app_id},
+    )
+    return Response(
+        {
+            "id": str(assignment.id),
+            "scope_type": assignment.scope_type,
+            "scope_id": str(assignment.scope_id) if assignment.scope_id else None,
+            "catalog_id": str(assignment.catalog_id),
+            "catalog": {
+                "id": str(catalog.id),
+                "dify_app_id": catalog.dify_app_id,
+                "display_name": catalog.display_name,
+                "is_active": bool(catalog.is_active),
+            },
+        },
+        status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+    )

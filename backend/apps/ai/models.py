@@ -415,6 +415,117 @@ class AgentAssignment(models.Model):
         return f"Assignment {self.scope_type} ({self.scope_id or 'inbox'}) -> {self.display_name}"
 
 
+class DifySettings(models.Model):
+    """
+    Configuração Dify por tenant (enabled/base_url).
+    API key vem de billing_tenant_product.api_key (product.slug='dify').
+    Tabela criada via SQL: docs/sql/ai/0017_dify_base_tables.up.sql
+    """
+
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="dify_settings",
+        primary_key=True,
+        db_column="tenant_id",
+    )
+    enabled = models.BooleanField(default=False)
+    base_url = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_dify_settings"
+        managed = False
+
+
+class DifyAppCatalogItem(models.Model):
+    """
+    Catálogo manual de apps/agentes Dify por tenant (soft delete via is_active).
+    Tabela criada via SQL: docs/sql/ai/0017_dify_base_tables.up.sql
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="dify_app_catalog",
+        db_column="tenant_id",
+    )
+    dify_app_id = models.CharField(max_length=128)
+    display_name = models.CharField(max_length=200, blank=True, default="")
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_dify_app_catalog"
+        managed = False
+        ordering = ["-created_at"]
+
+
+class DifyAssignment(models.Model):
+    """
+    Vínculo de item do catálogo a escopo: Inbox (scope_id nulo) ou departamento (scope_id = department_id).
+    Tabela criada via SQL: docs/sql/ai/0017_dify_base_tables.up.sql
+    """
+
+    SCOPE_INBOX = "inbox"
+    SCOPE_DEPARTMENT = "department"
+    SCOPE_CHOICES = [(SCOPE_INBOX, "Inbox"), (SCOPE_DEPARTMENT, "Departamento")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="dify_assignments",
+        db_column="tenant_id",
+    )
+    scope_type = models.CharField(max_length=20, choices=SCOPE_CHOICES)
+    scope_id = models.UUIDField(null=True, blank=True)
+    catalog = models.ForeignKey(
+        DifyAppCatalogItem,
+        on_delete=models.CASCADE,
+        related_name="assignments",
+        db_column="catalog_id",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_dify_assignment"
+        managed = False
+        ordering = ["scope_type", "scope_id"]
+
+
+class DifyAuditLog(models.Model):
+    """
+    Audit log Dify (mudanças de settings/catálogo/assignment). Nunca armazenar segredos.
+    Tabela criada via SQL: docs/sql/ai/0017_dify_base_tables.up.sql
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="dify_audit_logs",
+        db_column="tenant_id",
+    )
+    user_id = models.BigIntegerField(null=True, blank=True)
+    action = models.CharField(max_length=50)
+    scope_type = models.CharField(max_length=20, null=True, blank=True)
+    scope_id = models.UUIDField(null=True, blank=True)
+    catalog_id = models.UUIDField(null=True, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "ai_dify_audit_log"
+        managed = False
+        ordering = ["-created_at"]
+
+
 class AiTranscriptionDailyMetric(models.Model):
     """Métricas diárias de transcrição por tenant (UTC)."""
 

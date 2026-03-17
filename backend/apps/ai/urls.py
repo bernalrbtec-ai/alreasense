@@ -38,4 +38,9 @@ urlpatterns = [
     path('agent-assignments/', views.agent_assignments_list, name='agent-assignments-list'),
     path('agent-assignments/upsert/', views.agent_assignment_upsert, name='agent-assignment-upsert'),
     path('agent-assignments/<uuid:assignment_id>/', views.agent_assignment_delete, name='agent-assignment-delete'),
+
+    # Dify (fase 1): settings + catálogo + vínculo por escopo
+    path('dify/settings/', views.dify_settings, name='dify-settings'),
+    path('dify/catalog/', views.dify_catalog, name='dify-catalog'),
+    path('dify/assignments/', views.dify_assignments, name='dify-assignments'),
 ]
