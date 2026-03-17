@@ -46,13 +46,35 @@ class FlowViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         flow = serializer.save(tenant=self.request.user.tenant)
-        # Criação assíncrona/tolerante de bot Typebot associado ao fluxo (se APIs estiverem configuradas)
+        # Garante workspace/bot associado ao fluxo (se APIs estiverem configuradas)
         try:
             from apps.chat.services.typebot_flow_service import ensure_typebot_bot_for_flow
 
             ensure_typebot_bot_for_flow(flow)
         except Exception as e:
             logger.warning("[FLOW] Erro ao agendar criação de bot Typebot para flow=%s: %s", getattr(flow, "id", None), e, exc_info=True)
+
+    def perform_update(self, serializer):
+        flow = serializer.save()
+        # Em update/edit, também garantimos workspace/bot e completamos internal_id se necessário.
+        try:
+            from apps.chat.services.typebot_flow_service import ensure_typebot_bot_for_flow
+
+            ensure_typebot_bot_for_flow(flow)
+        except Exception as e:
+            logger.warning("[FLOW] Erro ao garantir bot/workspace para flow=%s: %s", getattr(flow, "id", None), e, exc_info=True)
+
+    def retrieve(self, request, *args, **kwargs):
+        response = super().retrieve(request, *args, **kwargs)
+        # Em buscar/abrir detalhes, garantir internal_id (e workspace, se ainda não existir) para o editor embutido.
+        try:
+            flow = self.get_object()
+            from apps.chat.services.typebot_flow_service import ensure_typebot_bot_for_flow
+
+            ensure_typebot_bot_for_flow(flow)
+        except Exception as e:
+            logger.warning("[FLOW] Erro ao completar integração no retrieve flow=%s: %s", getattr(kwargs, "pk", None), e, exc_info=True)
+        return response
 
     @action(detail=False, methods=["get"])
     def available_departments(self, request):
