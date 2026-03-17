@@ -3,6 +3,7 @@ Webhook handler para Evolution API.
 Recebe eventos de mensagens e atualiza o banco.
 """
 import logging
+import threading
 import httpx
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -4054,18 +4055,37 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 except Exception as e:
                     logger.error(f"❌ [WEBSOCKET] Error broadcasting notification: {e}", exc_info=True)
 
-                # 🤖 Dify takeover: encaminhar mensagem ao agente Dify se ativo
+                # 🤖 Dify takeover: encaminhar mensagem ao agente Dify se ativo.
+                # Executa em thread separada para não segurar a transação atômica
+                # (chamadas HTTP ao Dify podem levar até 30s).
                 if conversation_type == 'individual':
-                    try:
-                        from apps.ai.services.dify_chat_service import maybe_handle_dify_takeover
-                        maybe_handle_dify_takeover(
-                            tenant=tenant,
-                            conversation=conversation,
-                            message=message,
-                            wa_instance=wa_instance,
-                        )
-                    except Exception as dify_exc:
-                        logger.error(f"❌ [DIFY] Erro no takeover: {dify_exc}", exc_info=True)
+                    _conversation_id = str(conversation.id)
+                    _tenant_id = str(tenant.id)
+                    _message_content = str(getattr(message, 'content', '') or '')
+                    _contact_phone = str(getattr(conversation, 'contact_phone', '') or '')
+                    _wa_instance = wa_instance
+
+                    def _run_dify_takeover():
+                        try:
+                            from django.db import close_old_connections
+                            close_old_connections()
+                            from apps.ai.services.dify_chat_service import maybe_handle_dify_takeover
+                            from apps.chat.models import Conversation as _Conv
+                            from apps.tenancy.models import Tenant as _Tenant
+                            _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
+                            _tenant = _Tenant.objects.filter(id=_tenant_id).first()
+                            if _conv and _tenant:
+                                maybe_handle_dify_takeover(
+                                    tenant=_tenant,
+                                    conversation=_conv,
+                                    message=type('_M', (), {'content': _message_content})(),
+                                    wa_instance=_wa_instance,
+                                )
+                        except Exception as _exc:
+                            logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)
+
+                    t = threading.Thread(target=_run_dify_takeover, daemon=True)
+                    t.start()
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)
