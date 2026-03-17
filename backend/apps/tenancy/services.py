@@ -61,19 +61,30 @@ def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace
         resp = requests.post(url, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
         data = resp.json() or {}
-        workspace_id = (data.get("id") or data.get("workspaceId") or "").strip()
-        name = (data.get("name") or payload["name"]).strip()
+        # Builder API retorna { workspace: { id, name, ... } }
+        ws_obj = data.get("workspace") if isinstance(data, dict) else None
+        ws_obj = ws_obj if isinstance(ws_obj, dict) else {}
+        workspace_id = (ws_obj.get("id") or ws_obj.get("workspaceId") or data.get("id") or data.get("workspaceId") or "").strip()
+        name = (ws_obj.get("name") or data.get("name") or payload["name"]).strip()
         if not workspace_id:
             logger.warning(
                 "[TYPEBOT][WORKSPACE] Resposta sem id ao criar workspace tenant=%s data=%s",
                 tenant.id,
-                list(data.keys()),
+                list(data.keys()) if isinstance(data, dict) else [],
             )
             return None
     except requests.RequestException as e:
+        status_code = getattr(getattr(e, "response", None), "status_code", None)
+        body_text = None
+        try:
+            body_text = getattr(getattr(e, "response", None), "text", None)
+        except Exception:
+            body_text = None
         logger.warning(
-            "[TYPEBOT][WORKSPACE] Falha ao criar workspace para tenant=%s: %s",
+            "[TYPEBOT][WORKSPACE] Falha ao criar workspace para tenant=%s http=%s body=%s err=%s",
             tenant.id,
+            status_code,
+            (body_text[:500] if isinstance(body_text, str) else None),
             e,
         )
         return None
