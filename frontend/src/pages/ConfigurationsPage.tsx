@@ -350,6 +350,9 @@ export default function ConfigurationsPage() {
   const [difySavingKey, setDifySavingKey] = useState<string | null>(null)
   const [newDifyAppId, setNewDifyAppId] = useState('')
   const [newDifyDisplayName, setNewDifyDisplayName] = useState('')
+  const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
+  const [editDifyAppId, setEditDifyAppId] = useState('')
+  const [editDifyDisplayName, setEditDifyDisplayName] = useState('')
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -1705,6 +1708,43 @@ export default function ConfigurationsPage() {
       showSuccessToast(isActive ? 'Item ativado' : 'Item desativado')
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao atualizar item')
+    } finally {
+      setDifySavingKey(null)
+    }
+  }
+
+  const openEditDifyItem = (item: DifyCatalogItem) => {
+    setEditingDifyItemId(item.id)
+    setEditDifyAppId(item.dify_app_id || '')
+    setEditDifyDisplayName(item.display_name || '')
+  }
+
+  const saveEditDifyItem = async () => {
+    if (!editingDifyItemId) return
+    setDifySavingKey(`catalog_edit_${editingDifyItemId}`)
+    try {
+      await api.patch('/ai/dify/catalog/', {
+        id: editingDifyItemId,
+        display_name: editDifyDisplayName,
+      })
+      showSuccessToast('Agente atualizado')
+      setEditingDifyItemId(null)
+      await fetchDifyCatalog()
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao salvar agente')
+    } finally {
+      setDifySavingKey(null)
+    }
+  }
+
+  const testDifyConnection = async () => {
+    setDifySavingKey('dify_test_connection')
+    try {
+      const res = await api.post('/ai/dify/test-connection/', {})
+      if (res.data?.ok) showSuccessToast(res.data?.detail || 'Conexão OK')
+      else showErrorToast(res.data?.detail || 'Falha na conexão')
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || e.response?.data?.detail || 'Falha na conexão')
     } finally {
       setDifySavingKey(null)
     }
@@ -3066,10 +3106,21 @@ export default function ConfigurationsPage() {
                       )}
                     </div>
                     <div>
-                      <Button type="button" onClick={() => void saveDifySettings()} disabled={!difySettings}>
-                        <Save className="h-4 w-4 mr-1" />
-                        Salvar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button type="button" onClick={() => void saveDifySettings()} disabled={!difySettings}>
+                          <Save className="h-4 w-4 mr-1" />
+                          Salvar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void testDifyConnection()}
+                          disabled={difySavingKey === 'dify_test_connection'}
+                        >
+                          <TestTube className="h-4 w-4 mr-1" />
+                          {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3112,6 +3163,9 @@ export default function ConfigurationsPage() {
                           <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{it.dify_app_id}</div>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => openEditDifyItem(it)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
                           <Button type="button" variant="outline" size="sm" onClick={() => void setDifyCatalogItemActive(it.id, !it.is_active)} disabled={difySavingKey === `catalog_${it.id}`}>
                             {difySavingKey === `catalog_${it.id}` ? 'Salvando...' : it.is_active ? 'Desativar' : 'Ativar'}
                           </Button>
@@ -3119,6 +3173,40 @@ export default function ConfigurationsPage() {
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {editingDifyItemId && (
+                  <div className="mt-4 p-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/30">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-medium text-gray-900 dark:text-gray-100">Cadastro / edição do agente</h4>
+                      <Button type="button" variant="outline" size="sm" onClick={() => setEditingDifyItemId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <Label>ID Dify</Label>
+                        <Input value={editDifyAppId} onChange={(e) => setEditDifyAppId(e.target.value)} disabled />
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Por enquanto o ID não é editável (evita quebrar vínculos). Se precisar, desative e crie outro.
+                        </p>
+                      </div>
+                      <div>
+                        <Label>Nome</Label>
+                        <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`}>
+                          <Save className="h-4 w-4 mr-1" />
+                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => void testDifyConnection()} disabled={difySavingKey === 'dify_test_connection'}>
+                          <TestTube className="h-4 w-4 mr-1" />
+                          {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
                 )}
               </Card>
 

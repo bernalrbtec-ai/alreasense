@@ -43,4 +43,5 @@ urlpatterns = [
     path('dify/settings/', views.dify_settings, name='dify-settings'),
     path('dify/catalog/', views.dify_catalog, name='dify-catalog'),
     path('dify/assignments/', views.dify_assignments, name='dify-assignments'),
+    path('dify/test-connection/', views.dify_test_connection, name='dify-test-connection'),
 ]

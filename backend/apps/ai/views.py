@@ -3394,3 +3394,60 @@ def dify_assignments(request):
         },
         status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
     )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def dify_test_connection(request):
+    """
+    Teste de conexão do Dify.
+
+    Observação: a API key vem do billing_tenant_product.api_key (produto slug='dify').
+    Este teste tenta chamar /v1/info no base_url configurado usando a API key,
+    que valida conectividade + credencial (quando a key corresponde ao app).
+    """
+    tenant = request.user.tenant
+    settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+    base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
+    base_url = base_url.strip().rstrip("/")
+    if not base_url:
+        return Response({"ok": False, "detail": "Base URL do Dify não configurada."}, status=status.HTTP_400_BAD_REQUEST)
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return Response({"ok": False, "detail": "Base URL inválida (use http:// ou https://)."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # API key via billing_tenant_product (Tenant.get_product_api_key)
+    api_key = ""
+    try:
+        api_key = (tenant.get_product_api_key("dify") or "").strip()
+    except Exception:
+        api_key = ""
+    if not api_key:
+        return Response(
+            {"ok": False, "detail": "API key do produto 'dify' não configurada para este tenant."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    url = f"{base_url}/v1/info"
+    headers = {"Authorization": f"Bearer {api_key}"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code >= 400:
+            # tentar extrair detalhe
+            detail = (resp.text or "")[:300]
+            try:
+                j = resp.json()
+                if isinstance(j, dict):
+                    detail = str(j.get("message") or j.get("error") or detail)[:300]
+            except Exception:
+                pass
+            return Response({"ok": False, "detail": f"HTTP {resp.status_code}: {detail}"}, status=status.HTTP_200_OK)
+        data = {}
+        try:
+            data = resp.json() if resp.content else {}
+        except Exception:
+            data = {}
+        return Response({"ok": True, "detail": "Conexão OK.", "info": data}, status=status.HTTP_200_OK)
+    except requests.Timeout:
+        return Response({"ok": False, "detail": "Timeout ao conectar no Dify."}, status=status.HTTP_200_OK)
+    except requests.RequestException as e:
+        return Response({"ok": False, "detail": str(e) if str(e) else "Erro ao conectar no Dify."}, status=status.HTTP_200_OK)
