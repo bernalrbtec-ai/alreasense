@@ -178,6 +178,8 @@ export default function FlowPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const selectedFlowIdRef = useRef<string | null>(null)
   const typebotIframeCardRef = useRef<HTMLDivElement | null>(null)
+  const [typebotBuilderLoginUrl, setTypebotBuilderLoginUrl] = useState<string | null>(null)
+  const [loadingTypebotBuilder, setLoadingTypebotBuilder] = useState(false)
 
   // Confirm delete
   const [confirmDeleteNode, setConfirmDeleteNode] = useState<FlowNode | null>(null)
@@ -242,6 +244,24 @@ export default function FlowPage() {
     }
   }
 
+  const fetchTypebotBuilderLoginUrl = useCallback(
+    async (flowId: string, locale: string) => {
+      if (!flowId) return
+      setLoadingTypebotBuilder(true)
+      try {
+        const { data } = await api.post(`/chat/flows/${flowId}/typebot_builder_login_url/`, { locale })
+        const url = (data?.loginUrl as string | undefined) || ''
+        setTypebotBuilderLoginUrl(url.trim() ? url.trim() : null)
+      } catch (e: any) {
+        // Se ainda não sincronizou o bot, vamos só manter o estado amigável
+        setTypebotBuilderLoginUrl(null)
+      } finally {
+        setLoadingTypebotBuilder(false)
+      }
+    },
+    []
+  )
+
   const fetchDepartments = async () => {
     try {
       const { data } = await api.get('/chat/flows/available_departments/')
@@ -264,13 +284,23 @@ export default function FlowPage() {
     setDetailLoading(true)
     try {
       const { data } = await api.get(`/chat/flows/${id}/`)
-      if (selectedFlowIdRef.current === id) setFlowDetail(data)
+      if (selectedFlowIdRef.current === id) {
+        setFlowDetail(data)
+        // Se for Typebot e tiver internal_id, buscar URL de auto-login para o iframe do builder
+        const hasTypebot = String(data?.typebot_public_id ?? '').trim().length > 0
+        const internalId = String(data?.typebot_internal_id ?? '').trim()
+        if (hasTypebot && internalId && TYPEBOT_BUILDER_BASE) {
+          fetchTypebotBuilderLoginUrl(id, TYPEBOT_BUILDER_LOCALE)
+        } else {
+          setTypebotBuilderLoginUrl(null)
+        }
+      }
     } catch {
       if (selectedFlowIdRef.current === id) setFlowDetail(null)
     } finally {
       if (selectedFlowIdRef.current === id) setDetailLoading(false)
     }
-  }, [])
+  }, [fetchTypebotBuilderLoginUrl])
 
   useEffect(() => {
     setLoading(true)
@@ -1149,10 +1179,19 @@ export default function FlowPage() {
                       O editor abaixo é carregado a partir do serviço externo ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
                     </p>
                     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
+                      {loadingTypebotBuilder ? (
+                        <div className="p-4 text-sm text-gray-700 dark:text-gray-300">
+                          Preparando login do editor…
+                        </div>
+                      ) : null}
                       {((flowDetail.typebot_internal_id || '').trim()) ? (
                         <iframe
                           title="Editor do fluxo"
-                          src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/${TYPEBOT_BUILDER_LOCALE.replace(/^\/+|\/+$/g, '')}/typebots/${(flowDetail.typebot_internal_id || '').trim()}/edit`}
+                          src={
+                            (typebotBuilderLoginUrl || '').trim()
+                              ? (typebotBuilderLoginUrl || '').trim()
+                              : `${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/${TYPEBOT_BUILDER_LOCALE.replace(/^\/+|\/+$/g, '')}/typebots/${(flowDetail.typebot_internal_id || '').trim()}/edit`
+                          }
                           className="w-full h-[520px] border-0"
                           allow="clipboard-read; clipboard-write; microphone; camera"
                         />

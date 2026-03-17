@@ -2,7 +2,10 @@
 Views para Fluxo (lista/botões por Inbox ou departamento).
 """
 import logging
+from datetime import timedelta
+
 from django.utils import timezone
+from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -22,6 +25,11 @@ from apps.chat.api.serializers_flow import (
 )
 
 logger = logging.getLogger(__name__)
+
+try:
+    import jwt  # PyJWT (transitive dep via simplejwt)
+except Exception:  # pragma: no cover
+    jwt = None
 
 
 class FlowViewSet(viewsets.ModelViewSet):
@@ -75,6 +83,46 @@ class FlowViewSet(viewsets.ModelViewSet):
             logger.warning("[FLOW] Erro ao completar integração no retrieve flow=%s: %s", getattr(kwargs, "pk", None), e, exc_info=True)
         serializer = self.get_serializer(self.get_object())
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="typebot_builder_login_url")
+    def typebot_builder_login_url(self, request, pk=None):
+        """
+        Retorna uma URL de auto-login no Typebot Builder (para uso em iframe).
+        Requer:
+        - settings.SENSE_IFRAME_LOGIN_SECRET (mesmo valor no Typebot)
+        - settings.TYPEBOT_BUILDER_BASE (domínio do builder, ex.: https://typebot.alrea.ai)
+        """
+        flow = self.get_object()
+        if not (getattr(flow, "typebot_internal_id", None) or "").strip():
+            return Response({"detail": "Bot ainda não sincronizado."}, status=status.HTTP_409_CONFLICT)
+
+        builder_base = (getattr(settings, "TYPEBOT_BUILDER_BASE", None) or "").strip().rstrip("/")
+        if not builder_base:
+            return Response({"detail": "TYPEBOT_BUILDER_BASE não configurado no backend."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        secret = (getattr(settings, "SENSE_IFRAME_LOGIN_SECRET", None) or "").strip()
+        if not secret:
+            return Response({"detail": "SENSE_IFRAME_LOGIN_SECRET não configurado."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        if jwt is None:
+            return Response({"detail": "PyJWT não disponível no backend."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        locale = (request.data.get("locale") or "pt-BR").strip() or "pt-BR"
+        # Caminho relativo dentro do builder
+        return_to = f"/{locale}/typebots/{(flow.typebot_internal_id or '').strip()}/edit"
+
+        now = timezone.now()
+        payload = {
+            "aud": "typebot-builder",
+            "iss": "sense",
+            "tenant_id": str(request.user.tenant_id),
+            "user_id": str(getattr(request.user, "id", "")),
+            "flow_id": str(getattr(flow, "id", "")),
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(seconds=60)).timestamp()),
+        }
+        token = jwt.encode(payload, secret, algorithm="HS256")
+        login_url = f"{builder_base}/api/sense/iframe-login?token={token}&returnTo={return_to}"
+        return Response({"loginUrl": login_url, "expiresIn": 60, "returnTo": return_to})
 
     @action(detail=False, methods=["get"])
     def available_departments(self, request):

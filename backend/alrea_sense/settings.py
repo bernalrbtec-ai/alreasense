@@ -172,6 +172,7 @@ TYPEBOT_API_BASE = config('TYPEBOT_API_BASE', default=None)
 TYPEBOT_VIEWER_BASE = config('TYPEBOT_VIEWER_BASE', default=None)
 TYPEBOT_BUILDER_BASE = config('TYPEBOT_BUILDER_BASE', default=None)
 TYPEBOT_ADMIN_API_KEY = config('TYPEBOT_ADMIN_API_KEY', default=None)
+SENSE_IFRAME_LOGIN_SECRET = config('SENSE_IFRAME_LOGIN_SECRET', default=None)
 
 # Upload/Request Settings
 # Aumentado para suportar webhooks do Evolution com mídia em base64
