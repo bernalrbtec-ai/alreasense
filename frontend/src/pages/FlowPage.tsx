@@ -435,7 +435,8 @@ export default function FlowPage() {
       })
       selectedFlowIdRef.current = selectedFlow.id
       await fetchFlowDetail(selectedFlow.id)
-      if (pid) {
+      const hasTypebot = String(data?.typebot_public_id ?? selectedFlow.typebot_public_id ?? '').trim().length > 0
+      if (hasTypebot) {
         setTimeout(() => typebotIframeCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 300)
       }
     } catch (e: any) {
