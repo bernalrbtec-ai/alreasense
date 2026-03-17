@@ -5,6 +5,7 @@ e envia a resposta de volta via WhatsApp.
 from __future__ import annotations
 
 import logging
+import threading
 from urllib.parse import urlparse
 
 import httpx
@@ -12,6 +13,19 @@ import httpx
 from django.db import connection as _conn
 
 logger = logging.getLogger(__name__)
+
+# Lock por conversation_id para evitar race condition (EC-B07):
+# duas mensagens simultâneas da mesma conversa processadas em paralelo
+# resultariam em duas chamadas ao Dify e duas respostas ao cliente.
+_conversation_locks: dict[str, threading.Lock] = {}
+_conversation_locks_mutex = threading.Lock()
+
+
+def _get_or_create_lock(conversation_id: str) -> threading.Lock:
+    with _conversation_locks_mutex:
+        if conversation_id not in _conversation_locks:
+            _conversation_locks[conversation_id] = threading.Lock()
+        return _conversation_locks[conversation_id]
 
 
 def _extract_dify_base_url(public_url: str) -> str:
@@ -67,9 +81,35 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
     Verifica se há um agente Dify ativo para a conversa e, se houver,
     encaminha a mensagem do cliente ao Dify e envia a resposta ao WhatsApp.
 
+    Serializa execuções por conversation_id para evitar race condition quando
+    o cliente envia duas mensagens rapidamente (EC-B07).
+
     Retorna True se o takeover foi tratado, False caso contrário.
     """
-    state = _get_active_dify_state(str(conversation.id), str(tenant.id))
+    conv_id = str(conversation.id)
+
+    # EC-B07: adquirir lock por conversa — se outra thread já está processando
+    # esta conversa, esperar (timeout de 35s para não bloquear indefinidamente)
+    lock = _get_or_create_lock(conv_id)
+    acquired = lock.acquire(timeout=35)
+    if not acquired:
+        logger.warning(
+            "Dify takeover: timeout ao adquirir lock da conversa %s — descartando mensagem",
+            conv_id
+        )
+        return False
+
+    try:
+        return _do_dify_takeover(tenant, conversation, message, wa_instance)
+    finally:
+        lock.release()
+
+
+def _do_dify_takeover(tenant, conversation, message, wa_instance=None) -> bool:
+    """Lógica interna do takeover, já dentro do lock de serialização."""
+    conv_id = str(conversation.id)
+
+    state = _get_active_dify_state(conv_id, str(tenant.id))
     if not state:
         return False
 
@@ -89,6 +129,12 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
     if not msg_content:
         return False
 
+    # EC-B06: validar contact_phone ANTES de chamar o Dify (evita gastar créditos em vão)
+    contact_phone = (getattr(conversation, 'contact_phone', None) or '').strip()
+    if not contact_phone:
+        logger.warning("Dify takeover: sem telefone do contato para conversa %s — abortando antes do Dify", conv_id)
+        return False
+
     # Base URL extraída via urlparse (robusto para qualquer estrutura de path)
     base_url = _extract_dify_base_url(agent.public_url or '')
     if not base_url:
@@ -106,7 +152,7 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
         'inputs': {},
         'query': msg_content,
         'response_mode': 'blocking',
-        'user': f"sense-{str(conversation.id)}",
+        'user': f"sense-{conv_id}",
     }
     if state.get('dify_conversation_id'):
         payload['conversation_id'] = state['dify_conversation_id']
@@ -149,7 +195,8 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
         )
         return True  # takeover tratado, mas sem mensagem para enviar
 
-    # Determinar instância WA para enviar a resposta
+    # EC-B05: resolver instância ANTES de tentar enviar, para não entrar num estado
+    # onde o dify_conversation_id já foi persistido mas o envio vai falhar por falta de instância
     effective_instance = None
     try:
         if agent.whatsapp_instance_id:
@@ -173,10 +220,6 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
     try:
         from apps.notifications.whatsapp_providers.evolution import EvolutionProvider
         provider = EvolutionProvider(effective_instance)
-        contact_phone = (getattr(conversation, 'contact_phone', None) or '').strip()
-        if not contact_phone:
-            logger.warning("Dify takeover: sem telefone do contato para conversa %s", conversation.id)
-            return False
 
         ok, result = provider.send_text(phone=contact_phone, message=dify_answer)
         if not ok:

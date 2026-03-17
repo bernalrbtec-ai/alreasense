@@ -3256,7 +3256,7 @@ def dify_catalog(request):
         if not api_key:
             return Response({"error": "api_key é obrigatória."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Extrair app_id do final da URL pública (ex.: /chat/<app_id>)
+        # Extrair app_id da URL pública — esperado: https://dify.domain/chat/<app_id>
         dify_app_id = ""
         try:
             from urllib.parse import urlparse
@@ -3271,6 +3271,13 @@ def dify_catalog(request):
             dify_app_id = ""
         if not dify_app_id:
             return Response({"error": "Não foi possível extrair o app_id da URL pública."}, status=status.HTTP_400_BAD_REQUEST)
+        # EC-B01: garantir que a URL tem formato esperado (/chat/<app_id>)
+        # para evitar que URLs de API (ex: /v1/apps) criem agentes com IDs incorretos
+        if "/chat/" not in public_url:
+            return Response(
+                {"error": "A URL pública deve conter /chat/<app_id>. Exemplo: https://dify.domain.com/chat/WjOslU"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if not display_name:
             display_name = dify_app_id
@@ -3360,7 +3367,17 @@ def dify_catalog(request):
     if "description" in data:
         item.description = str(data.get("description") or "").strip()
     if "public_url" in data:
-        item.public_url = str(data.get("public_url") or "").strip()
+        new_public_url = str(data.get("public_url") or "").strip()
+        item.public_url = new_public_url
+        # EC-B10: reatualizar dify_app_id quando public_url é alterada
+        if new_public_url:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                _parts = [p for p in (_urlparse(new_public_url).path or "").split("/") if p]
+                if _parts:
+                    item.dify_app_id = _parts[-1]
+            except Exception:
+                pass
     if "is_active" in data:
         b = _normalize_bool(data.get("is_active"))
         if b is None:
@@ -3384,7 +3401,7 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
-    patch_fields = ["display_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
+    patch_fields = ["display_name", "description", "public_url", "dify_app_id", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
     api_key_raw = data.get("api_key")
     if api_key_raw is not None and str(api_key_raw).strip():
         # Só atualiza a chave se vier uma string não-vazia (evita apagar chave existente)
@@ -3571,19 +3588,26 @@ def dify_test_connection(request):
         item = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
         if not item:
             return Response({"ok": False, "detail": "Agente Dify não encontrado para este tenant."}, status=status.HTTP_400_BAD_REQUEST)
-        # Derivar base_url da public_url quando possível
-        if item.public_url:
-            try:
-                from urllib.parse import urlparse
+        # EC-B11: se o agente não tem public_url, retornar erro explícito ao invés
+        # de silenciosamente testar a URL global (que pode ser de outro agente)
+        if not (item.public_url or "").strip():
+            return Response(
+                {"ok": False, "detail": "Este agente não tem URL pública configurada. Edite o agente e salve a URL antes de testar."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            from urllib.parse import urlparse
 
-                parsed = urlparse(item.public_url)
-                if parsed.scheme and parsed.netloc:
-                    base_url = f"{parsed.scheme}://{parsed.netloc}"
-            except Exception:
-                pass
+            parsed = urlparse(item.public_url)
+            if parsed.scheme and parsed.netloc:
+                base_url = f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            pass
         if not base_url:
-            settings_obj = DifySettings.objects.filter(tenant=tenant).first()
-            base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
+            return Response(
+                {"ok": False, "detail": "URL pública do agente é inválida."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         api_key = (getattr(item, "api_key_encrypted", "") or "").strip()
     else:
         settings_obj = DifySettings.objects.filter(tenant=tenant).first()

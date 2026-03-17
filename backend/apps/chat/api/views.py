@@ -4131,8 +4131,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     "COALESCE(c.display_name, c.dify_app_id, '') "
                     "FROM ai_dify_conversation_state s "
                     "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id "
-                    "WHERE s.conversation_id = %s AND s.status = 'active' LIMIT 1",
-                    [str(conversation.id)]
+                    "WHERE s.conversation_id = %s AND s.tenant_id = %s AND s.status = 'active' LIMIT 1",
+                    [str(conversation.id), str(tenant.id)]
                 )
                 row = cur.fetchone()
                 if row:
