@@ -143,7 +143,8 @@ def _resolve_typebot_internal_id_from_public_id(flow: Flow) -> Optional[str]:
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    url = f"{admin_base}/workspaces/{workspace.workspace_id}/typebots"
+    # Builder API: POST /api/v1/typebots com workspaceId
+    url = f"{admin_base}/typebots"
     try:
         resp = requests.get(url, headers=headers, timeout=10)
         resp.raise_for_status()
@@ -308,7 +309,10 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
         pass
 
     payload: dict[str, Any] = {
-        "name": display_name[:80] or "Fluxo Sense",
+        "workspaceId": workspace.workspace_id,
+        "typebot": {
+            "name": display_name[:80] or "Fluxo Sense",
+        },
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -332,10 +336,18 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
             )
             return flow
     except requests.RequestException as e:
+        status_code = getattr(getattr(e, "response", None), "status_code", None)
+        body_text = None
+        try:
+            body_text = getattr(getattr(e, "response", None), "text", None)
+        except Exception:
+            body_text = None
         logger.warning(
-            "[TYPEBOT][BOT] Falha ao criar bot para flow=%s workspace=%s: %s",
+            "[TYPEBOT][BOT] Falha ao criar bot para flow=%s workspace=%s http=%s body=%s err=%s",
             getattr(flow, "id", None),
             workspace.workspace_id,
+            status_code,
+            (body_text[:500] if isinstance(body_text, str) else None),
             e,
         )
         return flow
