@@ -57,6 +57,7 @@ def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
+    desired_name = (payload.get("name") or "").strip()
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
@@ -80,6 +81,32 @@ def get_or_create_typebot_workspace(tenant: Tenant) -> Optional[TypebotWorkspace
             body_text = getattr(getattr(e, "response", None), "text", None)
         except Exception:
             body_text = None
+        # Se já existir, buscar e vincular ao tenant
+        try:
+            body_json = e.response.json() if getattr(e, "response", None) is not None else None
+        except Exception:
+            body_json = None
+        msg = (body_json.get("message") if isinstance(body_json, dict) else "") or ""
+        if status_code == 400 and "same name already exists" in msg.lower() and desired_name:
+            try:
+                list_url = f"{admin_api_base}/workspaces"
+                r2 = requests.get(list_url, headers=headers, timeout=10)
+                r2.raise_for_status()
+                d2 = r2.json() or {}
+                workspaces = d2.get("workspaces") if isinstance(d2, dict) else None
+                if isinstance(workspaces, list):
+                    match = next((w for w in workspaces if isinstance(w, dict) and (w.get("name") or "").strip() == desired_name), None)
+                    if match and (match.get("id") or "").strip():
+                        workspace_id = str(match.get("id")).strip()
+                        name = (match.get("name") or desired_name).strip()
+                        with transaction.atomic():
+                            ws, _ = TypebotWorkspace.objects.select_for_update().get_or_create(
+                                tenant=tenant,
+                                defaults={"workspace_id": workspace_id, "name": name},
+                            )
+                            return ws
+            except Exception as e2:
+                logger.warning("[TYPEBOT][WORKSPACE] Erro ao vincular workspace existente tenant=%s: %s", tenant.id, e2, exc_info=True)
         logger.warning(
             "[TYPEBOT][WORKSPACE] Falha ao criar workspace para tenant=%s http=%s body=%s err=%s",
             tenant.id,
