@@ -898,13 +898,6 @@ export function ChatWindow() {
                 </span>
               )}
 
-              {/* Atendente atual (quando conversa já está atribuída) */}
-              {activeConversation?.assigned_to && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-full text-xs font-medium">
-                  👤 {(activeConversation.assigned_to_data?.first_name || activeConversation.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
-                </span>
-              )}
-              
               {/* Tags do Contato (customizadas por cor) */}
               {contactTags && contactTags.length > 0 && (
                 <>
