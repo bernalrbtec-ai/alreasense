@@ -104,6 +104,55 @@ class Flow(models.Model):
         return f"{self.name} ({scope_label})"
 
 
+class FlowTypebotMap(models.Model):
+    """
+    Vínculo 1:1 entre Flow e Typebot (por tenant).
+    Tabela criada via SQL (sem migrations): public.chat_flow_typebot_map
+    """
+
+    STATUS_ACTIVE = "active"
+    STATUS_ARCHIVED = "archived"
+    STATUS_ERROR = "error"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Ativo"),
+        (STATUS_ARCHIVED, "Arquivado"),
+        (STATUS_ERROR, "Erro"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        "tenancy.Tenant",
+        on_delete=models.CASCADE,
+        related_name="flow_typebot_maps",
+        db_column="tenant_id",
+    )
+    flow = models.OneToOneField(
+        Flow,
+        on_delete=models.CASCADE,
+        related_name="typebot_map",
+        db_column="flow_id",
+    )
+
+    typebot_workspace_id = models.CharField(max_length=255)
+    typebot_internal_id = models.CharField(max_length=255)
+    typebot_public_id = models.CharField(max_length=255, blank=True, default="")
+    bot_name = models.CharField(max_length=255, blank=True, default="")
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "chat_flow_typebot_map"
+        managed = False
+        verbose_name = "Flow ↔ Typebot"
+        verbose_name_plural = "Flows ↔ Typebots"
+
+    def __str__(self) -> str:
+        return f"{self.tenant_id} / {self.flow_id} -> {self.typebot_internal_id}"
+
+
 class FlowNode(models.Model):
     """Etapa do fluxo: mensagem, imagem, arquivo, lista ou botões."""
 

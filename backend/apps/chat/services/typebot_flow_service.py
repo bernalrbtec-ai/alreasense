@@ -12,10 +12,11 @@ from typing import Any, List, Optional, Tuple
 
 import requests
 from django.conf import settings
+from django.db import IntegrityError
 from django.db import transaction
 
 from apps.chat.models import Conversation, Message
-from apps.chat.models_flow import Flow, ConversationFlowState
+from apps.chat.models_flow import Flow, ConversationFlowState, FlowTypebotMap
 from apps.chat.redis_streams import enqueue_send_message_batch, enqueue_send_message
 from apps.tenancy.services import get_or_create_typebot_workspace
 
@@ -175,17 +176,52 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     """
     if not flow or not getattr(flow, "tenant_id", None):
         return flow
-    # Já tem bot vinculado: se tiver internal_id, ok.
-    # Se faltar internal_id, cria um novo bot no workspace do tenant e sobrescreve os IDs.
-    if (getattr(flow, "typebot_public_id", None) or "").strip():
-        if (getattr(flow, "typebot_internal_id", None) or "").strip():
-            return flow
-        try:
-            flow.typebot_public_id = ""
-            flow.typebot_internal_id = ""
-            flow.save(update_fields=["typebot_public_id", "typebot_internal_id"])
-        except Exception:
-            return flow
+
+    # Idempotência (evita criar 2-4x quando create/retrieve disparam juntos)
+    try:
+        with transaction.atomic():
+            locked_flow = Flow.objects.select_for_update().filter(id=flow.id).first()
+            if locked_flow:
+                flow = locked_flow
+
+            existing_map = FlowTypebotMap.objects.select_for_update().filter(flow_id=flow.id, tenant_id=flow.tenant_id).first()
+            if existing_map and (existing_map.typebot_internal_id or "").strip():
+                # Sincronizar campos legados no Flow (para UI/compatibilidade)
+                try:
+                    flow.typebot_internal_id = (existing_map.typebot_internal_id or "").strip()
+                    flow.typebot_public_id = (existing_map.typebot_public_id or "").strip()
+                    if (existing_map.typebot_public_id or "").strip() and not (flow.typebot_base_url or "").strip():
+                        base = (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "").strip().rstrip("/")
+                        flow.typebot_base_url = base
+                    flow.save(update_fields=["typebot_internal_id", "typebot_public_id", "typebot_base_url"])
+                except Exception:
+                    pass
+                return flow
+
+            # Se ainda não existe map, mas já existe internal_id no Flow, cria o vínculo usando o workspace do tenant.
+            if not existing_map and (getattr(flow, "typebot_internal_id", None) or "").strip():
+                try:
+                    tenant = getattr(flow, "tenant", None)
+                    if not tenant:
+                        from apps.tenancy.models import Tenant
+
+                        tenant = Tenant.objects.filter(id=flow.tenant_id).first()
+                    if tenant:
+                        ws = get_or_create_typebot_workspace(tenant)
+                        if ws:
+                            FlowTypebotMap.objects.create(
+                                tenant_id=flow.tenant_id,
+                                flow_id=flow.id,
+                                typebot_workspace_id=ws.workspace_id,
+                                typebot_internal_id=(flow.typebot_internal_id or "").strip(),
+                                typebot_public_id=(flow.typebot_public_id or "").strip(),
+                                bot_name=(flow.name or "").strip()[:255],
+                            )
+                except Exception:
+                    pass
+    except Exception:
+        # Não quebrar request por falha no lock
+        pass
 
     admin_base = _get_typebot_admin_base()
     api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
@@ -256,12 +292,13 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
         tb = tb if isinstance(tb, dict) else data if isinstance(data, dict) else {}
         public_id = (tb.get("publicId") or tb.get("public_id") or tb.get("publicID") or "").strip()
         internal_id = (tb.get("id") or tb.get("_id") or tb.get("typebotId") or "").strip()
-        if not public_id:
+        if not internal_id:
             logger.warning(
-                "[TYPEBOT][BOT] Resposta sem publicId ao criar bot flow=%s workspace=%s data_keys=%s",
+                "[TYPEBOT][BOT] Resposta sem id ao criar bot flow=%s workspace=%s data_keys=%s typebot_keys=%s",
                 getattr(flow, "id", None),
                 workspace.workspace_id,
                 list(data.keys()) if isinstance(data, dict) else [],
+                list(tb.keys()) if isinstance(tb, dict) else [],
             )
             return flow
     except requests.RequestException as e:
@@ -290,30 +327,57 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
         )
         return flow
 
-    # Persistir IDs no Flow
+    # Persistir IDs no vínculo (tabela 1:1) e também no Flow (compatibilidade/UI)
     try:
-        flow.typebot_public_id = public_id
-        if internal_id:
+        with transaction.atomic():
+            locked_flow = Flow.objects.select_for_update().filter(id=flow.id).first()
+            if locked_flow:
+                flow = locked_flow
+
+            # Base do viewer (chat)
+            viewer_base = (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "").strip()
+            if viewer_base.endswith("/api/v1"):
+                viewer_base = viewer_base[: -len("/api/v1")]
+            viewer_base = viewer_base.rstrip("/")
+
+            # Cria/atualiza map (1:1)
+            try:
+                m, created = FlowTypebotMap.objects.select_for_update().get_or_create(
+                    tenant_id=flow.tenant_id,
+                    flow_id=flow.id,
+                    defaults={
+                        "typebot_workspace_id": workspace.workspace_id,
+                        "typebot_internal_id": internal_id,
+                        "typebot_public_id": public_id or "",
+                        "bot_name": (display_name or flow.name or "").strip()[:255],
+                        "status": FlowTypebotMap.STATUS_ACTIVE,
+                    },
+                )
+                if not created:
+                    m.typebot_workspace_id = workspace.workspace_id
+                    m.typebot_internal_id = internal_id
+                    if public_id:
+                        m.typebot_public_id = public_id
+                    m.bot_name = (display_name or flow.name or "").strip()[:255]
+                    m.status = FlowTypebotMap.STATUS_ACTIVE
+                    m.save(update_fields=["typebot_workspace_id", "typebot_internal_id", "typebot_public_id", "bot_name", "status", "updated_at"])
+            except IntegrityError:
+                # Outro request criou ao mesmo tempo; recarregar
+                m = FlowTypebotMap.objects.filter(tenant_id=flow.tenant_id, flow_id=flow.id).first()
+
+            # Preenche também no Flow (campos existentes)
             flow.typebot_internal_id = internal_id
-        if not getattr(flow, "typebot_base_url", None):
-            # Usar sempre a base do viewer (chat) como padrão
-            base = (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "").strip()
-            if base.endswith("/api/v1"):
-                base = base[: -len("/api/v1")]
-            flow.typebot_base_url = base
-        flow.save(
-            update_fields=[
-                "typebot_public_id",
-                "typebot_internal_id",
-                "typebot_base_url",
-            ],
-        )
+            if public_id:
+                flow.typebot_public_id = public_id
+            if viewer_base:
+                flow.typebot_base_url = viewer_base
+            flow.save(update_fields=["typebot_internal_id", "typebot_public_id", "typebot_base_url"])
         logger.info(
             "[TYPEBOT][BOT] Bot criado e associado ao flow=%s tenant=%s workspace=%s publicId=%s",
             flow.id,
             flow.tenant_id,
             workspace.workspace_id,
-            public_id,
+            public_id or "-",
         )
     except Exception as e:
         logger.warning(
