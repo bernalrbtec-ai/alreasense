@@ -3177,16 +3177,18 @@ def dify_settings(request):
     settings_obj.enabled = enabled
 
     # PATCH semântico: só atualiza base_url se explicitamente enviada
+    # base_url_audit captura o valor atual para o audit log mesmo quando não alterada
+    base_url_audit = settings_obj.base_url or ""
     if "base_url" in data:
-        base_url = str(data.get("base_url") or "").strip()
-        if base_url and not (base_url.startswith("http://") or base_url.startswith("https://")):
+        base_url_audit = str(data.get("base_url") or "").strip()
+        if base_url_audit and not (base_url_audit.startswith("http://") or base_url_audit.startswith("https://")):
             return Response({"error": "base_url deve iniciar com http:// ou https://."}, status=status.HTTP_400_BAD_REQUEST)
-        settings_obj.base_url = base_url
+        settings_obj.base_url = base_url_audit
         update_fields.append("base_url")
 
     settings_obj.updated_at = timezone.now()
     settings_obj.save(update_fields=update_fields)
-    _dify_audit(tenant, request.user, "settings_update", payload={"enabled": enabled, "base_url": base_url})
+    _dify_audit(tenant, request.user, "settings_update", payload={"enabled": enabled, "base_url": base_url_audit})
 
     return Response(
         {
@@ -3605,12 +3607,14 @@ def dify_test_connection(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    url = f"{base_url}/v1/info"
+    # /v1/parameters usa a app API key (igual ao serviço de chat) — evita falso negativo com /v1/info
+    url = f"{base_url}/v1/parameters"
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
-        resp = requests.get(url, headers=headers, timeout=10)
+        import httpx as _httpx
+        with _httpx.Client(timeout=10) as client:
+            resp = client.get(url, headers=headers)
         if resp.status_code >= 400:
-            # tentar extrair detalhe
             detail = (resp.text or "")[:300]
             try:
                 j = resp.json()
@@ -3619,13 +3623,13 @@ def dify_test_connection(request):
             except Exception:
                 pass
             return Response({"ok": False, "detail": f"HTTP {resp.status_code}: {detail}"}, status=status.HTTP_200_OK)
-        data = {}
+        info = {}
         try:
-            data = resp.json() if resp.content else {}
+            info = resp.json() if resp.content else {}
         except Exception:
-            data = {}
-        return Response({"ok": True, "detail": "Conexão OK.", "info": data}, status=status.HTTP_200_OK)
-    except requests.Timeout:
+            info = {}
+        return Response({"ok": True, "detail": "Conexão OK.", "info": info}, status=status.HTTP_200_OK)
+    except _httpx.TimeoutException:
         return Response({"ok": False, "detail": "Timeout ao conectar no Dify."}, status=status.HTTP_200_OK)
-    except requests.RequestException as e:
+    except _httpx.RequestError as e:
         return Response({"ok": False, "detail": str(e) if str(e) else "Erro ao conectar no Dify."}, status=status.HTTP_200_OK)

@@ -142,7 +142,11 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
         _update_dify_conversation_id(state['state_id'], new_dify_conv_id)
 
     if not dify_answer:
-        logger.info("Dify takeover: resposta vazia do agente %s (conversa %s)", agent.id, conversation.id)
+        logger.warning(
+            "⚠️ [DIFY] Agente %s retornou resposta vazia para conversa %s — "
+            "cliente não recebeu resposta. Verifique o fluxo do agente no Dify.",
+            agent.dify_app_id, conversation.id
+        )
         return True  # takeover tratado, mas sem mensagem para enviar
 
     # Determinar instância WA para enviar a resposta

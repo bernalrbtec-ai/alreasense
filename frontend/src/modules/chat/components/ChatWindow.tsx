@@ -49,6 +49,9 @@ export function ChatWindow() {
   const [loadingDifyAgents, setLoadingDifyAgents] = useState(false);
   const [startDifyLoading, setStartDifyLoading] = useState(false);
   const [stopDifyLoading, setStopDifyLoading] = useState(false);
+  // Badge permanente no header: busca o estado ativo ao carregar a conversa
+  const [difyHeaderState, setDifyHeaderState] = useState<{ display_name: string } | null>(null);
+  const [showDifySwapConfirm, setShowDifySwapConfirm] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
@@ -707,6 +710,20 @@ export function ChatWindow() {
     }
   }, [conversationId, displayName]);
 
+  // Badge permanente: buscar estado ativo Dify ao carregar/trocar de conversa
+  useEffect(() => {
+    if (!conversationId) { setDifyHeaderState(null); return; }
+    let cancelled = false;
+    api.get(`/chat/conversations/${conversationId}/dify-agents/`)
+      .then((res) => {
+        if (cancelled) return;
+        const active = (res?.data as any)?.active_state;
+        setDifyHeaderState(active?.status === 'active' ? { display_name: active.display_name || 'Dify' } : null);
+      })
+      .catch(() => { if (!cancelled) setDifyHeaderState(null); });
+    return () => { cancelled = true; };
+  }, [conversationId]);
+
   // Carregar fluxos e agentes Dify quando abrir o modal
   useEffect(() => {
     if (!showStartFlowModal || !conversationId) return;
@@ -772,6 +789,7 @@ export function ChatWindow() {
     // A6: garantir que estados de loading sejam resetados ao fechar o modal
     setStartDifyLoading(false);
     setStopDifyLoading(false);
+    setShowDifySwapConfirm(false);
   }, []);
 
   // Fechar modal com Escape
@@ -790,16 +808,7 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Verificar se activeConversation, conversationId e isReady antes de renderizar
   // Isso evita problemas de inicialização quando um grupo é acessado
   // isReady garante que todos os estados foram atualizados antes de renderizar
-  // ✅ CORREÇÃO ADICIONAL: Verificar também se displayName está definido (não vazio ou undefined)
-  console.log('🔍 [ChatWindow] Verificando condições para renderizar:', {
-    hasActiveConversation: !!activeConversation,
-    activeConversationId: activeConversation?.id,
-    conversationId,
-    isReady,
-    displayName,
-    displayNameType: typeof displayName,
-    willRender: !!(activeConversation && activeConversation.id && conversationId && isReady && displayName !== undefined)
-  });
+  // Verificar também se displayName está definido (não vazio ou undefined)
   
   if (!activeConversation || !activeConversation.id || !conversationId || !isReady || displayName === undefined) {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
@@ -861,10 +870,7 @@ export function ChatWindow() {
                   src={getMediaProxyUrl(profilePicUrl)}
                   alt={displayName}
                   className="w-full h-full object-cover"
-                  onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
                 onError={(e) => {
-                  console.error('❌ [IMG] Erro ao carregar foto:', e);
-                  console.error('   URL:', e.currentTarget.src);
                   e.currentTarget.style.display = 'none';
                 }}
               />
@@ -954,6 +960,17 @@ export function ChatWindow() {
                     </span>
                   ))}
                 </>
+              )}
+
+              {/* Badge de agente Dify ativo */}
+              {difyHeaderState && (
+                <span
+                  title={`Agente Dify ativo: ${difyHeaderState.display_name}`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full text-xs font-medium cursor-default"
+                >
+                  <Bot className="w-3 h-3" />
+                  {difyHeaderState.display_name}
+                </span>
               )}
             </div>
           </div>
@@ -1343,6 +1360,7 @@ export function ChatWindow() {
                               toast.success('Agente parado.');
                               setDifyActiveState(null);
                               setSelectedDifyAgentId(null);
+                              setDifyHeaderState(null);
                             } else {
                               toast.error(res?.data?.message || 'Erro ao parar agente.');
                             }
@@ -1404,18 +1422,67 @@ export function ChatWindow() {
                   >
                     Cancelar
                   </button>
+                  {/* Confirmação de troca de agente */}
+                  {showDifySwapConfirm ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-amber-700 dark:text-amber-300 text-xs">Encerra sessão atual. Confirmar?</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowDifySwapConfirm(false)}
+                        className="px-3 py-1.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-xs"
+                      >
+                        Não
+                      </button>
+                      <button
+                        type="button"
+                        disabled={startDifyLoading}
+                        onClick={async () => {
+                          if (!selectedDifyAgentId || !conversationId) return;
+                          setShowDifySwapConfirm(false);
+                          setStartDifyLoading(true);
+                          try {
+                            const res = await api.post(`/chat/conversations/${conversationId}/start-dify-agent/`, {
+                              catalog_id: selectedDifyAgentId,
+                            });
+                            if (res?.data?.success) {
+                              const agentName = difyAgents.find(a => a.id === selectedDifyAgentId)?.display_name || res.data.display_name || 'Dify';
+                              toast.success(res.data.message || 'Agente trocado.');
+                              setDifyHeaderState({ display_name: agentName });
+                              closeStartFlowModal();
+                            } else {
+                              toast.error(res?.data?.message || 'Erro ao trocar agente.');
+                            }
+                          } catch (e: any) {
+                            toast.error(e?.response?.data?.message || 'Não foi possível trocar o agente.');
+                          } finally {
+                            setStartDifyLoading(false);
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 disabled:opacity-50"
+                      >
+                        {startDifyLoading ? '...' : 'Sim, trocar'}
+                      </button>
+                    </div>
+                  ) : (
                   <button
                     type="button"
                     disabled={loadingDifyAgents || difyAgents.length === 0 || !selectedDifyAgentId || startDifyLoading}
                     onClick={async () => {
                       if (!selectedDifyAgentId || !conversationId) return;
+                      // Se há agente diferente ativo, pedir confirmação antes de trocar
+                      if (difyActiveState?.status === 'active' && selectedDifyAgentId !== difyActiveState.catalog_id) {
+                        setShowDifySwapConfirm(true);
+                        return;
+                      }
                       setStartDifyLoading(true);
                       try {
                         const res = await api.post(`/chat/conversations/${conversationId}/start-dify-agent/`, {
                           catalog_id: selectedDifyAgentId,
                         });
                         if (res?.data?.success) {
+                          const agentName = difyAgents.find(a => a.id === selectedDifyAgentId)?.display_name || res.data.display_name || 'Dify';
                           toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
+                          setDifyHeaderState({ display_name: agentName });
                           closeStartFlowModal();
                         } else {
                           toast.error(res?.data?.message || 'Erro ao iniciar agente.');
@@ -1434,6 +1501,7 @@ export function ChatWindow() {
                         ? 'Trocar agente'
                         : 'Ativar agente'}
                   </button>
+                  )}
                 </div>
               </>
             )}

@@ -3145,7 +3145,10 @@ export default function ConfigurationsPage() {
                     </div>
                   ) : (
                     <ul className="space-y-1">
-                      {difyCatalog.map((it) => (
+                      {difyCatalog.map((it) => {
+                        const dept = it.default_department_id ? departments.find(d => d.id === it.default_department_id) : null
+                        const waInst = it.whatsapp_instance_id ? difyWaInstances.find(i => i.id === it.whatsapp_instance_id) : null
+                        return (
                         <li key={it.id}>
                           <button
                             type="button"
@@ -3153,13 +3156,23 @@ export default function ConfigurationsPage() {
                             className="w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/80 text-gray-700 dark:text-gray-300"
                           >
                             <span className="block truncate font-medium">{it.display_name || it.dify_app_id}</span>
-                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 block font-mono truncate">
-                              {it.dify_app_id}
-                              {!it.is_active && <span className="ml-1 text-amber-600 dark:text-amber-400">(inativo)</span>}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {!it.is_active && <span className="text-xs text-amber-600 dark:text-amber-400">(inativo)</span>}
+                              {dept && (
+                                <span className="text-xs text-violet-600 dark:text-violet-400 truncate max-w-[120px]">
+                                  🏢 {dept.name}
+                                </span>
+                              )}
+                              {waInst && (
+                                <span className="text-xs text-blue-600 dark:text-blue-400 truncate max-w-[100px]">
+                                  📱 {waInst.friendly_name || waInst.instance_name}
+                                </span>
+                              )}
+                            </div>
                           </button>
                         </li>
-                      ))}
+                        )
+                      })}
                     </ul>
                   )}
                 </Card>
