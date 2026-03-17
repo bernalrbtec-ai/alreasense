@@ -169,6 +169,9 @@ export function upsertConversation(
       incoming.unread_count !== undefined ||
       incoming.status !== undefined ||
       incoming.last_message_at !== undefined ||
+      // ✅ CRÍTICO: atribuição/atendente (para exibir \"X está atendendo\")
+      incoming.assigned_to !== undefined ||
+      incoming.assigned_to_data !== undefined ||
       // ✅ CORREÇÃO CRÍTICA: Sempre processar atualizações de nome, foto, tipo e telefone (não ignorar por debounce)
       (existing && existing.contact_name !== incoming.contact_name) ||
       (existing && existing.profile_pic_url !== incoming.profile_pic_url) ||
