@@ -1019,7 +1019,7 @@ export default function FlowPage() {
       </AnimatePresence>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm transition-shadow hover:shadow-md">
+        <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm transition-shadow hover:shadow-md max-h-[calc(100vh-220px)] overflow-y-auto">
           <h3 className="font-medium mb-3 text-gray-900 dark:text-gray-100">Fluxos</h3>
           {flows.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
@@ -1056,7 +1056,7 @@ export default function FlowPage() {
           )}
         </Card>
 
-        <div className="md:col-span-2 space-y-4">
+        <div className="md:col-span-2 space-y-4 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
           {selectedFlow && detailLoading && (
             <motion.div
               initial={{ opacity: 0 }}
