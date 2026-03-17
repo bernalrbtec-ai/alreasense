@@ -52,8 +52,8 @@ export function ConversationList() {
     shallow // ✅ Comparação shallow para evitar re-renders quando objetos não mudaram
   );
   const [refreshTick, setRefreshTick] = useState(0);
-  const { isAdmin, isGerente } = usePermissions();
-  const canSpy = isAdmin || isGerente;
+  const permissions = usePermissions();
+  const canSpy = !!(permissions as any).can_view_metrics || permissions.isAdmin || permissions.isGerente;
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
