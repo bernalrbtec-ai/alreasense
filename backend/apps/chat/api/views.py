@@ -264,6 +264,37 @@ class ConversationListPagination(PageNumberPagination):
     max_page_size = 100
 
 
+def _broadcast_dify_state(
+    tenant_id: str,
+    conversation_id: str,
+    status: str,
+    catalog_id: str | None,
+    display_name: str | None,
+) -> None:
+    """
+    Envia evento WebSocket 'dify_agent_state_changed' para todos os operadores do tenant.
+    Permite que o badge do agente Dify se atualize em tempo real para qualquer operador
+    que esteja visualizando a mesma conversa — sem necessidade de refresh ou re-fetch.
+    """
+    try:
+        from apps.chat.utils.websocket import broadcast_to_tenant
+        broadcast_to_tenant(
+            tenant_id=tenant_id,
+            event_type='dify_agent_state_changed',
+            data={
+                'conversation_id': conversation_id,
+                'status': status,
+                'catalog_id': catalog_id,
+                'display_name': display_name or '',
+            },
+        )
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "dify_agent_state_changed broadcast falhou (não crítico): %s", exc
+        )
+
+
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     """
     ViewSet para conversas.
@@ -4202,11 +4233,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.error("start_dify_agent DB error: %s", exc)
             return Response({'success': False, 'message': 'Erro ao salvar estado do agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+        display_name = agent.display_name or agent.dify_app_id
+        # Notificar todos os operadores do tenant em tempo real (badge do header)
+        _broadcast_dify_state(
+            tenant_id=str(tenant.id),
+            conversation_id=str(conversation.id),
+            status='active',
+            catalog_id=str(agent.id),
+            display_name=display_name,
+        )
         return Response({
             'success': True,
-            'message': f'Agente "{agent.display_name or agent.dify_app_id}" iniciado.',
+            'message': f'Agente "{display_name}" iniciado.',
             'catalog_id': str(agent.id),
-            'display_name': agent.display_name or agent.dify_app_id,
+            'display_name': display_name,
         }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='stop-dify-agent')
@@ -4231,6 +4271,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
 
         if affected == 0:
             return Response({'success': False, 'message': 'Nenhum agente ativo nesta conversa.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Notificar todos os operadores do tenant em tempo real (remover badge do header)
+        _broadcast_dify_state(
+            tenant_id=str(tenant.id),
+            conversation_id=str(conversation.id),
+            status='stopped',
+            catalog_id=None,
+            display_name=None,
+        )
         return Response({'success': True, 'message': 'Agente parado.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'])

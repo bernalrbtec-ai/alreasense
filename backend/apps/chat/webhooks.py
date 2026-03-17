@@ -4,6 +4,7 @@ Recebe eventos de mensagens e atualiza o banco.
 """
 import logging
 import threading
+import weakref
 import httpx
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -28,6 +29,39 @@ from apps.connections.models import EvolutionConnection
 from apps.notifications.models import WhatsAppInstance
 
 logger = logging.getLogger(__name__)
+
+# Registry de threads Dify ativas — permite graceful shutdown sem perder respostas em andamento.
+# Usa WeakSet para não impedir GC de threads já finalizadas.
+_dify_active_threads: weakref.WeakSet = weakref.WeakSet()
+_dify_threads_lock = threading.Lock()
+
+
+def _launch_dify_thread(target) -> threading.Thread:
+    """
+    Lança uma thread para o takeover Dify e registra no WeakSet global.
+    Threads são daemon=True (não impedem encerramento do processo) mas são registradas
+    para que o sinal de shutdown possa aguardá-las com join(timeout=35) antes de sair.
+    """
+    t = threading.Thread(target=target, daemon=True)
+    with _dify_threads_lock:
+        _dify_active_threads.add(t)
+    t.start()
+    return t
+
+
+def wait_dify_threads(timeout: float = 35.0) -> None:
+    """
+    Aguarda todas as threads Dify ativas terminarem (chamado no graceful shutdown).
+    Máximo de `timeout` segundos para não travar o processo indefinidamente.
+    """
+    with _dify_threads_lock:
+        threads = list(_dify_active_threads)
+    if not threads:
+        return
+    logger.info("[DIFY] Aguardando %d thread(s) Dify ativa(s) antes de encerrar...", len(threads))
+    for t in threads:
+        t.join(timeout=timeout)
+    logger.info("[DIFY] Threads Dify finalizadas (ou timeout atingido).")
 
 
 def _mask_digits(value: str) -> str:
@@ -4092,8 +4126,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as _exc:
                             logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)
 
-                    t = threading.Thread(target=_run_dify_takeover, daemon=True)
-                    t.start()
+                    _launch_dify_thread(_run_dify_takeover)
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)

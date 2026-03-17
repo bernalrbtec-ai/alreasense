@@ -735,6 +735,29 @@ export function ChatWindow() {
     return () => { cancelled = true; };
   }, [conversationId]);
 
+  // Atualizar badge Dify em tempo real via WebSocket (outros operadores que ativaram/pararam o agente)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as any;
+      if (!detail || !conversationId) return;
+      if (String(detail.conversation_id) !== String(conversationId)) return;
+      if (detail.status === 'active') {
+        const newState = {
+          catalog_id: detail.catalog_id || '',
+          status: 'active',
+          display_name: detail.display_name || 'Dify',
+        };
+        setDifyActiveState(newState);
+        setDifyHeaderState({ display_name: detail.display_name || 'Dify' });
+      } else {
+        setDifyActiveState(null);
+        setDifyHeaderState(null);
+      }
+    };
+    window.addEventListener('dify_agent_state_changed', handler);
+    return () => window.removeEventListener('dify_agent_state_changed', handler);
+  }, [conversationId]);
+
   // Carregar fluxos e agentes Dify quando abrir o modal
   useEffect(() => {
     if (!showStartFlowModal || !conversationId) return;

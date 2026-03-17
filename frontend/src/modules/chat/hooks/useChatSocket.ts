@@ -334,6 +334,16 @@ export function useChatSocket(conversationId?: string) {
       });
     };
 
+    // Handler: badge do agente Dify atualizado em tempo real (qualquer operador que ativou/parou)
+    const handleDifyAgentStateChanged = (data: WebSocketMessage) => {
+      const convId = data.conversation_id as string | undefined;
+      if (!convId) return;
+      const { activeConversation } = useChatStore.getState();
+      if (!activeConversation?.id || String(activeConversation.id) !== String(convId)) return;
+      // Emitir evento customizado para o ChatWindow escutar sem prop drilling
+      window.dispatchEvent(new CustomEvent('dify_agent_state_changed', { detail: data }));
+    };
+
     // Registrar listeners
     chatWebSocketManager.on('message_received', handleMessageReceived);
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
@@ -342,9 +352,9 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('message_reaction_update', handleReactionUpdate);
     chatWebSocketManager.on('message_deleted', handleMessageDeleted);
     chatWebSocketManager.on('message_edited', handleMessageEdited);
-    // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
     chatWebSocketManager.on('new_conversation', handleNewConversation);
     chatWebSocketManager.on('instance_status_changed', handleInstanceStatusChanged);
+    chatWebSocketManager.on('dify_agent_state_changed', handleDifyAgentStateChanged);
 
     const handleError = (data: WebSocketMessage) => {
       const msg = data.message ?? data.error ?? 'Erro ao enviar. Tente novamente.';
@@ -364,6 +374,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_edited', handleMessageEdited);
       chatWebSocketManager.off('new_conversation', handleNewConversation);
       chatWebSocketManager.off('instance_status_changed', handleInstanceStatusChanged);
+      chatWebSocketManager.off('dify_agent_state_changed', handleDifyAgentStateChanged);
     };
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, setInstanceStatusAlert, notificationsEnabled, showNotification]);
 

@@ -40,12 +40,28 @@ def _extract_dify_base_url(public_url: str) -> str:
 def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
     """
     Retorna o estado de takeover Dify ativo para a conversa, ou None.
-    Usa SELECT FOR UPDATE para serializar o acesso entre múltiplos workers/threads,
-    substituindo o lock in-memory (que não funciona entre processos gunicorn).
+
+    Usa SELECT FOR UPDATE SKIP LOCKED:
+    - Se a linha existe e não está locked → retorna o estado (processamento normal)
+    - Se a linha existe mas está locked por outro worker → retorna None com log de aviso
+      (mensagem descartada — o outro worker já está respondendo)
+    - Se não há linha ativa → retorna None silenciosamente
+
     O caller deve envolver esta chamada em transaction.atomic().
     """
     try:
         with _conn.cursor() as cur:
+            # Primeiro: verificar se existe linha ativa (sem lock) para distinguir os casos
+            cur.execute(
+                "SELECT id FROM ai_dify_conversation_state "
+                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
+                [str(conversation_id), str(tenant_id)]
+            )
+            exists = cur.fetchone()
+            if not exists:
+                return None  # Sem agente ativo — silencioso
+
+            # Linha existe: tentar adquirir o lock
             cur.execute(
                 "SELECT id, catalog_id, dify_conversation_id "
                 "FROM ai_dify_conversation_state "
@@ -60,6 +76,12 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
                     'catalog_id': str(row[1]),
                     'dify_conversation_id': row[2],
                 }
+            # Linha existe mas lock não obtido → outro worker processando esta conversa
+            logger.warning(
+                "⚡ [DIFY] Conversa %s já está sendo processada por outro worker — "
+                "mensagem descartada para evitar resposta duplicada.",
+                conversation_id
+            )
     except Exception as exc:
         logger.warning("_get_active_dify_state error: %s", exc)
     return None
@@ -193,13 +215,36 @@ def maybe_handle_dify_takeover(
     if not dify_answer:
         logger.warning(
             "⚠️ [DIFY] Agente %s retornou resposta vazia para conversa %s — "
-            "cliente não recebeu resposta. Verifique o fluxo do agente no Dify.",
+            "tentando enviar mensagem de fallback ao cliente.",
             agent.dify_app_id, conv_id
         )
-        return True  # takeover tratou a mensagem, mas sem resposta ao cliente
+        # Tentar obter mensagem de fallback configurada nas settings do tenant
+        fallback_msg = _get_dify_empty_response_fallback(tenant)
+        if fallback_msg:
+            _send_wa_reply(effective_instance, contact_phone, fallback_msg, agent.dify_app_id, conv_id)
+        # Retornar True: a mensagem foi tratada pelo takeover (mesmo sem resposta útil)
+        # para que o fluxo normal não processe esta mensagem em paralelo
+        return True
 
     # ── Fase 5: enviar resposta via Evolution API ─────────────────────────────────
     return _send_wa_reply(effective_instance, contact_phone, dify_answer, agent.dify_app_id, conv_id)
+
+
+def _get_dify_empty_response_fallback(tenant) -> str:
+    """
+    Retorna a mensagem de fallback quando o Dify retorna resposta vazia.
+    Usa o campo `dify_empty_response_fallback` nas DifySettings do tenant, se configurado.
+    Fallback padrão do sistema (pode ser customizado por tenant no futuro).
+    """
+    try:
+        from apps.ai.models import DifySettings
+        settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+        if settings_obj and getattr(settings_obj, 'empty_response_fallback', None):
+            return settings_obj.empty_response_fallback.strip()
+    except Exception:
+        pass
+    # Sem fallback configurado → não enviar nada (evitar spam de mensagens genéricas)
+    return ''
 
 
 def _resolve_wa_instance(agent, tenant, wa_instance, conversation):
