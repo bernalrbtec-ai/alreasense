@@ -4093,6 +4093,123 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    @action(detail=True, methods=['get'], url_path='dify-agents')
+    def list_dify_agents_for_conversation(self, request, pk=None):
+        """
+        Lista agentes Dify ativos disponíveis para a conversa.
+        Retorna agentes do tenant. Também retorna estado de takeover ativo, se houver.
+        """
+        conversation = self.get_object()
+        tenant = conversation.tenant
+        try:
+            from apps.ai.models import DifyAppCatalogItem
+        except ImportError:
+            return Response({'agents': [], 'active_state': None}, status=status.HTTP_200_OK)
+        try:
+            agents_qs = DifyAppCatalogItem.objects.filter(tenant=tenant, is_active=True, deleted_at__isnull=True)
+            agents = [
+                {
+                    'id': str(a.id),
+                    'dify_app_id': a.dify_app_id,
+                    'display_name': a.display_name or a.dify_app_id,
+                    'description': a.description or '',
+                }
+                for a in agents_qs
+            ]
+        except Exception:
+            agents = []
+
+        active_state = None
+        try:
+            from django.db import connection as _conn
+            with _conn.cursor() as cur:
+                cur.execute(
+                    "SELECT catalog_id, dify_conversation_id, status FROM ai_dify_conversation_state "
+                    "WHERE conversation_id = %s AND status = 'active' LIMIT 1",
+                    [str(conversation.id)]
+                )
+                row = cur.fetchone()
+                if row:
+                    active_state = {
+                        'catalog_id': str(row[0]),
+                        'dify_conversation_id': row[1],
+                        'status': row[2],
+                    }
+        except Exception:
+            pass
+
+        return Response({'agents': agents, 'active_state': active_state}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='start-dify-agent')
+    def start_dify_agent(self, request, pk=None):
+        """
+        Inicia takeover de agente Dify na conversa.
+        Body: { "catalog_id": "uuid", "message": "opcional - primeira mensagem" }
+        """
+        conversation = self.get_object()
+        tenant = conversation.tenant
+        data = request.data if isinstance(request.data, dict) else {}
+        catalog_id = (data.get('catalog_id') or '').strip()
+        if not catalog_id:
+            return Response({'success': False, 'message': 'catalog_id é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            from apps.ai.models import DifyAppCatalogItem
+            from django.db import connection as _conn
+        except ImportError:
+            return Response({'success': False, 'message': 'Módulo Dify não disponível.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            agent = DifyAppCatalogItem.objects.get(id=catalog_id, tenant=tenant, is_active=True)
+        except DifyAppCatalogItem.DoesNotExist:
+            return Response({'success': False, 'message': 'Agente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as exc:
+            return Response({'success': False, 'message': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            with _conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO ai_dify_conversation_state "
+                    "(id, tenant_id, conversation_id, catalog_id, status, started_by_user_id, started_at, updated_at) "
+                    "VALUES (gen_random_uuid(), %s, %s, %s, 'active', %s, now(), now()) "
+                    "ON CONFLICT (conversation_id) DO UPDATE SET "
+                    "catalog_id = EXCLUDED.catalog_id, status = 'active', "
+                    "started_by_user_id = EXCLUDED.started_by_user_id, updated_at = now(), dify_conversation_id = NULL",
+                    [str(tenant.id), str(conversation.id), str(agent.id), request.user.id]
+                )
+        except Exception as exc:
+            logger.error("start_dify_agent DB error: %s", exc)
+            return Response({'success': False, 'message': 'Erro ao salvar estado do agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({
+            'success': True,
+            'message': f'Agente "{agent.display_name or agent.dify_app_id}" iniciado.',
+            'catalog_id': str(agent.id),
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='stop-dify-agent')
+    def stop_dify_agent(self, request, pk=None):
+        """
+        Para o agente Dify ativo na conversa.
+        """
+        conversation = self.get_object()
+        try:
+            from django.db import connection as _conn
+            with _conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE ai_dify_conversation_state SET status = 'stopped', updated_at = now() "
+                    "WHERE conversation_id = %s AND status = 'active'",
+                    [str(conversation.id)]
+                )
+                affected = cur.rowcount
+        except Exception as exc:
+            logger.error("stop_dify_agent DB error: %s", exc)
+            return Response({'success': False, 'message': 'Erro ao parar agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        if affected == 0:
+            return Response({'success': False, 'message': 'Nenhum agente ativo nesta conversa.'}, status=status.HTTP_200_OK)
+        return Response({'success': True, 'message': 'Agente parado.'}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):
         """

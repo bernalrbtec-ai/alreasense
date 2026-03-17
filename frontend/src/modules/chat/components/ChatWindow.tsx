@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, MoreVertical, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap, Bot, StopCircle } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -41,6 +41,14 @@ export function ChatWindow() {
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [loadingFlows, setLoadingFlows] = useState(false);
   const [startFlowLoading, setStartFlowLoading] = useState(false);
+  // Dify agent modal state
+  const [startFlowModalTab, setStartFlowModalTab] = useState<'flows' | 'dify'>('flows');
+  const [difyAgents, setDifyAgents] = useState<Array<{ id: string; dify_app_id: string; display_name: string; description: string }>>([]);
+  const [difyActiveState, setDifyActiveState] = useState<{ catalog_id: string; status: string } | null>(null);
+  const [selectedDifyAgentId, setSelectedDifyAgentId] = useState<string | null>(null);
+  const [loadingDifyAgents, setLoadingDifyAgents] = useState(false);
+  const [startDifyLoading, setStartDifyLoading] = useState(false);
+  const [stopDifyLoading, setStopDifyLoading] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
@@ -699,10 +707,12 @@ export function ChatWindow() {
     }
   }, [conversationId, displayName]);
 
-  // Carregar fluxos quando abrir o modal "Iniciar fluxo"
+  // Carregar fluxos e agentes Dify quando abrir o modal
   useEffect(() => {
     if (!showStartFlowModal || !conversationId) return;
     let cancelled = false;
+
+    // Fluxos
     setLoadingFlows(true);
     setFlowsForStart([]);
     setSelectedFlowId(null);
@@ -727,10 +737,31 @@ export function ChatWindow() {
       .finally(() => {
         if (!cancelled) setLoadingFlows(false);
       });
+
+    // Agentes Dify
+    setLoadingDifyAgents(true);
+    setDifyAgents([]);
+    setDifyActiveState(null);
+    setSelectedDifyAgentId(null);
+    api.get(`/chat/conversations/${conversationId}/dify-agents/`)
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data as any;
+        setDifyAgents(Array.isArray(data?.agents) ? data.agents : []);
+        setDifyActiveState(data?.active_state ?? null);
+        if (data?.active_state?.catalog_id) setSelectedDifyAgentId(data.active_state.catalog_id);
+      })
+      .catch(() => {
+        if (!cancelled) { setDifyAgents([]); setDifyActiveState(null); }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDifyAgents(false);
+      });
+
     return () => { cancelled = true; };
   }, [showStartFlowModal, conversationId]);
 
-  // Fechar modal "Iniciar fluxo" com Escape
+  // Fechar modal com Escape
   useEffect(() => {
     if (!showStartFlowModal) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1133,110 +1164,265 @@ export function ChatWindow() {
       )}
 
       {/* Modals */}
-      {/* Modal Iniciar fluxo: lista fluxos, descrição e confirmação */}
+      {/* Modal Iniciar fluxo / Agentes Dify (abas) */}
       {showStartFlowModal && conversationId && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
           role="dialog"
           aria-modal="true"
           aria-labelledby="start-flow-modal-title"
+          onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
         >
-          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
-              <h2 id="start-flow-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Iniciar fluxo</h2>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="px-5 pt-5 pb-0 flex items-center justify-between">
+              <h2 id="start-flow-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Automação</h2>
               <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }} className="rounded-full">
                 <X className="w-5 h-5" />
               </Button>
             </div>
-            <div className="p-4 overflow-y-auto flex-1">
-              {loadingFlows ? (
-                <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
-                  <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" aria-hidden />
-                  <span>Carregando fluxos...</span>
-                </div>
-              ) : flowsForStart.length === 0 ? (
-                <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
-                  <p>
-                    Nenhum fluxo ativo para {(() => {
-                      const conv = activeConversation;
-                      const deptName = conv?.department_name || (typeof conv?.department === 'object' && conv?.department != null ? (conv.department as { name?: string }).name : null);
-                      if (conv?.department != null && conv.department !== '' && deptName) return <>o departamento <strong>{deptName}</strong></>;
-                      return <>o <strong>Inbox</strong></>;
-                    })()} desta conversa.
-                  </p>
-                  <p className="text-xs">
-                    Em <strong>Configurações &gt; Fluxos</strong>, crie ou edite um fluxo e vincule ao mesmo escopo (Inbox ou ao departamento desta conversa).
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-3">
-                  {flowsForStart.map((f) => (
-                    <li key={f.id}>
-                      <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <input
-                          type="radio"
-                          name="flow"
-                          value={f.id}
-                          checked={selectedFlowId === f.id}
-                          onChange={() => setSelectedFlowId(f.id)}
-                          className="mt-1"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className="font-medium text-gray-900 dark:text-gray-100">{f.name}</span>
-                          {f.description && (
-                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{f.description}</p>
-                          )}
-                        </div>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="p-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 dark:border-gray-700 mt-4 px-5">
               <button
                 type="button"
-                onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
-                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                onClick={() => setStartFlowModalTab('flows')}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  startFlowModalTab === 'flows'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
               >
-                Cancelar
+                <Zap className="w-4 h-4" />
+                Fluxos
               </button>
               <button
                 type="button"
-                disabled={loadingFlows || flowsForStart.length === 0 || (flowsForStart.length > 1 && !selectedFlowId) || startFlowLoading}
-                onClick={async () => {
-                  const flowId = flowsForStart.length === 1 ? flowsForStart[0].id : selectedFlowId;
-                  if (!flowId || !conversationId) return;
-                  setStartFlowLoading(true);
-                  try {
-                    const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`, {
-                      flow_id: String(flowId),
-                    });
-                    if (res?.data?.success) {
-                      const queued = res.data?.messages_queued;
-                      if (typeof queued === 'number' && queued === 0) {
-                        toast.warning('Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem. Verifique se o primeiro bloco do fluxo é do tipo texto.');
-                      } else {
-                        toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                onClick={() => setStartFlowModalTab('dify')}
+                className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  startFlowModalTab === 'dify'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                <Bot className="w-4 h-4" />
+                Agentes Dify
+                {difyActiveState?.status === 'active' && (
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Agente ativo" />
+                )}
+              </button>
+            </div>
+
+            {/* Tab: Fluxos */}
+            {startFlowModalTab === 'flows' && (
+              <>
+                <div className="p-5 overflow-y-auto flex-1">
+                  {loadingFlows ? (
+                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" aria-hidden />
+                      <span>Carregando fluxos...</span>
+                    </div>
+                  ) : flowsForStart.length === 0 ? (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                      <p>
+                        Nenhum fluxo ativo para {(() => {
+                          const conv = activeConversation;
+                          const deptName = conv?.department_name || (typeof conv?.department === 'object' && conv?.department != null ? (conv.department as { name?: string }).name : null);
+                          if (conv?.department != null && conv.department !== '' && deptName) return <>o departamento <strong>{deptName}</strong></>;
+                          return <>o <strong>Inbox</strong></>;
+                        })()} desta conversa.
+                      </p>
+                      <p className="text-xs">
+                        Em <strong>Configurações &gt; Fluxos</strong>, crie ou edite um fluxo e vincule ao mesmo escopo (Inbox ou ao departamento desta conversa).
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {flowsForStart.map((f) => (
+                        <li key={f.id}>
+                          <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <input
+                              type="radio"
+                              name="flow"
+                              value={f.id}
+                              checked={selectedFlowId === f.id}
+                              onChange={() => setSelectedFlowId(f.id)}
+                              className="mt-1"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-gray-900 dark:text-gray-100">{f.name}</span>
+                              {f.description && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{f.description}</p>
+                              )}
+                            </div>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
+                    className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loadingFlows || flowsForStart.length === 0 || (flowsForStart.length > 1 && !selectedFlowId) || startFlowLoading}
+                    onClick={async () => {
+                      const flowId = flowsForStart.length === 1 ? flowsForStart[0].id : selectedFlowId;
+                      if (!flowId || !conversationId) return;
+                      setStartFlowLoading(true);
+                      try {
+                        const res = await api.post(`/chat/conversations/${conversationId}/start-flow/`, {
+                          flow_id: String(flowId),
+                        });
+                        if (res?.data?.success) {
+                          const queued = res.data?.messages_queued;
+                          if (typeof queued === 'number' && queued === 0) {
+                            toast.warning('Fluxo iniciado, mas o Typebot não enviou nenhuma mensagem. Verifique se o primeiro bloco do fluxo é do tipo texto.');
+                          } else {
+                            toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
+                          }
+                          setShowStartFlowModal(false);
+                          setFlowsForStart([]);
+                          setSelectedFlowId(null);
+                        } else {
+                          toast.error((res?.data?.message as string) || 'Nenhum fluxo ativo para esta conversa.');
+                        }
+                      } catch (e: any) {
+                        const msg = e?.response?.data?.message ?? e?.response?.data?.detail;
+                        toast.error(typeof msg === 'string' ? msg : 'Não foi possível iniciar o fluxo.');
+                      } finally {
+                        setStartFlowLoading(false);
                       }
-                      setShowStartFlowModal(false);
-                      setFlowsForStart([]);
-                      setSelectedFlowId(null);
-                    } else {
-                      toast.error((res?.data?.message as string) || 'Nenhum fluxo ativo para esta conversa.');
-                    }
-                  } catch (e: any) {
-                    const msg = e?.response?.data?.message ?? e?.response?.data?.detail;
-                    toast.error(typeof msg === 'string' ? msg : 'Não foi possível iniciar o fluxo.');
-                  } finally {
-                    setStartFlowLoading(false);
-                  }
-                }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {startFlowLoading ? 'Iniciando...' : 'Confirmar ativação'}
-              </button>
-            </div>
+                    }}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {startFlowLoading ? 'Iniciando...' : 'Confirmar ativação'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Tab: Agentes Dify */}
+            {startFlowModalTab === 'dify' && (
+              <>
+                <div className="p-5 overflow-y-auto flex-1">
+                  {/* Banner: agente ativo */}
+                  {difyActiveState?.status === 'active' && (
+                    <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
+                        <Bot className="w-4 h-4 shrink-0" />
+                        <span>
+                          Agente <strong>{difyAgents.find(a => a.id === difyActiveState.catalog_id)?.display_name || 'Dify'}</strong> ativo nesta conversa.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={stopDifyLoading}
+                        onClick={async () => {
+                          if (!conversationId) return;
+                          setStopDifyLoading(true);
+                          try {
+                            await api.post(`/chat/conversations/${conversationId}/stop-dify-agent/`);
+                            toast.success('Agente parado.');
+                            setDifyActiveState(null);
+                            setSelectedDifyAgentId(null);
+                          } catch (e: any) {
+                            toast.error(e?.response?.data?.message || 'Erro ao parar agente.');
+                          } finally {
+                            setStopDifyLoading(false);
+                          }
+                        }}
+                        className="flex items-center gap-1 px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                      >
+                        <StopCircle className="w-3.5 h-3.5" />
+                        {stopDifyLoading ? 'Parando...' : 'Parar agente'}
+                      </button>
+                    </div>
+                  )}
+
+                  {loadingDifyAgents ? (
+                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
+                      <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" aria-hidden />
+                      <span>Carregando agentes...</span>
+                    </div>
+                  ) : difyAgents.length === 0 ? (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                      <p>Nenhum agente Dify cadastrado.</p>
+                      <p className="text-xs">Em <strong>Configurações &gt; IA &gt; Dify</strong>, cadastre um agente para usar aqui.</p>
+                    </div>
+                  ) : (
+                    <ul className="space-y-3">
+                      {difyAgents.map((a) => (
+                        <li key={a.id}>
+                          <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                            <input
+                              type="radio"
+                              name="dify-agent"
+                              value={a.id}
+                              checked={selectedDifyAgentId === a.id}
+                              onChange={() => setSelectedDifyAgentId(a.id)}
+                              className="mt-1"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium text-gray-900 dark:text-gray-100">{a.display_name}</span>
+                              {a.description && (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{a.description}</p>
+                              )}
+                              <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-0.5">{a.dify_app_id}</p>
+                            </div>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowStartFlowModal(false); }}
+                    className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loadingDifyAgents || difyAgents.length === 0 || !selectedDifyAgentId || startDifyLoading || difyActiveState?.status === 'active'}
+                    onClick={async () => {
+                      if (!selectedDifyAgentId || !conversationId) return;
+                      setStartDifyLoading(true);
+                      try {
+                        const res = await api.post(`/chat/conversations/${conversationId}/start-dify-agent/`, {
+                          catalog_id: selectedDifyAgentId,
+                        });
+                        if (res?.data?.success) {
+                          toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
+                          setDifyActiveState({ catalog_id: selectedDifyAgentId, status: 'active' });
+                          setShowStartFlowModal(false);
+                        } else {
+                          toast.error(res?.data?.message || 'Erro ao iniciar agente.');
+                        }
+                      } catch (e: any) {
+                        toast.error(e?.response?.data?.message || 'Não foi possível iniciar o agente.');
+                      } finally {
+                        setStartDifyLoading(false);
+                      }
+                    }}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
+                  >
+                    {startDifyLoading ? 'Iniciando...' : difyActiveState?.status === 'active' ? 'Agente já ativo' : 'Ativar agente'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

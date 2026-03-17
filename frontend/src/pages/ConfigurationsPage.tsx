@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { 
   Settings, 
   Server, 
@@ -39,7 +40,7 @@ import {
   RefreshCw,
   ShieldCheck,
   AlertTriangle,
-  Activity
+  Bot
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -231,6 +232,13 @@ interface DifyCatalogItem {
   public_url?: string
   has_api_key?: boolean
   default_department_id?: string | null
+  whatsapp_instance_id?: string | null
+}
+
+interface DifyWaInstance {
+  id: string
+  friendly_name: string
+  instance_name: string
 }
 
 interface SecretaryProfile {
@@ -332,12 +340,18 @@ export default function ConfigurationsPage() {
   // Estados para sub-tab Dify (catálogo + vínculo por depto)
   const [difyCatalog, setDifyCatalog] = useState<DifyCatalogItem[]>([])
   const [difyCatalogLoading, setDifyCatalogLoading] = useState(false)
+  const [difyWaInstances, setDifyWaInstances] = useState<DifyWaInstance[]>([])
   const [difySavingKey, setDifySavingKey] = useState<string | null>(null)
+  // Criar agente – modal
+  const [difyCreateOpen, setDifyCreateOpen] = useState(false)
   const [newDifyDisplayName, setNewDifyDisplayName] = useState('')
   const [newDifyDescription, setNewDifyDescription] = useState('')
   const [newDifyPublicUrl, setNewDifyPublicUrl] = useState('')
   const [newDifyApiKey, setNewDifyApiKey] = useState('')
   const [newDifyDefaultDepartmentId, setNewDifyDefaultDepartmentId] = useState<string>('')
+  const [newDifyWaInstanceId, setNewDifyWaInstanceId] = useState<string>('')
+  // Editar agente – modal
+  const [editDifyOpen, setEditDifyOpen] = useState(false)
   const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
   const [editDifyAppId, setEditDifyAppId] = useState('')
   const [editDifyDisplayName, setEditDifyDisplayName] = useState('')
@@ -346,6 +360,7 @@ export default function ConfigurationsPage() {
   const [editDifyApiKey, setEditDifyApiKey] = useState('')
   const [editDifyHasApiKey, setEditDifyHasApiKey] = useState(false)
   const [editDifyDefaultDepartmentId, setEditDifyDefaultDepartmentId] = useState<string>('')
+  const [editDifyWaInstanceId, setEditDifyWaInstanceId] = useState<string>('')
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -712,6 +727,7 @@ export default function ConfigurationsPage() {
     }
     if (activeTab === 'ai' && aiSubTab === 'dify' && isTenantAdmin) {
       fetchDifyCatalog()
+      fetchDifyWaInstances()
     }
     if (activeTab === 'instances') {
       fetchMetaTemplates()
@@ -1645,25 +1661,37 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const fetchDifyWaInstances = async () => {
+    try {
+      const res = await api.get<DifyWaInstance[]>('/chat/flows/available_instances/')
+      setDifyWaInstances(Array.isArray(res.data) ? res.data : [])
+    } catch {
+      setDifyWaInstances([])
+    }
+  }
+
   const createDifyCatalogItem = async () => {
     const display_name = newDifyDisplayName.trim()
     const description = newDifyDescription.trim()
     const public_url = newDifyPublicUrl.trim()
     const api_key = newDifyApiKey.trim()
     const default_department_id = newDifyDefaultDepartmentId || null
+    const whatsapp_instance_id = newDifyWaInstanceId || null
     if (!public_url || !api_key) {
       showErrorToast('URL pública e API key são obrigatórias')
       return
     }
     setDifySavingKey('catalog_create')
     try {
-      await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id })
+      await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
       setNewDifyDisplayName('')
       setNewDifyDescription('')
       setNewDifyPublicUrl('')
       setNewDifyApiKey('')
       setNewDifyDefaultDepartmentId('')
-      showSuccessToast('Item adicionado ao catálogo')
+      setNewDifyWaInstanceId('')
+      setDifyCreateOpen(false)
+      showSuccessToast('Agente cadastrado')
       await fetchDifyCatalog()
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao adicionar item')
@@ -1695,6 +1723,8 @@ export default function ConfigurationsPage() {
     setEditDifyHasApiKey(Boolean(item.has_api_key))
     setEditDifyApiKey('')
     setEditDifyDefaultDepartmentId(item.default_department_id || '')
+    setEditDifyWaInstanceId(item.whatsapp_instance_id || '')
+    setEditDifyOpen(true)
   }
 
   const saveEditDifyItem = async () => {
@@ -1707,6 +1737,7 @@ export default function ConfigurationsPage() {
         description: editDifyDescription,
         public_url: editDifyPublicUrl,
         default_department_id: editDifyDefaultDepartmentId || null,
+        whatsapp_instance_id: editDifyWaInstanceId || null,
       }
       if (!payload.public_url?.trim()) {
         showErrorToast('URL pública é obrigatória')
@@ -1717,6 +1748,7 @@ export default function ConfigurationsPage() {
       }
       await api.patch('/ai/dify/catalog/', payload)
       showSuccessToast('Agente atualizado')
+      setEditDifyOpen(false)
       setEditingDifyItemId(null)
       await fetchDifyCatalog()
     } catch (e: any) {
@@ -3012,162 +3044,239 @@ export default function ConfigurationsPage() {
               )}
             </div>
           ) : aiSubTab === 'dify' ? (
-            <div className="space-y-6">
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Dify</h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Cadastre agentes por app (URL pública + API key). O Sense extrai automaticamente o <span className="font-mono">app_id</span> pela URL e você pode definir um departamento padrão.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      fetchDifyCatalog()
-                    }}
-                    disabled={difyCatalogLoading}
-                  >
-                    {difyCatalogLoading ? 'Atualizando...' : 'Atualizar'}
-                  </Button>
-                </div>
-              </Card>
+            <div className="space-y-6 animate-fade-in">
+              {/* Header + botão Novo agente */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Agentes Dify</h2>
+                <Button type="button" onClick={() => setDifyCreateOpen(true)} className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo agente
+                </Button>
+              </div>
 
-              <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Cadastro do agente</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <Label htmlFor="dify_new_display_name">Nome (opcional)</Label>
-                    <Input id="dify_new_display_name" value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+              {/* Form criar – inline animado (padrão FlowPage) */}
+              <AnimatePresence>
+              {difyCreateOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="overflow-hidden"
+                >
+                <Card className="p-6 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                  <h3 className="text-lg font-medium mb-4 text-gray-900 dark:text-gray-100">Cadastrar agente</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Nome (opcional)</Label>
+                      <Input value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                    </div>
+                    <div>
+                      <Label>URL pública do app <span className="text-red-500">*</span></Label>
+                      <Input value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">O app_id é extraído automaticamente da URL.</p>
+                    </div>
+                    <div>
+                      <Label>API key <span className="text-red-500">*</span></Label>
+                      <Input type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
+                    </div>
+                    <div>
+                      <Label>Descrição (opcional)</Label>
+                      <Input value={newDifyDescription} onChange={(e) => setNewDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
+                    </div>
+                    <div>
+                      <Label>Departamento padrão (opcional)</Label>
+                      <select
+                        value={newDifyDefaultDepartmentId}
+                        onChange={(e) => setNewDifyDefaultDepartmentId(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                      >
+                        <option value="">Nenhum</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <Label>Instância WhatsApp (opcional)</Label>
+                      <select
+                        value={newDifyWaInstanceId}
+                        onChange={(e) => setNewDifyWaInstanceId(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                      >
+                        <option value="">Usar instância da conversa</option>
+                        {difyWaInstances.map((i) => (
+                          <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o agente envia.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
+                        {difySavingKey === 'catalog_create' ? <LoadingSpinner size="sm" className="mr-1" /> : null}
+                        {difySavingKey === 'catalog_create' ? 'Salvando…' : 'Cadastrar'}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setDifyCreateOpen(false)} disabled={difySavingKey === 'catalog_create'}>Cancelar</Button>
+                    </div>
                   </div>
-                  <div>
-                    <Label htmlFor="dify_new_department">Departamento padrão (opcional)</Label>
-                    <select
-                      id="dify_new_department"
-                      value={newDifyDefaultDepartmentId}
-                      onChange={(e) => setNewDifyDefaultDepartmentId(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    >
-                      <option value="">Nenhum</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>{d.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="dify_new_public_url">URL pública do app (obrigatório)</Label>
-                    <Input id="dify_new_public_url" value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="dify_new_api_key">API key (obrigatória)</Label>
-                    <Input id="dify_new_api_key" type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
-                  </div>
-                  <div className="md:col-span-2">
-                    <Label htmlFor="dify_new_description">Descrição (opcional)</Label>
-                    <Input id="dify_new_description" value={newDifyDescription} onChange={(e) => setNewDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      {difySavingKey === 'catalog_create' ? 'Salvando...' : 'Cadastrar agente'}
-                    </Button>
-                  </div>
-                </div>
+                </Card>
+                </motion.div>
+              )}
+              </AnimatePresence>
 
-                {difyCatalogLoading && difyCatalog.length === 0 ? (
-                  <div className="flex items-center justify-center h-24">
-                    <LoadingSpinner />
-                  </div>
-                ) : difyCatalog.length === 0 ? (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum item no catálogo.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {difyCatalog.map((it) => (
-                      <li key={it.id} className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
-                        <div className="min-w-[220px]">
-                          <div className="font-medium text-gray-900 dark:text-gray-100">
-                            {it.display_name || it.dify_app_id}{' '}
-                            {!it.is_active && <span className="text-xs text-amber-700 dark:text-amber-300">(inativo)</span>}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">{it.dify_app_id}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => openEditDifyItem(it)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="outline" size="sm" onClick={() => void setDifyCatalogItemActive(it.id, !it.is_active)} disabled={difySavingKey === `catalog_${it.id}`}>
-                            {difySavingKey === `catalog_${it.id}` ? 'Salvando...' : it.is_active ? 'Desativar' : 'Ativar'}
-                          </Button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {editingDifyItemId && (
-                  <div className="mt-4 p-4 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900/30">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-medium text-gray-900 dark:text-gray-100">Cadastro / edição do agente</h4>
-                      <Button type="button" variant="outline" size="sm" onClick={() => setEditingDifyItemId(null)}>
-                        <X className="h-4 w-4" />
+              {/* Lista de agentes */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm max-h-[calc(100vh-280px)] overflow-y-auto">
+                  <h3 className="font-medium mb-3 text-gray-900 dark:text-gray-100">Agentes</h3>
+                  {difyCatalogLoading && difyCatalog.length === 0 ? (
+                    <div className="flex items-center justify-center h-24">
+                      <LoadingSpinner />
+                    </div>
+                  ) : difyCatalog.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
+                        <Bot className="h-6 w-6 text-gray-400 dark:text-gray-500" />
+                      </div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nenhum agente ainda</p>
+                      <p className="text-xs mb-4">Crie o primeiro para vincular um agente Dify ao Inbox ou a um departamento.</p>
+                      <Button size="sm" variant="outline" onClick={() => setDifyCreateOpen(true)} className="rounded-lg">
+                        <Plus className="h-4 w-4 mr-1" /> Criar primeiro agente
                       </Button>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <Label>ID Dify</Label>
-                        <Input value={editDifyAppId} onChange={(e) => setEditDifyAppId(e.target.value)} disabled />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Por enquanto o ID não é editável (evita quebrar vínculos). Se precisar, desative e crie outro.
-                        </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {difyCatalog.map((it) => (
+                        <li key={it.id}>
+                          <button
+                            type="button"
+                            onClick={() => openEditDifyItem(it)}
+                            className="w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/80 text-gray-700 dark:text-gray-300"
+                          >
+                            <span className="block truncate font-medium">{it.display_name || it.dify_app_id}</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 block font-mono truncate">
+                              {it.dify_app_id}
+                              {!it.is_active && <span className="ml-1 text-amber-600 dark:text-amber-400">(inativo)</span>}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+
+                <div className="md:col-span-2 flex items-center justify-center">
+                  <Card className="p-12 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 text-center w-full">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
+                      <Bot className="h-7 w-7 text-gray-400 dark:text-gray-500" />
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um agente</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
+                      Escolha um agente na lista ao lado para editar as configurações, ou crie um novo.
+                    </p>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Modal: Editar agente */}
+              <AnimatePresence>
+              {editDifyOpen && editingDifyItemId && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+                  onClick={() => setEditDifyOpen(false)}
+                  role="dialog"
+                  aria-modal="true"
+                >
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full max-w-lg max-h-[90vh] overflow-y-auto"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Card className="flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden">
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 shrink-0">
+                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar agente</h2>
+                        <button type="button" onClick={() => setEditDifyOpen(false)} className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
                       </div>
-                      <div>
-                        <Label>Nome</Label>
-                        <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                      <div className="overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
+                        <div>
+                          <Label>ID Dify</Label>
+                          <Input value={editDifyAppId} disabled />
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">O ID é extraído da URL e não pode ser alterado diretamente.</p>
+                        </div>
+                        <div>
+                          <Label>Nome (opcional)</Label>
+                          <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                        </div>
+                        <div>
+                          <Label>URL pública do app <span className="text-red-500">*</span></Label>
+                          <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
+                        </div>
+                        <div>
+                          <Label>API key</Label>
+                          <Input
+                            type="password"
+                            value={editDifyApiKey}
+                            onChange={(e) => setEditDifyApiKey(e.target.value)}
+                            placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
+                          />
+                        </div>
+                        <div>
+                          <Label>Descrição (opcional)</Label>
+                          <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
+                        </div>
+                        <div>
+                          <Label>Departamento padrão (opcional)</Label>
+                          <select
+                            value={editDifyDefaultDepartmentId}
+                            onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                          >
+                            <option value="">Nenhum</option>
+                            {departments.map((d) => (
+                              <option key={d.id} value={d.id}>{d.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Instância WhatsApp (opcional)</Label>
+                          <select
+                            value={editDifyWaInstanceId}
+                            onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
+                            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                          >
+                            <option value="">Usar instância da conversa</option>
+                            {difyWaInstances.map((i) => (
+                              <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o agente envia.</p>
+                        </div>
                       </div>
-                      <div className="md:col-span-2">
-                        <Label>URL pública do app</Label>
-                        <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label>API key</Label>
-                        <Input
-                          type="password"
-                          value={editDifyApiKey}
-                          onChange={(e) => setEditDifyApiKey(e.target.value)}
-                          placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <Label>Departamento padrão (opcional)</Label>
-                        <select
-                          value={editDifyDefaultDepartmentId}
-                          onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
-                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        >
-                          <option value="">Nenhum</option>
-                          {departments.map((d) => (
-                            <option key={d.id} value={d.id}>{d.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`}>
-                          <Save className="h-4 w-4 mr-1" />
-                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando...' : 'Salvar'}
+                      <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
+                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`} className="min-w-[100px]">
+                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? <LoadingSpinner size="sm" className="mr-1" /> : null}
+                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando…' : 'Salvar'}
                         </Button>
                         <Button type="button" variant="outline" onClick={() => void testDifyConnection(editingDifyItemId || undefined)} disabled={difySavingKey === 'dify_test_connection'}>
                           <TestTube className="h-4 w-4 mr-1" />
                           {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
                         </Button>
+                        <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="ml-auto text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
+                          {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => setEditDifyOpen(false)}>Cancelar</Button>
                       </div>
-                    </div>
-                  </div>
-                )}
-              </Card>
+                    </Card>
+                  </motion.div>
+                </motion.div>
+              )}
+              </AnimatePresence>
             </div>
           ) : aiSubTab === 'auditoria-ia' ? (
             <Card className="p-6">

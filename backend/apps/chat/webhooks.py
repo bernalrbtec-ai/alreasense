@@ -4053,6 +4053,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"📡 [WEBSOCKET] Notificação de nova mensagem broadcast para tenant {tenant.name}")
                 except Exception as e:
                     logger.error(f"❌ [WEBSOCKET] Error broadcasting notification: {e}", exc_info=True)
+
+                # 🤖 Dify takeover: encaminhar mensagem ao agente Dify se ativo
+                if conversation_type == 'individual':
+                    try:
+                        from apps.ai.services.dify_chat_service import maybe_handle_dify_takeover
+                        maybe_handle_dify_takeover(
+                            tenant=tenant,
+                            conversation=conversation,
+                            message=message,
+                            wa_instance=wa_instance,
+                        )
+                    except Exception as dify_exc:
+                        logger.error(f"❌ [DIFY] Erro no takeover: {dify_exc}", exc_info=True)
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)
