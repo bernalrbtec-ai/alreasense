@@ -1,6 +1,6 @@
 /**
- * Página de Fluxos: integração Typebot por Inbox ou departamento.
- * Lista fluxos, vincula Typebot (Public ID + URL base), escopo e envio de teste.
+ * Página de Fluxos: integração de fluxo por Inbox ou departamento.
+ * Lista fluxos, vincula IDs/URL base, escopo e envio de teste.
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -50,14 +50,14 @@ function isValidHttpUrl(s: string): boolean {
 async function validateTypebotConfig(api: any, typebot_public_id: string, typebot_base_url: string): Promise<{ valid: boolean; detail?: string }> {
   const pid = (typebot_public_id || '').trim()
   const base = (typebot_base_url || '').trim()
-  if (base && !isValidHttpUrl(base)) return { valid: false, detail: 'URL base do Typebot deve ser uma URL válida (ex: https://typebot.co).' }
+  if (base && !isValidHttpUrl(base)) return { valid: false, detail: 'URL base deve ser uma URL válida (ex: https://exemplo.com).' }
   try {
     const { data, status: resStatus } = await api.post('/chat/flows/validate_typebot/', {
       typebot_public_id: pid,
       typebot_base_url: base || undefined,
     })
     if (resStatus >= 200 && resStatus < 300 && data?.valid === true) return { valid: true }
-    return { valid: false, detail: (data?.detail as string) || 'Typebot não pôde ser validado.' }
+    return { valid: false, detail: (data?.detail as string) || 'Configuração não pôde ser validada.' }
   } catch (e: any) {
     const detail = e?.response?.data?.detail ?? getApiError(e)
     return { valid: false, detail }
@@ -151,14 +151,14 @@ function parseButtonsSafe(val: unknown): ButtonForm[] {
 }
 
 const FLOW_TYPEBOT_FAQ: { pergunta: string; resposta: string }[] = [
-  { pergunta: 'Quais variáveis o Sense envia ao Typebot?', resposta: 'conversation_id, contact_phone, contact_name, tenant_id, department_id (se houver); mais as variáveis extras (JSON) configuradas no fluxo.' },
-  { pergunta: 'O que são variáveis extras?', resposta: 'JSON no cadastro do fluxo enviado em todo startChat. Use no Typebot variáveis com o mesmo nome. Opção "Carregar variáveis" usa ID interno + API key e aplica ao JSON.' },
+  { pergunta: 'Quais variáveis o Sense envia?', resposta: 'conversation_id, contact_phone, contact_name, tenant_id, department_id (se houver); mais as variáveis extras (JSON) configuradas no fluxo.' },
+  { pergunta: 'O que são variáveis extras?', resposta: 'JSON no cadastro do fluxo enviado em todo startChat. Use variáveis com o mesmo nome no seu construtor. Opção "Carregar variáveis" usa ID interno + API key e aplica ao JSON.' },
   { pergunta: 'O que são instruções no texto?', resposta: 'Trechos no formato #{"chave": valor} numa mensagem de texto. O Sense executa a ação e remove o trecho antes de enviar ao WhatsApp (o cliente não vê).' },
-  { pergunta: 'Como encerrar a conversa pelo Typebot?', resposta: 'Inclua #{"closeTicket": true} (ou encerrar, closeConversation com valor truthy) no texto. Pode estar na mesma mensagem da despedida.' },
+  { pergunta: 'Como encerrar a conversa?', resposta: 'Inclua #{"closeTicket": true} (ou encerrar, closeConversation com valor truthy) no texto. Pode estar na mesma mensagem da despedida.' },
   { pergunta: 'Como transferir para um departamento?', resposta: 'Inclua #{"transferTo": "Nome do Departamento"}. O nome deve ser igual ao cadastrado no Sense (Configurações > Departamentos). Maiúsculas/minúsculas não importam.' },
   { pergunta: 'O nome do departamento pode ter espaços?', resposta: 'Sim. Use o nome completo como cadastrado (ex.: "Suporte Técnico", "Atendimento Comercial"). Apenas espaços no início e no fim são ignorados.' },
   { pergunta: 'Webhook como alternativa', resposta: 'Para enviar variáveis de volta ao Sense ou encerrar via variável, use o bloco Webhook apontando para POST /api/chat/webhooks/typebot/ (documentação no guia).' },
-  { pergunta: 'Onde ver mais?', resposta: 'Guia completo na documentação do projeto (FLUXOS_TYPEBOT_GUIA) ou com o suporte.' },
+  { pergunta: 'Onde ver mais?', resposta: 'Guia completo na documentação do projeto ou com o suporte.' },
 ]
 
 export default function FlowPage() {
@@ -300,7 +300,7 @@ export default function FlowPage() {
     const pid = newFlowTypebotPublicId.trim()
     const base = newFlowTypebotBaseUrl.trim()
     if (base && !isValidHttpUrl(base)) {
-      toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
+      toast.error('URL base deve ser uma URL válida (ex: https://exemplo.com)')
       return
     }
     setCreatingFlow(true)
@@ -308,7 +308,7 @@ export default function FlowPage() {
       if (pid) {
         const validation = await validateTypebotConfig(api, pid, base)
         if (!validation.valid) {
-          toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+          toast.error(validation.detail ?? 'Configuração não pôde ser validada')
           setCreatingFlow(false)
           return
         }
@@ -344,7 +344,7 @@ export default function FlowPage() {
         toast.error('Resposta inválida ao criar fluxo')
         return
       }
-      toast.success('Fluxo criado. Vamos preparar o bot Typebot…')
+      toast.success('Fluxo criado. Preparando integração…')
       setCreateOpen(false)
       setNewFlowName('')
       setNewFlowScope('inbox')
@@ -369,7 +369,7 @@ export default function FlowPage() {
       }
       setSelectedFlow(createdFlow)
       selectedFlowIdRef.current = String(id)
-      // Recarregar detalhes após pequeno atraso para dar tempo do backend criar o bot Typebot automaticamente
+      // Recarregar detalhes após pequeno atraso para dar tempo do backend criar o bot automaticamente
       setTimeout(() => {
         fetchFlowDetail(String(id))
       }, 1200)
@@ -417,7 +417,7 @@ export default function FlowPage() {
     const pid = editTypebotPublicId.trim()
     const base = editTypebotBaseUrl.trim()
     if (base && !isValidHttpUrl(base)) {
-      toast.error('URL base do Typebot deve ser uma URL válida (ex: https://typebot.co)')
+      toast.error('URL base deve ser uma URL válida (ex: https://exemplo.com)')
       return
     }
     setSavingFlow(true)
@@ -425,7 +425,7 @@ export default function FlowPage() {
       if (pid) {
         const validation = await validateTypebotConfig(api, pid, base)
         if (!validation.valid) {
-          toast.error(validation.detail ?? 'Typebot não pôde ser validado')
+          toast.error(validation.detail ?? 'Configuração não pôde ser validada')
           setSavingFlow(false)
           return
         }
@@ -1039,18 +1039,18 @@ export default function FlowPage() {
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher, o fluxo sempre envia por essa instância.</p>
             </div>
             <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-              <Label className="text-accent-600 dark:text-accent-400">Typebot (fluxo executado pelo Typebot)</Label>
+              <Label className="text-accent-600 dark:text-accent-400">Integração (execução automática)</Label>
               <Input
                 className="mt-1"
                 value={newFlowTypebotPublicId}
                 onChange={(e) => setNewFlowTypebotPublicId(e.target.value)}
-                placeholder="Public ID do Typebot (Share &gt; API)"
+                placeholder="Public ID (Share > API)"
               />
                 <Input
                   className="mt-2"
                   value={newFlowTypebotBaseUrl}
                   onChange={(e) => setNewFlowTypebotBaseUrl(e.target.value)}
-                  placeholder="URL base da API (vazio = typebot.io)"
+                  placeholder="URL base da API (vazio = padrão)"
                 />
                 <Label className="mt-2 block text-xs text-gray-500 dark:text-gray-400">Variáveis extras (JSON)</Label>
                 <textarea
@@ -1060,7 +1060,7 @@ export default function FlowPage() {
                   placeholder='{"campanha": "black-friday"}'
                   rows={2}
                 />
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para o fluxo ser executado pelo Typebot via API (startChat/continueChat). Variáveis extras são enviadas em prefilledVariables.</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para executar automaticamente via API (startChat/continueChat). Variáveis extras são enviadas em prefilledVariables.</p>
             </div>
             <div className="flex gap-2">
               <Button onClick={handleCreateFlow} disabled={creatingFlow}>
@@ -1084,7 +1084,7 @@ export default function FlowPage() {
                 <Zap className="h-6 w-6 text-gray-400 dark:text-gray-500" />
               </div>
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nenhum fluxo ainda</p>
-              <p className="text-xs mb-4">Crie o primeiro para vincular um fluxo Typebot ao Inbox ou a um departamento.</p>
+              <p className="text-xs mb-4">Crie o primeiro para vincular um fluxo ao Inbox ou a um departamento.</p>
               <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)} className="rounded-lg">
                 <Plus className="h-4 w-4 mr-1" /> Criar primeiro fluxo
               </Button>
@@ -1169,17 +1169,17 @@ export default function FlowPage() {
                     <p className="text-gray-500 dark:text-gray-500">Instância: usar da conversa</p>
                   )}
                   <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-                    <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">Integração Typebot</p>
+                    <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">Integração</p>
                     <p className="text-gray-600 dark:text-gray-400">
                       Public ID: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_public_id || '').trim() || '—'}</code>
                       {((flowDetail.typebot_base_url || '').trim()) ? (
                         <> · URL base: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_base_url || '').trim()}</code></>
                       ) : (
-                        <> · URL base: <span className="text-gray-500">typebot.io</span></>
+                        <> · URL base: <span className="text-gray-500">padrão</span></>
                       )}
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      A edição do fluxo é feita no Typebot. As mensagens são enviadas ao WhatsApp automaticamente (startChat/continueChat).
+                      As mensagens são enviadas ao WhatsApp automaticamente (startChat/continueChat).
                     </p>
                   </div>
                 </div>
@@ -1201,14 +1201,14 @@ export default function FlowPage() {
               </Card>
               {(flowDetail.typebot_public_id || '').trim() ? (
                 TYPEBOT_BUILDER_BASE ? (
-                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                    <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editar fluxo no Typebot</h3>
+                  <Card ref={typebotIframeCardRef} className="hidden p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                    <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editor do fluxo</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                      O construtor abaixo é carregado a partir do Typebot self-host ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
+                      O editor abaixo é carregado a partir do serviço externo ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
                     </p>
                     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
                       <iframe
-                        title="Construtor Typebot"
+                        title="Editor do fluxo"
                         src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/typebots/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
                         className="w-full h-[520px] border-0"
                         allow="clipboard-read; clipboard-write; microphone; camera"
@@ -1216,10 +1216,10 @@ export default function FlowPage() {
                     </div>
                   </Card>
                 ) : (
-                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20">
-                    <h3 className="font-medium mb-1 text-gray-900 dark:text-gray-100 text-sm">Construtor Typebot</h3>
+                  <Card ref={typebotIframeCardRef} className="hidden p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20">
+                    <h3 className="font-medium mb-1 text-gray-900 dark:text-gray-100 text-sm">Editor do fluxo</h3>
                     <p className="text-xs text-amber-800 dark:text-amber-200">
-                      Para exibir o construtor aqui, configure <code className="bg-white/80 dark:bg-gray-800 px-1 rounded">VITE_TYPEBOT_BUILDER_BASE</code> no ambiente do frontend (ex.: https://typebot.alrea.ai).
+                      Para exibir o editor aqui, configure a variável de ambiente do editor no serviço do frontend.
                     </p>
                   </Card>
                 )
@@ -1239,18 +1239,18 @@ export default function FlowPage() {
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um fluxo</p>
                 <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                  Escolha um fluxo na lista ao lado para ver os dados da integração Typebot e enviar teste, ou crie um novo.
+                  Escolha um fluxo na lista ao lado para ver os dados da integração e enviar teste, ou crie um novo.
                 </p>
               </Card>
             </motion.div>
           )}
 
-          {/* FAQ Typebot – visível na tela inicial para consulta */}
-          <Card className="rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm overflow-hidden">
+          {/* FAQ – referência visual (mantida, mas oculta) */}
+          <Card className="hidden rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm overflow-hidden">
             <button type="button" onClick={() => setFlowFaqExpanded((v) => !v)} className="flex items-center justify-between w-full p-4 text-left text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
               <span className="flex items-center gap-2">
                 <HelpCircle className="h-4 w-4 text-accent-600 dark:text-accent-400" />
-                Perguntas frequentes – Typebot no Sense
+                Perguntas frequentes
               </span>
               {flowFaqExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </button>
@@ -1572,7 +1572,7 @@ export default function FlowPage() {
       <ConfirmDialog
         show={!!confirmDeleteFlow}
         title="Excluir fluxo"
-        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? O vínculo com o Typebot será removido.` : ''}
+        message={confirmDeleteFlow ? `Excluir o fluxo "${confirmDeleteFlow.name}"? O vínculo de integração será removido.` : ''}
         confirmText="Excluir"
         variant="danger"
         onConfirm={handleDeleteFlowConfirm}
@@ -1665,24 +1665,22 @@ export default function FlowPage() {
                   </div>
                 </section>
 
-                {/* Seção: Typebot */}
+                {/* Seção: Integração */}
                 <section className="space-y-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
                   <h3 className="text-sm font-medium text-accent-600 dark:text-accent-400 flex items-center gap-2">
-                    <Zap className="h-4 w-4" /> Typebot
+                    <Zap className="h-4 w-4" /> Integração
                   </h3>
                   <div className="space-y-3">
                     <div>
                       <Label className="mb-1 block text-gray-700 dark:text-gray-300">Public ID</Label>
-                      <Input value={editTypebotPublicId} onChange={(e) => setEditTypebotPublicId(e.target.value)} placeholder="Ex: my-typebot-7l6svuv" className="rounded-lg font-mono text-sm" />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">No Typebot: Share &gt; API</p>
+                      <Input value={editTypebotPublicId} onChange={(e) => setEditTypebotPublicId(e.target.value)} placeholder="Ex: my-flow-7l6svuv" className="rounded-lg font-mono text-sm" />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Em geral: Share &gt; API</p>
                     </div>
                     <div>
                       <Label className="mb-1 block text-gray-700 dark:text-gray-300">URL base da API</Label>
-                      <Input value={editTypebotBaseUrl} onChange={(e) => setEditTypebotBaseUrl(e.target.value)} placeholder="Vazio = typebot.io" className="rounded-lg font-mono text-sm" />
+                      <Input value={editTypebotBaseUrl} onChange={(e) => setEditTypebotBaseUrl(e.target.value)} placeholder="Vazio = padrão" className="rounded-lg font-mono text-sm" />
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Após salvar, o construtor do Typebot aparece na tela de detalhes do fluxo (à direita), abaixo de &quot;Enviar passo inicial&quot;.
-                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Após salvar, a execução automática fica ativa para este fluxo.</p>
                   </div>
 
                   {/* Variáveis: bloco recolhível */}
@@ -1693,7 +1691,7 @@ export default function FlowPage() {
                     </button>
                     {editFlowVarsExpanded && (
                       <div className="mt-3 space-y-3">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">ID interno = ID na URL ao editar o typebot. API key = no Typebot: avatar (canto inferior esquerdo) &rarr; Settings &amp; Members &rarr; My account &rarr; API tokens &rarr; Create.</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Use ID interno e API key apenas se você precisar carregar variáveis do editor para preencher o JSON automaticamente.</p>
                         <div className="grid grid-cols-1 gap-2">
                           <Input value={editTypebotInternalId} onChange={(e) => setEditTypebotInternalId(e.target.value)} placeholder="ID interno (ex.: da URL ao editar)" className="rounded-lg text-sm" />
                           <Input type="password" autoComplete="off" value={editTypebotApiKey} onChange={(e) => setEditTypebotApiKey(e.target.value)} placeholder="API key (Settings & Members > My account > API tokens)" className="rounded-lg text-sm" />
