@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.tenancy.models import Tenant
+from django_cryptography.fields import encrypt
 
 
 class AiKnowledgeDocument(models.Model):
@@ -455,6 +456,12 @@ class DifyAppCatalogItem(models.Model):
     dify_app_id = models.CharField(max_length=128)
     display_name = models.CharField(max_length=200, blank=True, default="")
     is_active = models.BooleanField(default=True)
+    # URL pública completa do app Dify (ex.: https://dify.example.com/chat/<app_id>)
+    public_url = models.TextField(blank=True, default="")
+    # API key criptografada (django_cryptography cuida da criptografia em repouso)
+    api_key_encrypted = encrypt(models.CharField(max_length=255, blank=True, default=""))
+    description = models.TextField(blank=True, default="")
+    default_department_id = models.UUIDField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

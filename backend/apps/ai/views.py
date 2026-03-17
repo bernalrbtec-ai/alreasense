@@ -3208,7 +3208,11 @@ def dify_catalog(request):
                         "id": str(it.id),
                         "dify_app_id": it.dify_app_id,
                         "display_name": it.display_name,
+                        "description": it.description or "",
+                        "public_url": it.public_url or "",
                         "is_active": bool(it.is_active),
+                        "has_api_key": bool(getattr(it, "api_key_encrypted", "") or ""),
+                        "default_department_id": str(it.default_department_id) if it.default_department_id else None,
                         "metadata": it.metadata or {},
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
@@ -3225,30 +3229,72 @@ def dify_catalog(request):
     if request.method == "POST":
         dify_app_id = str(data.get("dify_app_id") or "").strip()
         display_name = str(data.get("display_name") or "").strip()
+        public_url = str(data.get("public_url") or "").strip()
+        description = str(data.get("description") or "").strip()
+        default_department_id = data.get("default_department_id")
+        api_key = str(data.get("api_key") or "").strip()
+
+        if not dify_app_id and public_url:
+            # Tentar extrair app_id do final da URL pública (ex.: /chat/<app_id>)
+            try:
+                from urllib.parse import urlparse
+
+                path = urlparse(public_url).path or ""
+                parts = [p for p in path.split("/") if p]
+                if parts:
+                    dify_app_id = parts[-1]
+            except Exception:
+                pass
+
         if not dify_app_id:
-            return Response({"error": "dify_app_id é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "dify_app_id ou URL pública com app_id é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
         if not display_name:
             display_name = dify_app_id
+
+        dept_uuid = None
+        if default_department_id:
+            dept_uuid = _parse_uuid(default_department_id)
+            if not dept_uuid:
+                return Response({"error": "default_department_id inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
         item, created = DifyAppCatalogItem.objects.update_or_create(
             tenant=tenant,
             dify_app_id=dify_app_id,
-            defaults={"display_name": display_name, "is_active": True},
+            defaults={
+                "display_name": display_name,
+                "is_active": True,
+                "public_url": public_url,
+                "description": description,
+                "default_department_id": dept_uuid,
+            },
         )
+        if api_key:
+            # encrypt field cuida da criptografia em repouso
+            item.api_key_encrypted = api_key
         item.updated_at = timezone.now()
-        item.save(update_fields=["updated_at"])
+        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "api_key_encrypted", "updated_at"])
         _dify_audit(
             tenant,
             request.user,
             "catalog_create" if created else "catalog_update",
             catalog_id=item.id,
-            payload={"dify_app_id": dify_app_id, "display_name": display_name},
+            payload={
+                "dify_app_id": dify_app_id,
+                "display_name": display_name,
+                "has_api_key": bool(api_key),
+                "default_department_id": str(dept_uuid) if dept_uuid else None,
+            },
         )
         return Response(
             {
                 "id": str(item.id),
                 "dify_app_id": item.dify_app_id,
                 "display_name": item.display_name,
+                "description": item.description or "",
+                "public_url": item.public_url or "",
                 "is_active": bool(item.is_active),
+                "has_api_key": bool(api_key),
+                "default_department_id": str(item.default_department_id) if item.default_department_id else None,
                 "metadata": item.metadata or {},
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -3263,13 +3309,40 @@ def dify_catalog(request):
         return Response({"error": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
     if "display_name" in data:
         item.display_name = str(data.get("display_name") or "").strip()
+    if "description" in data:
+        item.description = str(data.get("description") or "").strip()
+    if "public_url" in data:
+        item.public_url = str(data.get("public_url") or "").strip()
     if "is_active" in data:
         b = _normalize_bool(data.get("is_active"))
         if b is None:
             return Response({"error": "is_active inválido."}, status=status.HTTP_400_BAD_REQUEST)
         item.is_active = b
+    if "default_department_id" in data:
+        dept_raw = data.get("default_department_id")
+        if dept_raw:
+            dept_uuid = _parse_uuid(dept_raw)
+            if not dept_uuid:
+                return Response({"error": "default_department_id inválido."}, status=status.HTTP_400_BAD_REQUEST)
+            item.default_department_id = dept_uuid
+        else:
+            item.default_department_id = None
+    api_key_raw = data.get("api_key")
+    if api_key_raw is not None:
+        api_key = str(api_key_raw or "").strip()
+        item.api_key_encrypted = api_key
     item.updated_at = timezone.now()
-    item.save(update_fields=["display_name", "is_active", "updated_at"])
+    item.save(
+        update_fields=[
+            "display_name",
+            "description",
+            "public_url",
+            "is_active",
+            "default_department_id",
+            "api_key_encrypted",
+            "updated_at",
+        ]
+    )
     _dify_audit(
         tenant,
         request.user,
@@ -3279,11 +3352,15 @@ def dify_catalog(request):
     )
     return Response(
         {
-            "id": str(item.id),
-            "dify_app_id": item.dify_app_id,
-            "display_name": item.display_name,
-            "is_active": bool(item.is_active),
-            "metadata": item.metadata or {},
+        "id": str(item.id),
+        "dify_app_id": item.dify_app_id,
+        "display_name": item.display_name,
+        "description": item.description or "",
+        "public_url": item.public_url or "",
+        "is_active": bool(item.is_active),
+        "has_api_key": bool(getattr(item, "api_key_encrypted", "") or ""),
+        "default_department_id": str(item.default_department_id) if item.default_department_id else None,
+        "metadata": item.metadata or {},
         }
     )
 
@@ -3407,23 +3484,49 @@ def dify_test_connection(request):
     que valida conectividade + credencial (quando a key corresponde ao app).
     """
     tenant = request.user.tenant
-    settings_obj = DifySettings.objects.filter(tenant=tenant).first()
-    base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
-    base_url = base_url.strip().rstrip("/")
+    data = request.data or {}
+    catalog_id = _parse_uuid(data.get("catalog_id"))
+
+    base_url = ""
+    api_key = ""
+
+    if catalog_id:
+        item = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
+        if not item:
+            return Response({"ok": False, "detail": "Agente Dify não encontrado para este tenant."}, status=status.HTTP_400_BAD_REQUEST)
+        # Derivar base_url da public_url quando possível
+        if item.public_url:
+            try:
+                from urllib.parse import urlparse
+
+                parsed = urlparse(item.public_url)
+                if parsed.scheme and parsed.netloc:
+                    base_url = f"{parsed.scheme}://{parsed.netloc}"
+            except Exception:
+                pass
+        if not base_url:
+            settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+            base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
+        api_key = (getattr(item, "api_key_encrypted", "") or "").strip()
+    else:
+        settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+        base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
+        base_url = base_url.strip().rstrip("/")
+        # Fallback: API key via billing_tenant_product (Tenant.get_product_api_key)
+        try:
+            api_key = (tenant.get_product_api_key("dify") or "").strip()
+        except Exception:
+            api_key = ""
+
+    base_url = (base_url or "").strip().rstrip("/")
     if not base_url:
         return Response({"ok": False, "detail": "Base URL do Dify não configurada."}, status=status.HTTP_400_BAD_REQUEST)
     if not (base_url.startswith("http://") or base_url.startswith("https://")):
         return Response({"ok": False, "detail": "Base URL inválida (use http:// ou https://)."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # API key via billing_tenant_product (Tenant.get_product_api_key)
-    api_key = ""
-    try:
-        api_key = (tenant.get_product_api_key("dify") or "").strip()
-    except Exception:
-        api_key = ""
     if not api_key:
         return Response(
-            {"ok": False, "detail": "API key do produto 'dify' não configurada para este tenant."},
+            {"ok": False, "detail": "API key não configurada para este agente/tenant."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

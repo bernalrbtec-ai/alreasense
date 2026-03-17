@@ -233,6 +233,10 @@ interface DifyCatalogItem {
   dify_app_id: string
   display_name: string
   is_active: boolean
+  description?: string
+  public_url?: string
+  has_api_key?: boolean
+  default_department_id?: string | null
 }
 
 interface DifyAssignment {
@@ -353,6 +357,10 @@ export default function ConfigurationsPage() {
   const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
   const [editDifyAppId, setEditDifyAppId] = useState('')
   const [editDifyDisplayName, setEditDifyDisplayName] = useState('')
+  const [editDifyDescription, setEditDifyDescription] = useState('')
+  const [editDifyPublicUrl, setEditDifyPublicUrl] = useState('')
+  const [editDifyApiKey, setEditDifyApiKey] = useState('')
+  const [editDifyHasApiKey, setEditDifyHasApiKey] = useState(false)
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -1717,16 +1725,26 @@ export default function ConfigurationsPage() {
     setEditingDifyItemId(item.id)
     setEditDifyAppId(item.dify_app_id || '')
     setEditDifyDisplayName(item.display_name || '')
+    setEditDifyDescription(item.description || '')
+    setEditDifyPublicUrl(item.public_url || '')
+    setEditDifyHasApiKey(Boolean(item.has_api_key))
+    setEditDifyApiKey('')
   }
 
   const saveEditDifyItem = async () => {
     if (!editingDifyItemId) return
     setDifySavingKey(`catalog_edit_${editingDifyItemId}`)
     try {
-      await api.patch('/ai/dify/catalog/', {
+      const payload: any = {
         id: editingDifyItemId,
         display_name: editDifyDisplayName,
-      })
+        description: editDifyDescription,
+        public_url: editDifyPublicUrl,
+      }
+      if (editDifyApiKey.trim()) {
+        payload.api_key = editDifyApiKey.trim()
+      }
+      await api.patch('/ai/dify/catalog/', payload)
       showSuccessToast('Agente atualizado')
       setEditingDifyItemId(null)
       await fetchDifyCatalog()
@@ -1737,10 +1755,11 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const testDifyConnection = async () => {
+  const testDifyConnection = async (catalogId?: string) => {
     setDifySavingKey('dify_test_connection')
     try {
-      const res = await api.post('/ai/dify/test-connection/', {})
+      const body = catalogId ? { catalog_id: catalogId } : {}
+      const res = await api.post('/ai/dify/test-connection/', body)
       if (res.data?.ok) showSuccessToast(res.data?.detail || 'Conexão OK')
       else showErrorToast(res.data?.detail || 'Falha na conexão')
     } catch (e: any) {
@@ -3195,12 +3214,25 @@ export default function ConfigurationsPage() {
                         <Label>Nome</Label>
                         <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
                       </div>
+                      <div className="md:col-span-2">
+                        <Label>URL pública do app</Label>
+                        <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label>API key</Label>
+                        <Input
+                          type="password"
+                          value={editDifyApiKey}
+                          onChange={(e) => setEditDifyApiKey(e.target.value)}
+                          placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
+                        />
+                      </div>
                       <div className="flex gap-2">
                         <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`}>
                           <Save className="h-4 w-4 mr-1" />
                           {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando...' : 'Salvar'}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => void testDifyConnection()} disabled={difySavingKey === 'dify_test_connection'}>
+                        <Button type="button" variant="outline" onClick={() => void testDifyConnection(editingDifyItemId || undefined)} disabled={difySavingKey === 'dify_test_connection'}>
                           <TestTube className="h-4 w-4 mr-1" />
                           {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
                         </Button>
