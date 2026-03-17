@@ -165,58 +165,6 @@ def _resolve_typebot_internal_id_from_public_id(flow: Flow) -> Optional[str]:
     return None
 
 
-def _workspace_typebots(flow: Flow) -> tuple[Optional[str], Optional[str], Optional[list]]:
-    """
-    Retorna (admin_base, api_key, items) para o workspace do tenant do flow.
-    items é a lista de typebots retornada pela API admin (quando possível).
-    """
-    if not flow or not getattr(flow, "tenant_id", None):
-        return None, None, None
-    admin_base = _get_typebot_admin_base()
-    api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
-    if not admin_base or not api_key:
-        return admin_base, api_key, None
-    try:
-        tenant = getattr(flow, "tenant", None)
-        if not tenant:
-            from apps.tenancy.models import Tenant
-
-            tenant = Tenant.objects.filter(id=flow.tenant_id).first()
-        if not tenant:
-            return admin_base, api_key, None
-        workspace = get_or_create_typebot_workspace(tenant)
-    except Exception:
-        return admin_base, api_key, None
-    if not workspace:
-        return admin_base, api_key, None
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    url = f"{admin_base}/workspaces/{workspace.workspace_id}/typebots"
-    try:
-        resp = requests.get(url, headers=headers, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data if isinstance(data, list) else data.get("typebots") if isinstance(data, dict) else None
-        return admin_base, api_key, items if isinstance(items, list) else None
-    except Exception:
-        return admin_base, api_key, None
-
-
-def _public_id_exists_in_tenant_workspace(flow: Flow) -> bool:
-    public_id = (getattr(flow, "typebot_public_id", None) or "").strip()
-    if not public_id:
-        return False
-    _, _, items = _workspace_typebots(flow)
-    if not isinstance(items, list):
-        return False
-    for it in items:
-        if not isinstance(it, dict):
-            continue
-        pid = (it.get("publicId") or it.get("public_id") or "").strip()
-        if pid == public_id:
-            return True
-    return False
-
-
 def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     """
     Garante que o Flow tenha um bot Typebot associado:
@@ -227,36 +175,16 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     """
     if not flow or not getattr(flow, "tenant_id", None):
         return flow
-    # Já tem bot vinculado: se o publicId não existir no workspace do tenant, recria.
-    # Também completa internal_id quando faltando.
+    # Já tem bot vinculado: se tiver internal_id, ok.
+    # Se faltar internal_id, cria um novo bot no workspace do tenant e sobrescreve os IDs.
     if (getattr(flow, "typebot_public_id", None) or "").strip():
+        if (getattr(flow, "typebot_internal_id", None) or "").strip():
+            return flow
         try:
-            if not _public_id_exists_in_tenant_workspace(flow):
-                # Public ID pertence a outro workspace (ou foi removido). Zerar para recriar.
-                flow.typebot_public_id = ""
-                flow.typebot_internal_id = ""
-                flow.save(update_fields=["typebot_public_id", "typebot_internal_id"])
-                # segue para criação normal
-            else:
-                if not (getattr(flow, "typebot_internal_id", None) or "").strip():
-                    internal = _resolve_typebot_internal_id_from_public_id(flow)
-                    if internal:
-                        try:
-                            flow.typebot_internal_id = internal
-                            flow.save(update_fields=["typebot_internal_id"])
-                        except Exception:
-                            pass
-                return flow
+            flow.typebot_public_id = ""
+            flow.typebot_internal_id = ""
+            flow.save(update_fields=["typebot_public_id", "typebot_internal_id"])
         except Exception:
-            # Se não conseguir validar, mantém comportamento anterior (não quebrar)
-            if not (getattr(flow, "typebot_internal_id", None) or "").strip():
-                internal = _resolve_typebot_internal_id_from_public_id(flow)
-                if internal:
-                    try:
-                        flow.typebot_internal_id = internal
-                        flow.save(update_fields=["typebot_internal_id"])
-                    except Exception:
-                        pass
             return flow
 
     admin_base = _get_typebot_admin_base()
