@@ -2,6 +2,8 @@
 Serviço de takeover Dify: encaminha mensagens do cliente para o agente Dify ativo
 e envia a resposta de volta via WhatsApp.
 """
+from __future__ import annotations
+
 import logging
 import httpx
 

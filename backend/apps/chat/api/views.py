@@ -4106,7 +4106,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         except ImportError:
             return Response({'agents': [], 'active_state': None}, status=status.HTTP_200_OK)
         try:
-            agents_qs = DifyAppCatalogItem.objects.filter(tenant=tenant, is_active=True, deleted_at__isnull=True)
+            agents_qs = DifyAppCatalogItem.objects.filter(tenant=tenant, is_active=True)
             agents = [
                 {
                     'id': str(a.id),

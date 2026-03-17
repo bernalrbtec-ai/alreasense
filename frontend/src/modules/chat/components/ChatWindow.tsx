@@ -761,19 +761,25 @@ export function ChatWindow() {
     return () => { cancelled = true; };
   }, [showStartFlowModal, conversationId]);
 
+  const closeStartFlowModal = useCallback(() => {
+    setShowStartFlowModal(false);
+    setFlowsForStart([]);
+    setSelectedFlowId(null);
+    setStartFlowModalTab('flows');
+    setDifyAgents([]);
+    setDifyActiveState(null);
+    setSelectedDifyAgentId(null);
+  }, []);
+
   // Fechar modal com Escape
   useEffect(() => {
     if (!showStartFlowModal) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowStartFlowModal(false);
-        setFlowsForStart([]);
-        setSelectedFlowId(null);
-      }
+      if (e.key === 'Escape') closeStartFlowModal();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [showStartFlowModal]);
+  }, [showStartFlowModal, closeStartFlowModal]);
   
   // ✅ REMOVIDO: useEffect separado para displayName - agora é calculado diretamente no useEffect acima
   // Isso evita problemas de inicialização e dependências circulares
@@ -1171,7 +1177,7 @@ export function ChatWindow() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="start-flow-modal-title"
-          onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
+          onClick={closeStartFlowModal}
         >
           <div
             className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col"
@@ -1180,7 +1186,7 @@ export function ChatWindow() {
             {/* Header */}
             <div className="px-5 pt-5 pb-0 flex items-center justify-between">
               <h2 id="start-flow-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">Automação</h2>
-              <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }} className="rounded-full">
+              <Button type="button" variant="ghost" size="icon" aria-label="Fechar" onClick={closeStartFlowModal} className="rounded-full">
                 <X className="w-5 h-5" />
               </Button>
             </div>
@@ -1267,7 +1273,7 @@ export function ChatWindow() {
                 <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => { setShowStartFlowModal(false); setFlowsForStart([]); setSelectedFlowId(null); }}
+                    onClick={closeStartFlowModal}
                     className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   >
                     Cancelar
@@ -1290,9 +1296,7 @@ export function ChatWindow() {
                           } else {
                             toast.success('Fluxo iniciado. O cliente receberá o menu/etapas em instantes.');
                           }
-                          setShowStartFlowModal(false);
-                          setFlowsForStart([]);
-                          setSelectedFlowId(null);
+                          closeStartFlowModal();
                         } else {
                           toast.error((res?.data?.message as string) || 'Nenhum fluxo ativo para esta conversa.');
                         }
@@ -1388,7 +1392,7 @@ export function ChatWindow() {
                 <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => { setShowStartFlowModal(false); }}
+                    onClick={closeStartFlowModal}
                     className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                   >
                     Cancelar
@@ -1405,8 +1409,7 @@ export function ChatWindow() {
                         });
                         if (res?.data?.success) {
                           toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
-                          setDifyActiveState({ catalog_id: selectedDifyAgentId, status: 'active' });
-                          setShowStartFlowModal(false);
+                          closeStartFlowModal();
                         } else {
                           toast.error(res?.data?.message || 'Erro ao iniciar agente.');
                         }
