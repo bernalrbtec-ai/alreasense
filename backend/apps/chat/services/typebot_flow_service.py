@@ -318,14 +318,17 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
         resp = requests.post(url, json=payload, headers=headers, timeout=10)
         resp.raise_for_status()
         data = resp.json() or {}
-        public_id = (data.get("publicId") or data.get("public_id") or "").strip()
-        internal_id = (data.get("id") or data.get("_id") or "").strip()
+        # Algumas versões retornam o objeto diretamente; outras retornam dentro de "typebot"
+        tb = data.get("typebot") if isinstance(data, dict) else None
+        tb = tb if isinstance(tb, dict) else data if isinstance(data, dict) else {}
+        public_id = (tb.get("publicId") or tb.get("public_id") or tb.get("publicID") or "").strip()
+        internal_id = (tb.get("id") or tb.get("_id") or tb.get("typebotId") or "").strip()
         if not public_id:
             logger.warning(
                 "[TYPEBOT][BOT] Resposta sem publicId ao criar bot flow=%s workspace=%s data_keys=%s",
                 getattr(flow, "id", None),
                 workspace.workspace_id,
-                list(data.keys()),
+                list(data.keys()) if isinstance(data, dict) else [],
             )
             return flow
     except requests.RequestException as e:

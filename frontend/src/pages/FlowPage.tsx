@@ -201,8 +201,6 @@ export default function FlowPage() {
   const [savingFlow, setSavingFlow] = useState(false)
   const [flowInstances, setFlowInstances] = useState<WhatsAppInstanceOption[]>([])
   const [newFlowInstanceId, setNewFlowInstanceId] = useState<string | null>(null)
-  const [newFlowTypebotPublicId, setNewFlowTypebotPublicId] = useState('')
-  const [newFlowTypebotBaseUrl, setNewFlowTypebotBaseUrl] = useState('')
   const [newFlowTypebotPrefilledExtra, setNewFlowTypebotPrefilledExtra] = useState('')
 
   // Node form (add / edit)
@@ -294,22 +292,8 @@ export default function FlowPage() {
       toast.error('Selecione o departamento')
       return
     }
-    const pid = newFlowTypebotPublicId.trim()
-    const base = newFlowTypebotBaseUrl.trim()
-    if (base && !isValidHttpUrl(base)) {
-      toast.error('URL base deve ser uma URL válida (ex: https://exemplo.com)')
-      return
-    }
     setCreatingFlow(true)
     try {
-      if (pid) {
-        const validation = await validateTypebotConfig(api, pid, base)
-        if (!validation.valid) {
-          toast.error(validation.detail ?? 'Configuração não pôde ser validada')
-          setCreatingFlow(false)
-          return
-        }
-      }
       let prefilledExtra: Record<string, string> = {}
       try {
         const raw = newFlowTypebotPrefilledExtra.trim()
@@ -331,8 +315,6 @@ export default function FlowPage() {
         scope: newFlowScope,
         department: newFlowScope === 'department' ? newFlowDepartmentId : null,
         whatsapp_instance: newFlowInstanceId || null,
-        typebot_public_id: pid || null,
-        typebot_base_url: base || null,
         typebot_prefilled_extra: prefilledExtra,
         is_active: true,
       })
@@ -347,8 +329,6 @@ export default function FlowPage() {
       setNewFlowScope('inbox')
       setNewFlowDepartmentId(null)
       setNewFlowInstanceId(null)
-      setNewFlowTypebotPublicId('')
-      setNewFlowTypebotBaseUrl('')
       setNewFlowTypebotPrefilledExtra('')
       await fetchFlows()
       const createdFlow: Flow = {
@@ -1015,28 +995,15 @@ export default function FlowPage() {
               <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Se escolher, o fluxo sempre envia por essa instância.</p>
             </div>
             <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
-              <Label className="text-accent-600 dark:text-accent-400">Integração (execução automática)</Label>
-              <Input
-                className="mt-1"
-                value={newFlowTypebotPublicId}
-                onChange={(e) => setNewFlowTypebotPublicId(e.target.value)}
-                placeholder="Public ID (Share > API)"
+              <Label className="text-gray-700 dark:text-gray-300">Variáveis extras (JSON)</Label>
+              <textarea
+                className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[50px]"
+                value={newFlowTypebotPrefilledExtra}
+                onChange={(e) => setNewFlowTypebotPrefilledExtra(e.target.value)}
+                placeholder='{"campanha": "black-friday"}'
+                rows={2}
               />
-                <Input
-                  className="mt-2"
-                  value={newFlowTypebotBaseUrl}
-                  onChange={(e) => setNewFlowTypebotBaseUrl(e.target.value)}
-                  placeholder="URL base da API (vazio = padrão)"
-                />
-                <Label className="mt-2 block text-xs text-gray-500 dark:text-gray-400">Variáveis extras (JSON)</Label>
-                <textarea
-                  className="mt-0.5 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[50px]"
-                  value={newFlowTypebotPrefilledExtra}
-                  onChange={(e) => setNewFlowTypebotPrefilledExtra(e.target.value)}
-                  placeholder='{"campanha": "black-friday"}'
-                  rows={2}
-                />
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Preencha o Public ID para executar automaticamente via API (startChat/continueChat). Variáveis extras são enviadas em prefilledVariables.</p>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional. Enviado na inicialização do atendimento.</p>
             </div>
             <div className="flex gap-2">
               <Button onClick={handleCreateFlow} disabled={creatingFlow}>
