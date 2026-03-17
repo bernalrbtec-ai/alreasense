@@ -172,8 +172,8 @@ class FlowViewSet(viewsets.ModelViewSet):
                 {"valid": False, "detail": "Public ID do Typebot é obrigatório."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Se URL base não vier do frontend, use o self-host configurado no backend.
-        base = typebot_base_url or (getattr(settings, "TYPEBOT_API_BASE", None) or "https://typebot.io/api/v1")
+        # Se URL base não vier do frontend, use o viewer (chat) configurado no backend.
+        base = typebot_base_url or (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "https://typebot.io/api/v1")
         base = (base or "").strip().rstrip("/")
         if base and not base.endswith("/api/v1"):
             base = f"{base}/api/v1"

@@ -21,12 +21,12 @@ from apps.tenancy.services import get_or_create_typebot_workspace
 
 logger = logging.getLogger(__name__)
 
-# Base default da API Typebot:
+# Base default da API de chat (viewer) do Typebot:
 # - Se o Flow definir typebot_base_url, ela prevalece (_typebot_base_url).
-# - Caso contrário, usamos TYPEBOT_API_BASE das settings (self-host) quando definido.
+# - Caso contrário, usamos TYPEBOT_VIEWER_BASE das settings (self-host) quando definido.
 # - Se nenhuma das duas estiver definida, caímos em um default seguro (typebot.io),
 #   apenas para não quebrar ambientes onde o Typebot ainda não foi configurado.
-DEFAULT_TYPEBOT_BASE = getattr(settings, "TYPEBOT_API_BASE", None) or "https://typebot.io/api/v1"
+DEFAULT_TYPEBOT_BASE = getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "https://typebot.io/api/v1"
 MAX_INSTRUCTION_JSON_LENGTH = 500
 CLOSE_KEYS = ("closeTicket", "encerrar", "closeConversation")
 TRANSFER_KEYS = ("transferTo", "transferToDepartment")
@@ -76,9 +76,9 @@ def _find_matching_brace(text: str, open_pos: int) -> int:
 
 def _typebot_base_url(flow: Flow) -> str:
     """
-    Resolve a URL base da API do Typebot para um fluxo:
+    Resolve a URL base da API de chat (viewer) do Typebot para um fluxo:
     - Se Flow.typebot_base_url estiver preenchido, ela é usada (normalizada com /api/v1).
-    - Caso contrário, usa TYPEBOT_API_BASE das settings (self-host) quando definida.
+    - Caso contrário, usa TYPEBOT_VIEWER_BASE das settings (self-host) quando definida.
     - Em último caso, usa DEFAULT_TYPEBOT_BASE (typebot.io) como fallback.
     """
     base = (getattr(flow, "typebot_base_url", None) or "").strip().rstrip("/")
@@ -99,10 +99,69 @@ def _get_typebot_admin_base() -> Optional[str]:
     Base da API admin do Typebot com sufixo /api/v1, derivada de settings.TYPEBOT_API_BASE.
     Ex.: https://typebot.alrea.ai -> https://typebot.alrea.ai/api/v1
     """
+    # Admin API fica no builder (dashboard)
     base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip().rstrip("/")
     if not base:
         return None
     return base if base.endswith("/api/v1") else f"{base}/api/v1"
+
+
+def _resolve_typebot_internal_id_from_public_id(flow: Flow) -> Optional[str]:
+    """
+    Em alguns casos (self-host), o front só conhece o publicId.
+    Para embutir o editor (builder) precisamos do internal id.
+
+    Estratégia:
+    - Usa API admin para listar typebots do workspace do tenant
+    - Encontra o item com publicId == flow.typebot_public_id
+    """
+    public_id = (getattr(flow, "typebot_public_id", None) or "").strip()
+    if not public_id or not getattr(flow, "tenant_id", None):
+        return None
+
+    admin_base = _get_typebot_admin_base()
+    api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
+    if not admin_base or not api_key:
+        return None
+
+    try:
+        tenant = getattr(flow, "tenant", None)
+        if not tenant:
+            from apps.tenancy.models import Tenant
+
+            tenant = Tenant.objects.filter(id=flow.tenant_id).first()
+        if not tenant:
+            return None
+        workspace = get_or_create_typebot_workspace(tenant)
+    except Exception:
+        return None
+
+    if not workspace:
+        return None
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    url = f"{admin_base}/workspaces/{workspace.workspace_id}/typebots"
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        items = data if isinstance(data, list) else data.get("typebots") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return None
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            pid = (it.get("publicId") or it.get("public_id") or "").strip()
+            if pid != public_id:
+                continue
+            internal = (it.get("id") or it.get("_id") or "").strip()
+            return internal or None
+    except Exception:
+        return None
+    return None
 
 
 def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
@@ -115,8 +174,16 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     """
     if not flow or not getattr(flow, "tenant_id", None):
         return flow
-    # Já tem bot vinculado
+    # Já tem bot vinculado: ainda podemos completar internal_id se estiver faltando
     if (getattr(flow, "typebot_public_id", None) or "").strip():
+        if not (getattr(flow, "typebot_internal_id", None) or "").strip():
+            internal = _resolve_typebot_internal_id_from_public_id(flow)
+            if internal:
+                try:
+                    flow.typebot_internal_id = internal
+                    flow.save(update_fields=["typebot_internal_id"])
+                except Exception:
+                    pass
         return flow
 
     admin_base = _get_typebot_admin_base()
@@ -213,8 +280,8 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
         if internal_id:
             flow.typebot_internal_id = internal_id
         if not getattr(flow, "typebot_base_url", None):
-            # Usar sempre a base self-host como padrão
-            base = (getattr(settings, "TYPEBOT_API_BASE", None) or "").strip()
+            # Usar sempre a base do viewer (chat) como padrão
+            base = (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "").strip()
             if base.endswith("/api/v1"):
                 base = base[: -len("/api/v1")]
             flow.typebot_base_url = base

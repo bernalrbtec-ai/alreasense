@@ -192,11 +192,7 @@ export default function FlowPage() {
   const [editFlowScope, setEditFlowScope] = useState<'inbox' | 'department'>('inbox')
   const [editFlowDepartmentId, setEditFlowDepartmentId] = useState<string | null>(null)
   const [editFlowInstanceId, setEditFlowInstanceId] = useState<string | null>(null)
-  const [editTypebotPublicId, setEditTypebotPublicId] = useState('')
-  const [editTypebotBaseUrl, setEditTypebotBaseUrl] = useState('')
   const [editTypebotPrefilledExtra, setEditTypebotPrefilledExtra] = useState('')
-  const [editTypebotInternalId, setEditTypebotInternalId] = useState('')
-  const [editTypebotApiKey, setEditTypebotApiKey] = useState('')
   const [typebotVariablesList, setTypebotVariablesList] = useState<Array<{ id: string; name: string }>>([])
   const [typebotVariableValues, setTypebotVariableValues] = useState<Record<string, string>>({})
   const [loadingTypebotVariables, setLoadingTypebotVariables] = useState(false)
@@ -388,10 +384,7 @@ export default function FlowPage() {
     setEditFlowScope((selectedFlow.scope as 'inbox' | 'department') || 'inbox')
     setEditFlowDepartmentId(selectedFlow.department || null)
     setEditFlowInstanceId(selectedFlow.whatsapp_instance ?? null)
-    setEditTypebotPublicId(selectedFlow.typebot_public_id ?? '')
-    setEditTypebotBaseUrl(selectedFlow.typebot_base_url ?? '')
-    setEditTypebotInternalId(flowDetail?.typebot_internal_id ?? selectedFlow.typebot_internal_id ?? '')
-    setEditTypebotApiKey(flowDetail?.typebot_api_key ?? selectedFlow.typebot_api_key ?? '')
+    // Integração é gerenciada automaticamente no backend (workspace por tenant).
     setTypebotVariablesList([])
     setTypebotVariableValues({})
     setEditFlowVarsExpanded(false)
@@ -415,22 +408,8 @@ export default function FlowPage() {
       toast.error('Selecione o departamento')
       return
     }
-    const pid = editTypebotPublicId.trim()
-    const base = editTypebotBaseUrl.trim()
-    if (base && !isValidHttpUrl(base)) {
-      toast.error('URL base deve ser uma URL válida (ex: https://exemplo.com)')
-      return
-    }
     setSavingFlow(true)
     try {
-      if (pid) {
-        const validation = await validateTypebotConfig(api, pid, base)
-        if (!validation.valid) {
-          toast.error(validation.detail ?? 'Configuração não pôde ser validada')
-          setSavingFlow(false)
-          return
-        }
-      }
       let prefilledExtra: Record<string, string> | null = null
       try {
         const raw = editTypebotPrefilledExtra.trim()
@@ -453,11 +432,7 @@ export default function FlowPage() {
         scope: editFlowScope,
         department: editFlowScope === 'department' ? editFlowDepartmentId : null,
         whatsapp_instance: editFlowInstanceId || null,
-        typebot_public_id: pid || null,
-        typebot_base_url: base || null,
         typebot_prefilled_extra: prefilledExtra || {},
-        typebot_internal_id: editTypebotInternalId.trim() || null,
-        typebot_api_key: editTypebotApiKey.trim() || null,
       })
       toast.success('Fluxo atualizado')
       setEditFlowOpen(false)
@@ -1677,18 +1652,9 @@ export default function FlowPage() {
                   <h3 className="text-sm font-medium text-accent-600 dark:text-accent-400 flex items-center gap-2">
                     <Zap className="h-4 w-4" /> Integração
                   </h3>
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="mb-1 block text-gray-700 dark:text-gray-300">Public ID</Label>
-                      <Input value={editTypebotPublicId} onChange={(e) => setEditTypebotPublicId(e.target.value)} placeholder="Ex: my-flow-7l6svuv" className="rounded-lg font-mono text-sm" />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Em geral: Share &gt; API</p>
-                    </div>
-                    <div>
-                      <Label className="mb-1 block text-gray-700 dark:text-gray-300">URL base da API</Label>
-                      <Input value={editTypebotBaseUrl} onChange={(e) => setEditTypebotBaseUrl(e.target.value)} placeholder="Vazio = padrão" className="rounded-lg font-mono text-sm" />
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Após salvar, a execução automática fica ativa para este fluxo.</p>
-                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    A integração é gerenciada automaticamente por tenant. Ao salvar, o sistema garante o workspace e o bot do fluxo.
+                  </p>
 
                   {/* Variáveis: bloco recolhível */}
                   <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
@@ -1698,14 +1664,7 @@ export default function FlowPage() {
                     </button>
                     {editFlowVarsExpanded && (
                       <div className="mt-3 space-y-3">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Use ID interno e API key apenas se você precisar carregar variáveis do editor para preencher o JSON automaticamente.</p>
-                        <div className="grid grid-cols-1 gap-2">
-                          <Input value={editTypebotInternalId} onChange={(e) => setEditTypebotInternalId(e.target.value)} placeholder="ID interno (ex.: da URL ao editar)" className="rounded-lg text-sm" />
-                          <Input type="password" autoComplete="off" value={editTypebotApiKey} onChange={(e) => setEditTypebotApiKey(e.target.value)} placeholder="API key (Settings & Members > My account > API tokens)" className="rounded-lg text-sm" />
-                        </div>
-                        <Button type="button" variant="outline" size="sm" disabled={loadingTypebotVariables || !editTypebotInternalId.trim() || !editTypebotApiKey.trim()} onClick={async () => { if (!selectedFlow?.id) return; setLoadingTypebotVariables(true); try { const { data } = await api.post(`/chat/flows/${selectedFlow.id}/fetch_typebot_variables/`, { typebot_internal_id: editTypebotInternalId.trim(), typebot_api_key: editTypebotApiKey.trim() }); setTypebotVariablesList(data?.variables ?? []); const prev: Record<string, string> = {}; try { const extra = JSON.parse(editTypebotPrefilledExtra || '{}'); if (typeof extra === 'object' && extra !== null) Object.assign(prev, extra); } catch { /* ignore */ } setTypebotVariableValues(prev); if ((data?.variables?.length ?? 0) > 0) toast.success(`${data.variables.length} variável(is). Preencha e clique em Aplicar.`); else toast.info('Nenhuma variável neste fluxo.'); } catch (e: any) { toast.error(e?.response?.data?.detail ?? 'Falha ao carregar'); } finally { setLoadingTypebotVariables(false); } }}>
-                          {loadingTypebotVariables ? <LoadingSpinner size="sm" className="mr-1" /> : null}{loadingTypebotVariables ? 'Carregando…' : 'Carregar variáveis'}
-                        </Button>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">Preencha o JSON de variáveis extras para enviar no startChat.</p>
                         {typebotVariablesList.length > 0 && (
                           <div className="space-y-2 rounded-lg bg-white dark:bg-gray-800/80 p-3 border border-gray-200 dark:border-gray-600">
                             <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Valores para cada variável</p>
