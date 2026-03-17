@@ -16,6 +16,9 @@ export interface ConversationSidebarConversation {
   avatarColor: string;
   /** URL da foto de perfil (ex.: WhatsApp); null = usar apenas iniciais */
   profilePicUrl: string | null;
+  /** Atendente atual (quando conversa está atribuída) */
+  assignedToId?: number | null;
+  assignedToName?: string | null;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
@@ -100,6 +103,16 @@ export function conversationToSidebarItem(conv: Conversation): ConversationSideb
     avatarInitials,
     avatarColor: getAvatarColor(conv.id),
     profilePicUrl: conv.profile_pic_url ?? null,
+    assignedToId:
+      typeof (conv as any).assigned_to === 'number'
+        ? (conv as any).assigned_to
+        : (typeof (conv as any).assigned_to === 'string' && (conv as any).assigned_to.trim() !== '')
+        ? Number((conv as any).assigned_to)
+        : null,
+    assignedToName:
+      ((conv as any).assigned_to_data?.first_name || (conv as any).assigned_to_data?.email || '')
+        ?.toString()
+        .trim() || null,
     lastMessage: lastMessageText,
     lastMessageAt,
     unreadCount: conv.unread_count ?? 0,

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Eye } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { shallow } from 'zustand/shallow';
 import { useConversationListData } from '../hooks/useConversationListData';
@@ -16,6 +16,7 @@ import { conversationToSidebarItem } from '@/components/chat/adapters';
 import { ConversationSidebar } from '@/components/chat/ConversationSidebar';
 import { NewConversationModal } from './NewConversationModal';
 import type { Conversation } from '../types';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export function ChatConversationSidebarWrapper() {
   const {
@@ -26,6 +27,7 @@ export function ChatConversationSidebarWrapper() {
     waitingForResponseMode,
     setWaitingForResponseMode,
     setOpenInSpyMode,
+    openInSpyMode,
   } = useChatStore(
     (s) => ({
       conversations: s.conversations,
@@ -35,9 +37,13 @@ export function ChatConversationSidebarWrapper() {
       waitingForResponseMode: s.waitingForResponseMode,
       setWaitingForResponseMode: s.setWaitingForResponseMode,
       setOpenInSpyMode: s.setOpenInSpyMode,
+      openInSpyMode: s.openInSpyMode,
     }),
     shallow
   );
+
+  const permissions = usePermissions();
+  const canSpy = permissions.isAdmin || permissions.isGerente;
 
   const {
     loading,
@@ -175,6 +181,20 @@ export function ChatConversationSidebarWrapper() {
     if (isSame) return;
     setActiveConversation(conv);
     setOpenInSpyMode(false);
+  };
+
+  const handleSpyToggle = (id: string) => {
+    if (!canSpy) return;
+    const conv = filteredConversations.find((c) => String(c.id) === id);
+    if (!conv) return;
+    const isSame = activeConversation?.id === conv.id;
+    const isSameAndSpy = isSame && openInSpyMode;
+    if (isSameAndSpy) {
+      setOpenInSpyMode(false);
+      return;
+    }
+    if (!isSame) setActiveConversation(conv);
+    setOpenInSpyMode(true);
   };
 
   const showSearchAndNew = activeDepartment?.id !== 'groups';
@@ -329,6 +349,29 @@ export function ChatConversationSidebarWrapper() {
         conversations={sidebarItems}
         activeId={activeConversation?.id ?? null}
         onSelect={handleSelectConversation}
+        renderTrailingAction={(item, isActive) => {
+          if (!canSpy) return null;
+          const isSpyActive = isActive && openInSpyMode;
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSpyToggle(item.id);
+              }}
+              className={`ml-1 flex-shrink-0 p-1.5 rounded-full transition-colors ${
+                isSpyActive
+                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-800/40'
+                  : 'hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+              title={isSpyActive ? 'Sair do modo espião (assumir conversa)' : 'Abrir em modo espião (não marca como lida)'}
+              aria-label={isSpyActive ? 'Sair do modo espião' : 'Abrir em modo espião'}
+              aria-pressed={isSpyActive}
+            >
+              <Eye className="w-4 h-4" aria-hidden />
+            </button>
+          );
+        }}
         searchValue={showSearchAndNew ? searchTerm : undefined}
         onSearchChange={showSearchAndNew ? setSearchTerm : undefined}
         searchPlaceholder="Buscar ou iniciar conversa"

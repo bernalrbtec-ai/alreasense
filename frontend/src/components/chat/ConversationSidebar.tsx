@@ -19,6 +19,8 @@ export interface ConversationSidebarProps {
   conversations: ConversationSidebarConversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  /** Opcional: renderiza ação à direita de cada item (ex.: modo espião) */
+  renderTrailingAction?: (item: ConversationSidebarConversation, isActive: boolean) => React.ReactNode;
   /** Opcional: controle de busca pelo wrapper */
   searchValue?: string;
   onSearchChange?: (value: string) => void;
@@ -31,6 +33,7 @@ export function ConversationSidebar({
   conversations,
   activeId,
   onSelect,
+  renderTrailingAction,
   searchValue = '',
   onSearchChange,
   searchPlaceholder = 'Buscar ou iniciar conversa',
@@ -84,63 +87,81 @@ export function ConversationSidebar({
             return (
               <motion.div
                 key={item.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => onSelect(item.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelect(item.id);
-                  }
-                }}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.15 }}
                 className={`
                   w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 flex-shrink-0
-                  hover:bg-chat-sidebar dark:hover:bg-gray-700 active:scale-[0.99]
-                  transition-colors duration-150 ease-out transition-transform
+                  hover:bg-chat-sidebar dark:hover:bg-gray-700
+                  transition-colors duration-150 ease-out
                   border-b border-gray-100 dark:border-gray-700
-                  cursor-pointer
                   min-h-[72px]
                   ${isActive ? 'bg-chat-sidebar dark:bg-gray-700 ring-inset ring-2 ring-chat-ring' : ''}
                 `}
               >
-                <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-white font-medium text-sm">
-                  {item.profilePicUrl && !failedImageIds.has(item.id) ? (
-                    <img
-                      src={getMediaProxyUrl(item.profilePicUrl)}
-                      alt=""
-                      className="w-full h-full object-cover"
-                      onError={() => handleAvatarError(item.id)}
-                    />
-                  ) : (
-                    <span className={`w-full h-full flex items-center justify-center ${item.avatarColor}`} aria-hidden>
-                      {item.avatarInitials}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0 text-left">
-                  <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                    <span className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm block">
-                      {item.contactName}
-                    </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
-                      {formatTimeAgo(item.lastMessageAt)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1 min-w-0">
-                      {item.lastMessage || 'Sem mensagens'}
-                    </span>
-                    {item.unreadCount > 0 && (
-                      <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
-                        {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onSelect(item.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSelect(item.id);
+                    }
+                  }}
+                  className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 cursor-pointer active:scale-[0.99] transition-transform"
+                >
+                  <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-white font-medium text-sm">
+                    {item.profilePicUrl && !failedImageIds.has(item.id) ? (
+                      <img
+                        src={getMediaProxyUrl(item.profilePicUrl)}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={() => handleAvatarError(item.id)}
+                      />
+                    ) : (
+                      <span className={`w-full h-full flex items-center justify-center ${item.avatarColor}`} aria-hidden>
+                        {item.avatarInitials}
                       </span>
                     )}
                   </div>
+
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm block">
+                        {item.contactName}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                        {formatTimeAgo(item.lastMessageAt)}
+                      </span>
+                    </div>
+
+                    {item.assignedToId && item.assignedToName && (
+                      <div className="mb-0.5">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
+                          👤 {item.assignedToName} está atendendo
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1 min-w-0">
+                        {item.lastMessage || 'Sem mensagens'}
+                      </span>
+                      {item.unreadCount > 0 && (
+                        <span className="flex-shrink-0 min-w-[18px] h-[18px] rounded-full bg-green-500 text-white text-[10px] font-bold flex items-center justify-center">
+                          {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {renderTrailingAction ? (
+                  <div className="flex-shrink-0 flex items-center">
+                    {renderTrailingAction(item, isActive)}
+                  </div>
+                ) : null}
               </motion.div>
             );
           })}
