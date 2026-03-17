@@ -220,7 +220,8 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     if not workspace:
         return flow
 
-    url = f"{admin_base}/workspaces/{workspace.workspace_id}/typebots"
+    # Builder API: POST /api/v1/typebots (workspaceId no payload)
+    url = f"{admin_base}/typebots"
     display_name = (flow.name or "Fluxo Sense").strip()
     try:
         from apps.authn.models import Department
