@@ -889,12 +889,19 @@ export function ChatWindow() {
               )}
             </div>
             
-            {/* Tags: Instância + Tags do Contato */}
+            {/* Tags: Instância + Tags do Contato + Atendente */}
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
               {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
               {(instanceFriendlyName || instanceName) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200 rounded-full text-xs font-medium">
                   📱 {instanceFriendlyName || instanceName}
+                </span>
+              )}
+
+              {/* Atendente atual (quando conversa já está atribuída) */}
+              {activeConversation?.assigned_to && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded-full text-xs font-medium">
+                  👤 {(activeConversation.assigned_to_data?.first_name || activeConversation.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
                 </span>
               )}
               
