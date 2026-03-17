@@ -1114,17 +1114,15 @@ export default function FlowPage() {
                   )}
                   <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
                     <p className="font-medium text-gray-900 dark:text-gray-100 mb-1">Integração</p>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      Public ID: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_public_id || '').trim() || '—'}</code>
-                      {((flowDetail.typebot_base_url || '').trim()) ? (
-                        <> · URL base: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">{(flowDetail.typebot_base_url || '').trim()}</code></>
-                      ) : (
-                        <> · URL base: <span className="text-gray-500">padrão</span></>
-                      )}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      As mensagens são enviadas ao WhatsApp automaticamente (startChat/continueChat).
-                    </p>
+                    {(flowDetail.typebot_public_id || '').trim() ? (
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Fluxo automatizado ativo. As mensagens são enviadas ao WhatsApp automaticamente.
+                      </p>
+                    ) : (
+                      <p className="text-gray-600 dark:text-gray-400">
+                        Fluxo padrão (com etapas). Para usar o editor avançado, crie/ative a integração automaticamente ao salvar o fluxo.
+                      </p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -1160,7 +1158,7 @@ export default function FlowPage() {
                         />
                       ) : (
                         <div className="p-4 text-sm text-amber-800 dark:text-amber-200 bg-amber-50/50 dark:bg-amber-900/20">
-                          Para abrir o editor aqui, preencha o <strong>ID interno</strong> do fluxo no modal “Editar fluxo” e salve.
+                          Estamos preparando o editor para este fluxo. Recarregue a página em alguns segundos ou salve novamente o fluxo para sincronizar.
                         </div>
                       )}
                     </div>
