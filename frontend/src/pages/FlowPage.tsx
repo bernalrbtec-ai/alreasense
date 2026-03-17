@@ -1647,43 +1647,59 @@ export default function FlowPage() {
                   </div>
                 </section>
 
-                {/* Seção: Integração */}
+                {/* Variáveis extras (opcional) */}
                 <section className="space-y-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-4 border border-gray-100 dark:border-gray-700/50">
-                  <h3 className="text-sm font-medium text-accent-600 dark:text-accent-400 flex items-center gap-2">
-                    <Zap className="h-4 w-4" /> Integração
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    A integração é gerenciada automaticamente por tenant. Ao salvar, o sistema garante o workspace e o bot do fluxo.
-                  </p>
-
-                  {/* Variáveis: bloco recolhível */}
-                  <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
-                    <button type="button" onClick={() => setEditFlowVarsExpanded((v) => !v)} className="flex items-center justify-between w-full py-1.5 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200">
-                      <span>Variáveis (opcional)</span>
-                      {editFlowVarsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-                    {editFlowVarsExpanded && (
-                      <div className="mt-3 space-y-3">
-                        <p className="text-xs text-gray-500 dark:text-gray-400">Preencha o JSON de variáveis extras para enviar no startChat.</p>
-                        {typebotVariablesList.length > 0 && (
-                          <div className="space-y-2 rounded-lg bg-white dark:bg-gray-800/80 p-3 border border-gray-200 dark:border-gray-600">
-                            <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Valores para cada variável</p>
-                            {typebotVariablesList.map((v) => (
-                              <div key={v.id} className="flex gap-2 items-center">
-                                <span className="text-xs font-mono text-gray-500 dark:text-gray-400 w-28 shrink-0 truncate" title={v.name}>{v.name}</span>
-                                <Input className="flex-1 text-sm rounded-lg" value={typebotVariableValues[v.name] ?? ''} onChange={(e) => setTypebotVariableValues((prev) => ({ ...prev, [v.name]: e.target.value }))} placeholder="valor" />
-                              </div>
-                            ))}
-                            <Button type="button" variant="outline" size="sm" onClick={() => { const extra: Record<string, string> = {}; typebotVariablesList.forEach((v) => { const val = (typebotVariableValues[v.name] ?? '').trim(); if (val) extra[v.name] = val; }); try { const current = JSON.parse(editTypebotPrefilledExtra || '{}'); const merged = typeof current === 'object' && current !== null ? { ...current, ...extra } : extra; setEditTypebotPrefilledExtra(JSON.stringify(merged, null, 2)); toast.success('Aplicado ao JSON.'); } catch { setEditTypebotPrefilledExtra(JSON.stringify(extra, null, 2)); toast.success('Aplicado ao JSON.'); } }}>Aplicar ao JSON</Button>
-                          </div>
-                        )}
-                        <div>
-                          <Label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Variáveis extras (JSON)</Label>
-                          <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[72px]" value={editTypebotPrefilledExtra} onChange={(e) => setEditTypebotPrefilledExtra(e.target.value)} placeholder='{"campanha": "black-friday"}' rows={3} />
+                  <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wide">Variáveis (opcional)</h3>
+                  <button
+                    type="button"
+                    onClick={() => setEditFlowVarsExpanded((v) => !v)}
+                    className="flex items-center justify-between w-full py-1.5 text-left text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+                  >
+                    <span>Variáveis extras (JSON)</span>
+                    {editFlowVarsExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </button>
+                  {editFlowVarsExpanded && (
+                    <div className="space-y-3">
+                      {typebotVariablesList.length > 0 && (
+                        <div className="space-y-2 rounded-lg bg-white dark:bg-gray-800/80 p-3 border border-gray-200 dark:border-gray-600">
+                          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Valores para cada variável</p>
+                          {typebotVariablesList.map((v) => (
+                            <div key={v.id} className="flex gap-2 items-center">
+                              <span className="text-xs font-mono text-gray-500 dark:text-gray-400 w-28 shrink-0 truncate" title={v.name}>{v.name}</span>
+                              <Input className="flex-1 text-sm rounded-lg" value={typebotVariableValues[v.name] ?? ''} onChange={(e) => setTypebotVariableValues((prev) => ({ ...prev, [v.name]: e.target.value }))} placeholder="valor" />
+                            </div>
+                          ))}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const extra: Record<string, string> = {}
+                              typebotVariablesList.forEach((v) => {
+                                const val = (typebotVariableValues[v.name] ?? '').trim()
+                                if (val) extra[v.name] = val
+                              })
+                              try {
+                                const current = JSON.parse(editTypebotPrefilledExtra || '{}')
+                                const merged = typeof current === 'object' && current !== null ? { ...current, ...extra } : extra
+                                setEditTypebotPrefilledExtra(JSON.stringify(merged, null, 2))
+                                toast.success('Aplicado ao JSON.')
+                              } catch {
+                                setEditTypebotPrefilledExtra(JSON.stringify(extra, null, 2))
+                                toast.success('Aplicado ao JSON.')
+                              }
+                            }}
+                          >
+                            Aplicar ao JSON
+                          </Button>
                         </div>
+                      )}
+                      <div>
+                        <Label className="mb-1 block text-xs text-gray-600 dark:text-gray-400">Variáveis extras (JSON)</Label>
+                        <textarea className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm font-mono min-h-[72px]" value={editTypebotPrefilledExtra} onChange={(e) => setEditTypebotPrefilledExtra(e.target.value)} placeholder='{"campanha": "black-friday"}' rows={3} />
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </section>
               </div>
 
