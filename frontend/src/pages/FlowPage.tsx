@@ -1201,7 +1201,7 @@ export default function FlowPage() {
               </Card>
               {(flowDetail.typebot_public_id || '').trim() ? (
                 TYPEBOT_BUILDER_BASE ? (
-                  <Card ref={typebotIframeCardRef} className="hidden p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
+                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
                     <h3 className="font-medium mb-2 text-gray-900 dark:text-gray-100 text-sm">Editor do fluxo</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
                       O editor abaixo é carregado a partir do serviço externo ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
@@ -1216,7 +1216,7 @@ export default function FlowPage() {
                     </div>
                   </Card>
                 ) : (
-                  <Card ref={typebotIframeCardRef} className="hidden p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20">
+                  <Card ref={typebotIframeCardRef} className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/20">
                     <h3 className="font-medium mb-1 text-gray-900 dark:text-gray-100 text-sm">Editor do fluxo</h3>
                     <p className="text-xs text-amber-800 dark:text-amber-200">
                       Para exibir o editor aqui, configure a variável de ambiente do editor no serviço do frontend.
