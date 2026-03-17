@@ -758,23 +758,31 @@ export function ChatWindow() {
         if (!cancelled) setLoadingFlows(false);
       });
 
-    // Agentes Dify
+    // Agentes Dify — um único GET por abertura de modal
+    // (M3: o badge do header já fez o fetch ao carregar a conversa; aqui buscamos
+    // a lista completa de agentes + estado ativo em uma só request)
     setLoadingDifyAgents(true);
     setDifyAgents([]);
-    setDifyActiveState(null);
     setSelectedDifyAgentId(null);
     api.get(`/chat/conversations/${conversationId}/dify-agents/`)
       .then((res) => {
         if (cancelled) return;
         const data = res?.data as any;
-        setDifyAgents(Array.isArray(data?.agents) ? data.agents : []);
-        setDifyActiveState(data?.active_state ?? null);
-        if (data?.active_state?.catalog_id) setSelectedDifyAgentId(data.active_state.catalog_id);
+        const agents = Array.isArray(data?.agents) ? data.agents : [];
+        const activeState = data?.active_state ?? null;
+        setDifyAgents(agents);
+        setDifyActiveState(activeState);
+        // Sincronizar badge com o estado mais fresco retornado por esta request
+        setDifyHeaderState(
+          activeState?.status === 'active'
+            ? { display_name: activeState.display_name || 'Dify' }
+            : null
+        );
+        if (activeState?.catalog_id) setSelectedDifyAgentId(activeState.catalog_id);
       })
       .catch((e: any) => {
         if (cancelled) return;
         setDifyAgents([]);
-        setDifyActiveState(null);
         // EC-F06: distinguir 401 (sessão expirada) de outros erros
         if (e?.response?.status === 401) {
           toast.error('Sessão expirada. Faça login novamente.');
@@ -793,9 +801,10 @@ export function ChatWindow() {
     setSelectedFlowId(null);
     setStartFlowModalTab('flows');
     setDifyAgents([]);
-    setDifyActiveState(null);
+    // M4: NÃO apagar difyActiveState aqui — ele reflete o estado real da conversa
+    // e é usado pelo badge permanente no header. Só é zerado ao trocar de conversa.
     setSelectedDifyAgentId(null);
-    // A6: garantir que estados de loading sejam resetados ao fechar o modal
+    // Garantir que estados de loading sejam resetados ao fechar o modal
     setStartDifyLoading(false);
     setStopDifyLoading(false);
     setShowDifySwapConfirm(false);
@@ -1432,11 +1441,14 @@ export function ChatWindow() {
                   >
                     Cancelar
                   </button>
-                  {/* Confirmação de troca de agente (EC-F07: usa pendingSwapAgentId capturado no clique) */}
+                  {/* A1 + C5 + EC-F05/F07: confirmação inline para troca e reativação do mesmo agente */}
                   {showDifySwapConfirm && pendingSwapAgentId ? (
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-amber-700 dark:text-amber-300 text-xs">
-                        Trocar para <strong>{difyAgents.find(a => a.id === pendingSwapAgentId)?.display_name || 'novo agente'}</strong>? Encerra a sessão atual.
+                        {pendingSwapAgentId === difyActiveState?.catalog_id
+                          ? <>Reativar <strong>{difyAgents.find(a => a.id === pendingSwapAgentId)?.display_name || 'agente'}</strong>? A sessão atual será reiniciada.</>
+                          : <>Trocar para <strong>{difyAgents.find(a => a.id === pendingSwapAgentId)?.display_name || 'novo agente'}</strong>? Encerra a sessão atual.</>
+                        }
                       </span>
                       <button
                         type="button"
@@ -1460,8 +1472,11 @@ export function ChatWindow() {
                             });
                             if (res?.data?.success) {
                               const agentName = difyAgents.find(a => a.id === agentIdToActivate)?.display_name || res.data.display_name || 'Dify';
-                              toast.success(res.data.message || 'Agente trocado.');
+                              const newActive = { catalog_id: agentIdToActivate, status: 'active', display_name: agentName };
+                              // C5: atualizar estado local imediatamente após troca/reativação
+                              setDifyActiveState(newActive);
                               setDifyHeaderState({ display_name: agentName });
+                              toast.success(res.data.message || 'Agente trocado.');
                               closeStartFlowModal();
                             } else {
                               toast.error(res?.data?.message || 'Erro ao trocar agente.');
@@ -1474,44 +1489,47 @@ export function ChatWindow() {
                         }}
                         className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 disabled:opacity-50"
                       >
-                        {startDifyLoading ? '...' : 'Sim, trocar'}
+                        {startDifyLoading ? '...' : 'Sim, confirmar'}
                       </button>
                     </div>
                   ) : (
                   <button
                     type="button"
                     disabled={loadingDifyAgents || difyAgents.length === 0 || !selectedDifyAgentId || startDifyLoading}
-                    onClick={async () => {
+                    onClick={() => {
                       if (!selectedDifyAgentId || !conversationId) return;
-                      // Se há agente diferente ativo, pedir confirmação antes de trocar
-                      // EC-F07: capturar o ID alvo agora para não usar o estado mutável depois
-                      if (difyActiveState?.status === 'active' && selectedDifyAgentId !== difyActiveState.catalog_id) {
-                        setPendingSwapAgentId(selectedDifyAgentId);
+                      // EC-F07: capturar o ID alvo agora antes de mostrar qualquer confirmação
+                      const targetAgentId = selectedDifyAgentId;
+                      if (difyActiveState?.status === 'active') {
+                        // A1 + EC-F05: tanto troca quanto reativação usam confirmação inline
+                        setPendingSwapAgentId(targetAgentId);
                         setShowDifySwapConfirm(true);
                         return;
                       }
-                      // EC-F05: reativar o mesmo agente avisa que a sessão será reiniciada
-                      if (difyActiveState?.status === 'active' && selectedDifyAgentId === difyActiveState.catalog_id) {
-                        if (!window.confirm('Este agente já está ativo. Reativar irá reiniciar a sessão e perder o contexto atual. Confirmar?')) return;
-                      }
-                      setStartDifyLoading(true);
-                      try {
-                        const res = await api.post(`/chat/conversations/${conversationId}/start-dify-agent/`, {
-                          catalog_id: selectedDifyAgentId,
-                        });
-                        if (res?.data?.success) {
-                          const agentName = difyAgents.find(a => a.id === selectedDifyAgentId)?.display_name || res.data.display_name || 'Dify';
-                          toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
-                          setDifyHeaderState({ display_name: agentName });
-                          closeStartFlowModal();
-                        } else {
-                          toast.error(res?.data?.message || 'Erro ao iniciar agente.');
+                      // Sem agente ativo — ativar diretamente
+                      void (async () => {
+                        setStartDifyLoading(true);
+                        try {
+                          const res = await api.post(`/chat/conversations/${conversationId}/start-dify-agent/`, {
+                            catalog_id: targetAgentId,
+                          });
+                          if (res?.data?.success) {
+                            const agentName = difyAgents.find(a => a.id === targetAgentId)?.display_name || res.data.display_name || 'Dify';
+                            const newActive = { catalog_id: targetAgentId, status: 'active', display_name: agentName };
+                            // C5: atualizar estado local imediatamente para evitar double-activation
+                            setDifyActiveState(newActive);
+                            setDifyHeaderState({ display_name: agentName });
+                            toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
+                            closeStartFlowModal();
+                          } else {
+                            toast.error(res?.data?.message || 'Erro ao iniciar agente.');
+                          }
+                        } catch (e: any) {
+                          toast.error(e?.response?.data?.message || 'Não foi possível iniciar o agente.');
+                        } finally {
+                          setStartDifyLoading(false);
                         }
-                      } catch (e: any) {
-                        toast.error(e?.response?.data?.message || 'Não foi possível iniciar o agente.');
-                      } finally {
-                        setStartDifyLoading(false);
-                      }
+                      })();
                     }}
                     className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:pointer-events-none"
                   >

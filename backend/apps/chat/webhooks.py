@@ -4069,7 +4069,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         try:
                             from django.db import close_old_connections
                             close_old_connections()
-                            from apps.ai.services.dify_chat_service import maybe_handle_dify_takeover
+                            from apps.ai.services.dify_chat_service import (
+                                maybe_handle_dify_takeover,
+                                DifyMessageStub,
+                            )
                             from apps.chat.models import Conversation as _Conv
                             from apps.tenancy.models import Tenant as _Tenant
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
@@ -4083,7 +4086,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 maybe_handle_dify_takeover(
                                     tenant=_tenant,
                                     conversation=_conv,
-                                    message=type('_M', (), {'content': _message_content})(),
+                                    message=DifyMessageStub(content=_message_content),
                                     wa_instance=_wa_inst,
                                 )
                         except Exception as _exc:

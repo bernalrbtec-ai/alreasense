@@ -3139,8 +3139,9 @@ def _dify_audit(
             catalog_id=catalog_id,
             payload=payload or {},
         )
-    except Exception:
-        pass
+    except Exception as _audit_exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning("dify_audit falhou (ação: %s): %s", action, _audit_exc)
 
 
 @api_view(["GET", "PUT", "PATCH"])
@@ -3401,7 +3402,10 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
-    patch_fields = ["display_name", "description", "public_url", "dify_app_id", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
+    patch_fields = ["display_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
+    # dify_app_id só entra em patch_fields se public_url foi enviada (e portanto o app_id foi reextrado)
+    if "public_url" in data:
+        patch_fields.append("dify_app_id")
     api_key_raw = data.get("api_key")
     if api_key_raw is not None and str(api_key_raw).strip():
         # Só atualiza a chave se vier uma string não-vazia (evita apagar chave existente)

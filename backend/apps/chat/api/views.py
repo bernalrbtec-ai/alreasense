@@ -4181,7 +4181,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'message': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         try:
-            with _conn.cursor() as cur:
+            from django.db import transaction
+            with transaction.atomic(), _conn.cursor() as cur:
                 cur.execute(
                     "INSERT INTO ai_dify_conversation_state "
                     "(id, tenant_id, conversation_id, catalog_id, status, started_by_user_id, started_at, updated_at) "
@@ -4208,10 +4209,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Para o agente Dify ativo na conversa.
         """
         conversation = self.get_object()
-        # C1: filtrar por tenant_id para evitar IDOR
         try:
-            from django.db import connection as _conn
-            with _conn.cursor() as cur:
+            from django.db import connection as _conn, transaction
+            with transaction.atomic(), _conn.cursor() as cur:
                 cur.execute(
                     "UPDATE ai_dify_conversation_state SET status = 'stopped', updated_at = now() "
                     "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active'",
