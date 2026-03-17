@@ -12,15 +12,15 @@ from django.db import connection as _conn
 logger = logging.getLogger(__name__)
 
 
-def _get_active_dify_state(conversation_id: str) -> dict | None:
+def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
     """Retorna o estado de takeover Dify ativo para a conversa, ou None."""
     try:
         with _conn.cursor() as cur:
             cur.execute(
                 "SELECT id, catalog_id, dify_conversation_id "
                 "FROM ai_dify_conversation_state "
-                "WHERE conversation_id = %s AND status = 'active' LIMIT 1",
-                [str(conversation_id)]
+                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
+                [str(conversation_id), str(tenant_id)]
             )
             row = cur.fetchone()
             if row:
@@ -55,7 +55,7 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
 
     Retorna True se o takeover foi tratado, False caso contrário.
     """
-    state = _get_active_dify_state(str(conversation.id))
+    state = _get_active_dify_state(str(conversation.id), str(tenant.id))
     if not state:
         return False
 
@@ -96,7 +96,7 @@ def maybe_handle_dify_takeover(tenant, conversation, message, wa_instance=None) 
         'inputs': {},
         'query': msg_content,
         'response_mode': 'blocking',
-        'user': f"sense-{str(conversation.id)[:8]}",
+        'user': f"sense-{str(conversation.id)}",
     }
     if state.get('dify_conversation_id'):
         payload['conversation_id'] = state['dify_conversation_id']

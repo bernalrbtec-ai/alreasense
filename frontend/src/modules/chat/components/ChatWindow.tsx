@@ -44,7 +44,7 @@ export function ChatWindow() {
   // Dify agent modal state
   const [startFlowModalTab, setStartFlowModalTab] = useState<'flows' | 'dify'>('flows');
   const [difyAgents, setDifyAgents] = useState<Array<{ id: string; dify_app_id: string; display_name: string; description: string }>>([]);
-  const [difyActiveState, setDifyActiveState] = useState<{ catalog_id: string; status: string } | null>(null);
+  const [difyActiveState, setDifyActiveState] = useState<{ catalog_id: string; status: string; display_name?: string } | null>(null);
   const [selectedDifyAgentId, setSelectedDifyAgentId] = useState<string | null>(null);
   const [loadingDifyAgents, setLoadingDifyAgents] = useState(false);
   const [startDifyLoading, setStartDifyLoading] = useState(false);
@@ -769,6 +769,9 @@ export function ChatWindow() {
     setDifyAgents([]);
     setDifyActiveState(null);
     setSelectedDifyAgentId(null);
+    // A6: garantir que estados de loading sejam resetados ao fechar o modal
+    setStartDifyLoading(false);
+    setStopDifyLoading(false);
   }, []);
 
   // Fechar modal com Escape
@@ -1101,7 +1104,7 @@ export function ChatWindow() {
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
                     <Zap className="w-4 h-4" />
-                    Iniciar fluxo
+                    Automação
                   </button>
                 )}
 
@@ -1325,7 +1328,7 @@ export function ChatWindow() {
                       <div className="flex items-center gap-2 text-sm text-green-800 dark:text-green-300">
                         <Bot className="w-4 h-4 shrink-0" />
                         <span>
-                          Agente <strong>{difyAgents.find(a => a.id === difyActiveState.catalog_id)?.display_name || 'Dify'}</strong> ativo nesta conversa.
+                          Agente <strong>{difyAgents.find(a => a.id === difyActiveState.catalog_id)?.display_name || difyActiveState.display_name || 'Dify'}</strong> ativo nesta conversa.
                         </span>
                       </div>
                       <button

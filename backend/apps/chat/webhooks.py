@@ -4062,8 +4062,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     _conversation_id = str(conversation.id)
                     _tenant_id = str(tenant.id)
                     _message_content = str(getattr(message, 'content', '') or '')
-                    _contact_phone = str(getattr(conversation, 'contact_phone', '') or '')
-                    _wa_instance = wa_instance
+                    # A2: capturar apenas o ID do wa_instance para evitar objeto ORM stale na thread
+                    _wa_instance_id = str(wa_instance.id) if wa_instance else None
 
                     def _run_dify_takeover():
                         try:
@@ -4075,11 +4075,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
                             _tenant = _Tenant.objects.filter(id=_tenant_id).first()
                             if _conv and _tenant:
+                                # Recarregar wa_instance com conexão fresca da thread
+                                _wa_inst = None
+                                if _wa_instance_id:
+                                    from apps.notifications.models import WhatsAppInstance as _WAI
+                                    _wa_inst = _WAI.objects.filter(id=_wa_instance_id).first()
                                 maybe_handle_dify_takeover(
                                     tenant=_tenant,
                                     conversation=_conv,
                                     message=type('_M', (), {'content': _message_content})(),
-                                    wa_instance=_wa_instance,
+                                    wa_instance=_wa_inst,
                                 )
                         except Exception as _exc:
                             logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)

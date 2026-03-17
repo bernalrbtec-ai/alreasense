@@ -3197,6 +3197,11 @@ def dify_catalog(request):
     """GET: lista catálogo; POST: cria item; PATCH: atualizar/ativar/desativar (soft-delete)."""
     from django.db.utils import ProgrammingError, OperationalError
 
+    _TABLE_MISSING_RESPONSE = Response(
+        {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
+
     tenant = request.user.tenant
     try:
         if request.method == "GET":
@@ -3221,12 +3226,14 @@ def dify_catalog(request):
                 )
             return Response(out)
     except (ProgrammingError, OperationalError):
-        return Response(
-            {"error": "Tabela Dify não disponível. Execute o script SQL docs/sql/ai/0017_dify_base_tables.up.sql"},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
+        return _TABLE_MISSING_RESPONSE
 
     data = request.data or {}
+    # M6: proteger POST e PATCH contra tabela inexistente também
+    try:
+        DifyAppCatalogItem.objects.filter(tenant=tenant).exists()
+    except (ProgrammingError, OperationalError):
+        return _TABLE_MISSING_RESPONSE
     if request.method == "POST":
         display_name = str(data.get("display_name") or "").strip()
         public_url = str(data.get("public_url") or "").strip()
@@ -3286,7 +3293,7 @@ def dify_catalog(request):
         # encrypt field cuida da criptografia em repouso
         item.api_key_encrypted = api_key
         item.updated_at = timezone.now()
-        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "api_key_encrypted", "updated_at"])
+        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "whatsapp_instance_id", "api_key_encrypted", "updated_at"])
 
         # Auto-binding por departamento (opcional): se default_department_id foi definido,
         # faz upsert do vínculo do departamento para este catálogo.
@@ -3369,9 +3376,9 @@ def dify_catalog(request):
         else:
             item.whatsapp_instance_id = None
     api_key_raw = data.get("api_key")
-    if api_key_raw is not None:
-        api_key = str(api_key_raw or "").strip()
-        item.api_key_encrypted = api_key
+    if api_key_raw is not None and str(api_key_raw).strip():
+        # C3: só atualiza se vier uma chave não-vazia (evita apagar a chave existente acidentalmente)
+        item.api_key_encrypted = str(api_key_raw).strip()
     item.updated_at = timezone.now()
     item.save(
         update_fields=[

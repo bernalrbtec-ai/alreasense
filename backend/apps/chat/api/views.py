@@ -4123,9 +4123,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         try:
             from django.db import connection as _conn
             with _conn.cursor() as cur:
+                # M7: incluir display_name no join para que o frontend mostre o nome correto
+                # mesmo antes da lista de agentes terminar de carregar
                 cur.execute(
-                    "SELECT catalog_id, dify_conversation_id, status FROM ai_dify_conversation_state "
-                    "WHERE conversation_id = %s AND status = 'active' LIMIT 1",
+                    "SELECT s.catalog_id, s.dify_conversation_id, s.status, "
+                    "COALESCE(c.display_name, c.dify_app_id, '') "
+                    "FROM ai_dify_conversation_state s "
+                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id "
+                    "WHERE s.conversation_id = %s AND s.status = 'active' LIMIT 1",
                     [str(conversation.id)]
                 )
                 row = cur.fetchone()
@@ -4134,6 +4139,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         'catalog_id': str(row[0]),
                         'dify_conversation_id': row[1],
                         'status': row[2],
+                        'display_name': row[3] or '',
                     }
         except Exception:
             pass
@@ -4144,14 +4150,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     def start_dify_agent(self, request, pk=None):
         """
         Inicia takeover de agente Dify na conversa.
-        Body: { "catalog_id": "uuid", "message": "opcional - primeira mensagem" }
+        Body: { "catalog_id": "uuid" }
         """
         conversation = self.get_object()
         tenant = conversation.tenant
         data = request.data if isinstance(request.data, dict) else {}
-        catalog_id = (data.get('catalog_id') or '').strip()
-        if not catalog_id:
+        catalog_id_raw = (data.get('catalog_id') or '').strip()
+        if not catalog_id_raw:
             return Response({'success': False, 'message': 'catalog_id é obrigatório.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # M5: validar UUID antes de passar ao ORM (evita HTTP 500 com string inválida)
+        try:
+            from uuid import UUID as _UUID
+            _UUID(catalog_id_raw)
+        except (ValueError, TypeError):
+            return Response({'success': False, 'message': 'catalog_id inválido.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             from apps.ai.models import DifyAppCatalogItem
@@ -4160,7 +4173,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'message': 'Módulo Dify não disponível.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            agent = DifyAppCatalogItem.objects.get(id=catalog_id, tenant=tenant, is_active=True)
+            agent = DifyAppCatalogItem.objects.get(id=catalog_id_raw, tenant=tenant, is_active=True)
         except DifyAppCatalogItem.DoesNotExist:
             return Response({'success': False, 'message': 'Agente não encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as exc:
@@ -4185,6 +4198,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             'success': True,
             'message': f'Agente "{agent.display_name or agent.dify_app_id}" iniciado.',
             'catalog_id': str(agent.id),
+            'display_name': agent.display_name or agent.dify_app_id,
         }, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='stop-dify-agent')
@@ -4193,13 +4207,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Para o agente Dify ativo na conversa.
         """
         conversation = self.get_object()
+        # C1: filtrar por tenant_id para evitar IDOR
         try:
             from django.db import connection as _conn
             with _conn.cursor() as cur:
                 cur.execute(
                     "UPDATE ai_dify_conversation_state SET status = 'stopped', updated_at = now() "
-                    "WHERE conversation_id = %s AND status = 'active'",
-                    [str(conversation.id)]
+                    "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active'",
+                    [str(conversation.id), str(conversation.tenant_id)]
                 )
                 affected = cur.rowcount
         except Exception as exc:
