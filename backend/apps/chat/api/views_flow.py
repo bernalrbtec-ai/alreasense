@@ -65,8 +65,7 @@ class FlowViewSet(viewsets.ModelViewSet):
             logger.warning("[FLOW] Erro ao garantir bot/workspace para flow=%s: %s", getattr(flow, "id", None), e, exc_info=True)
 
     def retrieve(self, request, *args, **kwargs):
-        response = super().retrieve(request, *args, **kwargs)
-        # Em buscar/abrir detalhes, garantir internal_id (e workspace, se ainda não existir) para o editor embutido.
+        # Em buscar/abrir detalhes, garantir workspace/bot e internal_id antes de serializar (para o editor embutido).
         try:
             flow = self.get_object()
             from apps.chat.services.typebot_flow_service import ensure_typebot_bot_for_flow
@@ -74,7 +73,8 @@ class FlowViewSet(viewsets.ModelViewSet):
             ensure_typebot_bot_for_flow(flow)
         except Exception as e:
             logger.warning("[FLOW] Erro ao completar integração no retrieve flow=%s: %s", getattr(kwargs, "pk", None), e, exc_info=True)
-        return response
+        serializer = self.get_serializer(self.get_object())
+        return Response(serializer.data)
 
     @action(detail=False, methods=["get"])
     def available_departments(self, request):
