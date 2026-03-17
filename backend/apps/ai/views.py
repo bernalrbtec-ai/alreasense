@@ -3227,27 +3227,33 @@ def dify_catalog(request):
 
     data = request.data or {}
     if request.method == "POST":
-        dify_app_id = str(data.get("dify_app_id") or "").strip()
         display_name = str(data.get("display_name") or "").strip()
         public_url = str(data.get("public_url") or "").strip()
         description = str(data.get("description") or "").strip()
         default_department_id = data.get("default_department_id")
         api_key = str(data.get("api_key") or "").strip()
 
-        if not dify_app_id and public_url:
-            # Tentar extrair app_id do final da URL pública (ex.: /chat/<app_id>)
-            try:
-                from urllib.parse import urlparse
+        if not public_url:
+            return Response({"error": "public_url é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+        if not api_key:
+            return Response({"error": "api_key é obrigatória."}, status=status.HTTP_400_BAD_REQUEST)
 
-                path = urlparse(public_url).path or ""
-                parts = [p for p in path.split("/") if p]
-                if parts:
-                    dify_app_id = parts[-1]
-            except Exception:
-                pass
+        # Extrair app_id do final da URL pública (ex.: /chat/<app_id>)
+        dify_app_id = ""
+        try:
+            from urllib.parse import urlparse
 
+            parsed = urlparse(public_url)
+            if not (parsed.scheme and parsed.netloc):
+                return Response({"error": "public_url inválida."}, status=status.HTTP_400_BAD_REQUEST)
+            parts = [p for p in (parsed.path or "").split("/") if p]
+            if parts:
+                dify_app_id = parts[-1]
+        except Exception:
+            dify_app_id = ""
         if not dify_app_id:
-            return Response({"error": "dify_app_id ou URL pública com app_id é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Não foi possível extrair o app_id da URL pública."}, status=status.HTTP_400_BAD_REQUEST)
+
         if not display_name:
             display_name = dify_app_id
 
@@ -3268,11 +3274,26 @@ def dify_catalog(request):
                 "default_department_id": dept_uuid,
             },
         )
-        if api_key:
-            # encrypt field cuida da criptografia em repouso
-            item.api_key_encrypted = api_key
+        # encrypt field cuida da criptografia em repouso
+        item.api_key_encrypted = api_key
         item.updated_at = timezone.now()
         item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "api_key_encrypted", "updated_at"])
+
+        # Auto-binding por departamento (opcional): se default_department_id foi definido,
+        # faz upsert do vínculo do departamento para este catálogo.
+        try:
+            if item.default_department_id:
+                DifyAssignment.objects.update_or_create(
+                    tenant=tenant,
+                    scope_type=DifyAssignment.SCOPE_DEPARTMENT,
+                    scope_id=item.default_department_id,
+                    defaults={"catalog": item},
+                )
+            else:
+                # Se não há dept padrão, não cria vínculo automaticamente.
+                pass
+        except Exception as e:
+            logger.warning("DifyAssignment auto-binding (POST) falhou: %s", e)
         _dify_audit(
             tenant,
             request.user,
@@ -3293,7 +3314,7 @@ def dify_catalog(request):
                 "description": item.description or "",
                 "public_url": item.public_url or "",
                 "is_active": bool(item.is_active),
-                "has_api_key": bool(api_key),
+                "has_api_key": True,
                 "default_department_id": str(item.default_department_id) if item.default_department_id else None,
                 "metadata": item.metadata or {},
             },
@@ -3307,6 +3328,7 @@ def dify_catalog(request):
     item = DifyAppCatalogItem.objects.filter(id=item_id, tenant=tenant).first()
     if not item:
         return Response({"error": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    prev_default_dept_id = item.default_department_id
     if "display_name" in data:
         item.display_name = str(data.get("display_name") or "").strip()
     if "description" in data:
@@ -3343,6 +3365,27 @@ def dify_catalog(request):
             "updated_at",
         ]
     )
+
+    # Auto-binding por departamento (PATCH):
+    # - Se setou dept padrão => upsert do vínculo desse dept
+    # - Se removeu dept padrão => remove vínculo do dept anterior (se existir)
+    try:
+        if "default_department_id" in data:
+            if prev_default_dept_id and not item.default_department_id:
+                DifyAssignment.objects.filter(
+                    tenant=tenant,
+                    scope_type=DifyAssignment.SCOPE_DEPARTMENT,
+                    scope_id=prev_default_dept_id,
+                ).delete()
+            if item.default_department_id:
+                DifyAssignment.objects.update_or_create(
+                    tenant=tenant,
+                    scope_type=DifyAssignment.SCOPE_DEPARTMENT,
+                    scope_id=item.default_department_id,
+                    defaults={"catalog": item},
+                )
+    except Exception as e:
+        logger.warning("DifyAssignment auto-binding (PATCH) falhou: %s", e)
     _dify_audit(
         tenant,
         request.user,

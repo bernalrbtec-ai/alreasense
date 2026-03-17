@@ -222,12 +222,6 @@ interface AiSettings {
   n8n_models_webhook_url: string
 }
 
-interface DifySettings {
-  enabled: boolean
-  base_url: string
-  api_key_source?: string
-}
-
 interface DifyCatalogItem {
   id: string
   dify_app_id: string
@@ -237,15 +231,6 @@ interface DifyCatalogItem {
   public_url?: string
   has_api_key?: boolean
   default_department_id?: string | null
-}
-
-interface DifyAssignment {
-  id: string
-  scope_type: 'inbox' | 'department'
-  scope_id: string | null
-  catalog_id: string
-  catalog?: DifyCatalogItem | null
-  department_name?: string | null
 }
 
 interface SecretaryProfile {
@@ -345,15 +330,14 @@ export default function ConfigurationsPage() {
   const [assignmentToDelete, setAssignmentToDelete] = useState<{ id: string; scopeLabel: string } | null>(null)
 
   // Estados para sub-tab Dify (catálogo + vínculo por depto)
-  const [difySettings, setDifySettings] = useState<DifySettings | null>(null)
-  const [difySettingsLoading, setDifySettingsLoading] = useState(false)
   const [difyCatalog, setDifyCatalog] = useState<DifyCatalogItem[]>([])
   const [difyCatalogLoading, setDifyCatalogLoading] = useState(false)
-  const [difyAssignments, setDifyAssignments] = useState<DifyAssignment[]>([])
-  const [difyAssignmentsLoading, setDifyAssignmentsLoading] = useState(false)
   const [difySavingKey, setDifySavingKey] = useState<string | null>(null)
-  const [newDifyAppId, setNewDifyAppId] = useState('')
   const [newDifyDisplayName, setNewDifyDisplayName] = useState('')
+  const [newDifyDescription, setNewDifyDescription] = useState('')
+  const [newDifyPublicUrl, setNewDifyPublicUrl] = useState('')
+  const [newDifyApiKey, setNewDifyApiKey] = useState('')
+  const [newDifyDefaultDepartmentId, setNewDifyDefaultDepartmentId] = useState<string>('')
   const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
   const [editDifyAppId, setEditDifyAppId] = useState('')
   const [editDifyDisplayName, setEditDifyDisplayName] = useState('')
@@ -361,6 +345,7 @@ export default function ConfigurationsPage() {
   const [editDifyPublicUrl, setEditDifyPublicUrl] = useState('')
   const [editDifyApiKey, setEditDifyApiKey] = useState('')
   const [editDifyHasApiKey, setEditDifyHasApiKey] = useState(false)
+  const [editDifyDefaultDepartmentId, setEditDifyDefaultDepartmentId] = useState<string>('')
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -726,9 +711,7 @@ export default function ConfigurationsPage() {
       loadAgentAssignments()
     }
     if (activeTab === 'ai' && aiSubTab === 'dify' && isTenantAdmin) {
-      fetchDifySettings()
       fetchDifyCatalog()
-      fetchDifyAssignments()
     }
     if (activeTab === 'instances') {
       fetchMetaTemplates()
@@ -1649,33 +1632,6 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchDifySettings = async () => {
-    try {
-      setDifySettingsLoading(true)
-      const res = await api.get<DifySettings>('/ai/dify/settings/')
-      setDifySettings(res.data)
-    } catch (e: any) {
-      setDifySettings(null)
-      if (e.response?.status === 403) showErrorToast('Apenas administradores podem acessar esta configuração')
-      else showErrorToast(e.response?.data?.error || 'Erro ao carregar configurações do Dify')
-    } finally {
-      setDifySettingsLoading(false)
-    }
-  }
-
-  const saveDifySettings = async () => {
-    if (!difySettings) return
-    const toastId = showLoadingToast('salvar', 'Dify')
-    try {
-      const payload = { enabled: difySettings.enabled, base_url: difySettings.base_url }
-      const res = await api.patch<DifySettings>('/ai/dify/settings/', payload)
-      setDifySettings(res.data)
-      updateToastSuccess(toastId, 'salvar', 'Dify')
-    } catch (e: any) {
-      updateToastError(toastId, 'salvar', 'Dify', e)
-    }
-  }
-
   const fetchDifyCatalog = async () => {
     try {
       setDifyCatalogLoading(true)
@@ -1690,14 +1646,23 @@ export default function ConfigurationsPage() {
   }
 
   const createDifyCatalogItem = async () => {
-    const dify_app_id = newDifyAppId.trim()
     const display_name = newDifyDisplayName.trim()
-    if (!dify_app_id) return
+    const description = newDifyDescription.trim()
+    const public_url = newDifyPublicUrl.trim()
+    const api_key = newDifyApiKey.trim()
+    const default_department_id = newDifyDefaultDepartmentId || null
+    if (!public_url || !api_key) {
+      showErrorToast('URL pública e API key são obrigatórias')
+      return
+    }
     setDifySavingKey('catalog_create')
     try {
-      await api.post('/ai/dify/catalog/', { dify_app_id, display_name })
-      setNewDifyAppId('')
+      await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id })
       setNewDifyDisplayName('')
+      setNewDifyDescription('')
+      setNewDifyPublicUrl('')
+      setNewDifyApiKey('')
+      setNewDifyDefaultDepartmentId('')
       showSuccessToast('Item adicionado ao catálogo')
       await fetchDifyCatalog()
     } catch (e: any) {
@@ -1729,6 +1694,7 @@ export default function ConfigurationsPage() {
     setEditDifyPublicUrl(item.public_url || '')
     setEditDifyHasApiKey(Boolean(item.has_api_key))
     setEditDifyApiKey('')
+    setEditDifyDefaultDepartmentId(item.default_department_id || '')
   }
 
   const saveEditDifyItem = async () => {
@@ -1740,6 +1706,11 @@ export default function ConfigurationsPage() {
         display_name: editDifyDisplayName,
         description: editDifyDescription,
         public_url: editDifyPublicUrl,
+        default_department_id: editDifyDefaultDepartmentId || null,
+      }
+      if (!payload.public_url?.trim()) {
+        showErrorToast('URL pública é obrigatória')
+        return
       }
       if (editDifyApiKey.trim()) {
         payload.api_key = editDifyApiKey.trim()
@@ -1764,34 +1735,6 @@ export default function ConfigurationsPage() {
       else showErrorToast(res.data?.detail || 'Falha na conexão')
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || e.response?.data?.detail || 'Falha na conexão')
-    } finally {
-      setDifySavingKey(null)
-    }
-  }
-
-  const fetchDifyAssignments = async () => {
-    try {
-      setDifyAssignmentsLoading(true)
-      const res = await api.get<DifyAssignment[]>('/ai/dify/assignments/')
-      setDifyAssignments(Array.isArray(res.data) ? res.data : [])
-    } catch (e: any) {
-      setDifyAssignments([])
-      showErrorToast(e.response?.data?.error || 'Erro ao carregar vínculos Dify')
-    } finally {
-      setDifyAssignmentsLoading(false)
-    }
-  }
-
-  const saveDifyAssignment = async (scopeType: 'department' | 'inbox', scopeId: string | null, catalogId: string) => {
-    if (!catalogId) return
-    const key = scopeType === 'inbox' ? 'dify_inbox' : `dify_${scopeId ?? ''}`
-    setDifySavingKey(key)
-    try {
-      await api.put('/ai/dify/assignments/', { scope_type: scopeType, scope_id: scopeId, catalog_id: catalogId })
-      showSuccessToast('Vínculo salvo')
-      await fetchDifyAssignments()
-    } catch (e: any) {
-      showErrorToast(e.response?.data?.error || 'Erro ao salvar vínculo')
     } finally {
       setDifySavingKey(null)
     }
@@ -3075,7 +3018,7 @@ export default function ConfigurationsPage() {
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Dify</h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Catálogo manual de apps/agentes e vínculo por departamento. A API key é lida do produto <span className="font-mono">dify</span> no billing.
+                      Cadastre agentes por app (URL pública + API key). O Sense extrai automaticamente o <span className="font-mono">app_id</span> pela URL e você pode definir um departamento padrão.
                     </p>
                   </div>
                   <Button
@@ -3083,83 +3026,54 @@ export default function ConfigurationsPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      fetchDifySettings()
                       fetchDifyCatalog()
-                      fetchDifyAssignments()
                     }}
-                    disabled={difySettingsLoading || difyCatalogLoading || difyAssignmentsLoading}
+                    disabled={difyCatalogLoading}
                   >
-                    {difySettingsLoading || difyCatalogLoading || difyAssignmentsLoading ? 'Atualizando...' : 'Atualizar'}
+                    {difyCatalogLoading ? 'Atualizando...' : 'Atualizar'}
                   </Button>
                 </div>
-
-                {difySettingsLoading && !difySettings ? (
-                  <div className="flex items-center justify-center h-24">
-                    <LoadingSpinner />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="flex items-center gap-2">
-                      <input
-                        id="dify_enabled"
-                        type="checkbox"
-                        checked={Boolean(difySettings?.enabled)}
-                        onChange={(e) =>
-                          setDifySettings((prev) => ({ ...(prev || { enabled: false, base_url: '' }), enabled: e.target.checked }))
-                        }
-                      />
-                      <Label htmlFor="dify_enabled">Habilitar Dify</Label>
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="dify_base_url">Base URL</Label>
-                      <Input
-                        id="dify_base_url"
-                        value={difySettings?.base_url ?? ''}
-                        onChange={(e) =>
-                          setDifySettings((prev) => ({ ...(prev || { enabled: false, base_url: '' }), base_url: e.target.value }))
-                        }
-                        placeholder="https://seu-dify.exemplo"
-                      />
-                      {difySettings?.api_key_source && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">API key: {difySettings.api_key_source}</p>
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex gap-2">
-                        <Button type="button" onClick={() => void saveDifySettings()} disabled={!difySettings}>
-                          <Save className="h-4 w-4 mr-1" />
-                          Salvar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => void testDifyConnection()}
-                          disabled={difySavingKey === 'dify_test_connection'}
-                        >
-                          <TestTube className="h-4 w-4 mr-1" />
-                          {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </Card>
 
               <Card className="p-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Catálogo</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Cadastro do agente</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <Label htmlFor="dify_new_app_id">App ID</Label>
-                    <Input id="dify_new_app_id" value={newDifyAppId} onChange={(e) => setNewDifyAppId(e.target.value)} placeholder="app_id do Dify" />
-                  </div>
-                  <div>
-                    <Label htmlFor="dify_new_display_name">Nome</Label>
+                    <Label htmlFor="dify_new_display_name">Nome (opcional)</Label>
                     <Input id="dify_new_display_name" value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
                   </div>
-                  <div className="flex items-end">
-                    <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create' || !newDifyAppId.trim()}>
+                  <div>
+                    <Label htmlFor="dify_new_department">Departamento padrão (opcional)</Label>
+                    <select
+                      id="dify_new_department"
+                      value={newDifyDefaultDepartmentId}
+                      onChange={(e) => setNewDifyDefaultDepartmentId(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    >
+                      <option value="">Nenhum</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="dify_new_public_url">URL pública do app (obrigatório)</Label>
+                    <Input id="dify_new_public_url" value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="dify_new_api_key">API key (obrigatória)</Label>
+                    <Input id="dify_new_api_key" type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="dify_new_description">Descrição (opcional)</Label>
+                    <Input id="dify_new_description" value={newDifyDescription} onChange={(e) => setNewDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
                       <Plus className="h-4 w-4 mr-1" />
-                      {difySavingKey === 'catalog_create' ? 'Adicionando...' : 'Adicionar'}
+                      {difySavingKey === 'catalog_create' ? 'Salvando...' : 'Cadastrar agente'}
                     </Button>
                   </div>
                 </div>
@@ -3227,6 +3141,19 @@ export default function ConfigurationsPage() {
                           placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
                         />
                       </div>
+                      <div className="md:col-span-2">
+                        <Label>Departamento padrão (opcional)</Label>
+                        <select
+                          value={editDifyDefaultDepartmentId}
+                          onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
+                          className="mt-1 block w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        >
+                          <option value="">Nenhum</option>
+                          {departments.map((d) => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
                       <div className="flex gap-2">
                         <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`}>
                           <Save className="h-4 w-4 mr-1" />
@@ -3239,43 +3166,6 @@ export default function ConfigurationsPage() {
                       </div>
                     </div>
                   </div>
-                )}
-              </Card>
-
-              <Card className="p-6">
-                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Vínculo por departamento</h3>
-                {departments.length === 0 ? (
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum departamento. Crie em Equipe / Departamentos.</p>
-                ) : (
-                  <ul className="space-y-3">
-                    {departments.map((dept) => {
-                      const assignment = difyAssignments.find((a) => a.scope_type === 'department' && a.scope_id === dept.id)
-                      const selectedCatalogId = assignment?.catalog_id ?? ''
-                      const activeCatalog = difyCatalog.filter((c) => c.is_active)
-                      return (
-                        <li key={dept.id} className="flex flex-wrap items-end gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
-                          <span className="w-32 font-medium text-gray-700 dark:text-gray-300 truncate">{dept.name}</span>
-                          <select
-                            value={selectedCatalogId}
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (v) void saveDifyAssignment('department', dept.id, v)
-                            }}
-                            disabled={difySavingKey === `dify_${dept.id}`}
-                            className="flex-1 min-w-[220px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-3 py-2 text-sm disabled:opacity-60"
-                          >
-                            <option value="">{activeCatalog.length ? 'Selecione um item…' : 'Catálogo vazio'}</option>
-                            {activeCatalog.map((c) => (
-                              <option key={c.id} value={c.id}>
-                                {c.display_name || c.dify_app_id}
-                              </option>
-                            ))}
-                          </select>
-                          {difySavingKey === `dify_${dept.id}` ? <span className="text-sm text-gray-500 dark:text-gray-400">Salvando...</span> : null}
-                        </li>
-                      )
-                    })}
-                  </ul>
                 )}
               </Card>
             </div>
