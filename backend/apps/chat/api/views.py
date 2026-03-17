@@ -6005,7 +6005,8 @@ class ConfirmUploadView(APIView):
             "s3_key": "chat/.../...",
             "filename": "foto.jpg",
             "content_type": "image/jpeg",
-            "file_size": 1024000
+            "file_size": 1024000,
+            "content": "texto opcional (caption)"
         }
         
         Returns:
@@ -6035,6 +6036,7 @@ class ConfirmUploadView(APIView):
         filename = request.data.get('filename')
         content_type = request.data.get('content_type')
         file_size = request.data.get('file_size', 0)
+        content = (request.data.get('content', '') or '').strip()
         
         if not all([conversation_id, attachment_id, s3_key, filename, content_type]):
             return Response(
@@ -6138,10 +6140,15 @@ class ConfirmUploadView(APIView):
         
         # Criar mensagem (com UUID próprio)
         import uuid
+        # WhatsApp caption tem limite (evolution/baileys varia); manter um limite seguro.
+        caption_for_send = content[:1024] if content else ''
+        # Áudio não tem caption (PTT); se vier texto, enviaremos como mensagem separada.
+        is_audio = bool(content_type and str(content_type).startswith('audio/'))
+
         message = Message.objects.create(
             conversation=conversation,
             sender=request.user,
-            content='',  # Vazio, apenas anexo
+            content='' if is_audio else caption_for_send,
             direction='outgoing',
             status='pending',
             is_internal=False,
@@ -6198,6 +6205,19 @@ class ConfirmUploadView(APIView):
             from apps.chat.tasks import send_message_to_evolution
             send_message_to_evolution.delay(str(message.id))
             logger.info(f"✅ [UPLOAD] Task enfileirada para envio")
+
+            # Se for áudio e veio texto junto, criar uma 2ª mensagem de texto (WhatsApp não suporta caption em áudio)
+            if is_audio and caption_for_send:
+                text_msg = Message.objects.create(
+                    conversation=conversation,
+                    sender=request.user,
+                    content=caption_for_send,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={},
+                )
+                send_message_to_evolution.delay(str(text_msg.id))
             
             # Broadcast via WebSocket
             from channels.layers import get_channel_layer

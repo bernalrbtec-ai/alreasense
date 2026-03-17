@@ -338,7 +338,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
 
       if (hasFiles) {
         if (selectedFiles.length === 1) {
-          await handleFileUpload(selectedFiles[0]);
+          await handleFileUpload(selectedFiles[0], hasText ? message.trim() : '');
         } else {
           await handleBatchUpload(selectedFiles, hasText ? message.trim() : '');
         }
@@ -433,7 +433,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     return () => document.removeEventListener('keydown', handleSlashKey);
   }, [message, sending, isConnected]);
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (file: File, captionText?: string) => {
     if (!file || !activeConversation || uploadingFile) return;
 
     // ✅ FIX: Validar tamanho de arquivo antes de iniciar upload
@@ -497,6 +497,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         filename: file.name,
         content_type: file.type,
         file_size: file.size,
+        content: captionText || '',
       });
 
       if (confirmData?.message) {
