@@ -3,6 +3,7 @@ Views para Fluxo (lista/botões por Inbox ou departamento).
 """
 import logging
 from datetime import timedelta
+from urllib.parse import quote
 
 from django.utils import timezone
 from django.conf import settings
@@ -121,7 +122,10 @@ class FlowViewSet(viewsets.ModelViewSet):
             "exp": int((now + timedelta(seconds=60)).timestamp()),
         }
         token = jwt.encode(payload, secret, algorithm="HS256")
-        login_url = f"{builder_base}/api/sense/iframe-login?token={token}&returnTo={return_to}"
+        # Garantir querystring segura
+        token_q = quote(token, safe="")
+        return_to_q = quote(return_to, safe="/")
+        login_url = f"{builder_base}/api/sense/iframe-login?token={token_q}&returnTo={return_to_q}"
         return Response({"loginUrl": login_url, "expiresIn": 60, "returnTo": return_to})
 
     @action(detail=False, methods=["get"])
