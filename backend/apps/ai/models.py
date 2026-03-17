@@ -462,6 +462,8 @@ class DifyAppCatalogItem(models.Model):
     api_key_encrypted = encrypt(models.CharField(max_length=255, blank=True, default=""))
     description = models.TextField(blank=True, default="")
     default_department_id = models.UUIDField(null=True, blank=True)
+    # Instância WhatsApp preferencial para este agente (opcional)
+    whatsapp_instance_id = models.UUIDField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

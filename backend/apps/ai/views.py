@@ -3213,6 +3213,7 @@ def dify_catalog(request):
                         "is_active": bool(it.is_active),
                         "has_api_key": bool(getattr(it, "api_key_encrypted", "") or ""),
                         "default_department_id": str(it.default_department_id) if it.default_department_id else None,
+                        "whatsapp_instance_id": str(it.whatsapp_instance_id) if getattr(it, "whatsapp_instance_id", None) else None,
                         "metadata": it.metadata or {},
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
@@ -3231,6 +3232,7 @@ def dify_catalog(request):
         public_url = str(data.get("public_url") or "").strip()
         description = str(data.get("description") or "").strip()
         default_department_id = data.get("default_department_id")
+        whatsapp_instance_id = data.get("whatsapp_instance_id")
         api_key = str(data.get("api_key") or "").strip()
 
         if not public_url:
@@ -3263,6 +3265,12 @@ def dify_catalog(request):
             if not dept_uuid:
                 return Response({"error": "default_department_id inválido."}, status=status.HTTP_400_BAD_REQUEST)
 
+        wa_uuid = None
+        if whatsapp_instance_id:
+            wa_uuid = _parse_uuid(whatsapp_instance_id)
+            if not wa_uuid:
+                return Response({"error": "whatsapp_instance_id inválido."}, status=status.HTTP_400_BAD_REQUEST)
+
         item, created = DifyAppCatalogItem.objects.update_or_create(
             tenant=tenant,
             dify_app_id=dify_app_id,
@@ -3272,6 +3280,7 @@ def dify_catalog(request):
                 "public_url": public_url,
                 "description": description,
                 "default_department_id": dept_uuid,
+                "whatsapp_instance_id": wa_uuid,
             },
         )
         # encrypt field cuida da criptografia em repouso
@@ -3316,6 +3325,7 @@ def dify_catalog(request):
                 "is_active": bool(item.is_active),
                 "has_api_key": True,
                 "default_department_id": str(item.default_department_id) if item.default_department_id else None,
+                "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
                 "metadata": item.metadata or {},
             },
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -3349,6 +3359,15 @@ def dify_catalog(request):
             item.default_department_id = dept_uuid
         else:
             item.default_department_id = None
+    if "whatsapp_instance_id" in data:
+        wa_raw = data.get("whatsapp_instance_id")
+        if wa_raw:
+            wa_uuid = _parse_uuid(wa_raw)
+            if not wa_uuid:
+                return Response({"error": "whatsapp_instance_id inválido."}, status=status.HTTP_400_BAD_REQUEST)
+            item.whatsapp_instance_id = wa_uuid
+        else:
+            item.whatsapp_instance_id = None
     api_key_raw = data.get("api_key")
     if api_key_raw is not None:
         api_key = str(api_key_raw or "").strip()
@@ -3361,6 +3380,7 @@ def dify_catalog(request):
             "public_url",
             "is_active",
             "default_department_id",
+            "whatsapp_instance_id",
             "api_key_encrypted",
             "updated_at",
         ]
@@ -3403,6 +3423,7 @@ def dify_catalog(request):
         "is_active": bool(item.is_active),
         "has_api_key": bool(getattr(item, "api_key_encrypted", "") or ""),
         "default_department_id": str(item.default_department_id) if item.default_department_id else None,
+        "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
         "metadata": item.metadata or {},
         }
     )
