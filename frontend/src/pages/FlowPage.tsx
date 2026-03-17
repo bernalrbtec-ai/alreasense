@@ -15,6 +15,7 @@ import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { api } from '../lib/api'
 
 const TYPEBOT_BUILDER_BASE = (import.meta as any).env.VITE_TYPEBOT_BUILDER_BASE as string | undefined
+const TYPEBOT_BUILDER_LOCALE = ((import.meta as any).env.VITE_TYPEBOT_BUILDER_LOCALE as string | undefined) || 'pt-BR'
 
 function getApiError(e: any): string {
   const data = e?.response?.data
@@ -1207,12 +1208,18 @@ export default function FlowPage() {
                       O editor abaixo é carregado a partir do serviço externo ({TYPEBOT_BUILDER_BASE}). Os clientes não veem essa URL.
                     </p>
                     <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-gray-50 dark:bg-gray-900">
-                      <iframe
-                        title="Editor do fluxo"
-                        src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/typebots/${(flowDetail.typebot_internal_id || flowDetail.typebot_public_id || '').trim()}`}
-                        className="w-full h-[520px] border-0"
-                        allow="clipboard-read; clipboard-write; microphone; camera"
-                      />
+                      {((flowDetail.typebot_internal_id || '').trim()) ? (
+                        <iframe
+                          title="Editor do fluxo"
+                          src={`${TYPEBOT_BUILDER_BASE.replace(/\/+$/, '')}/${TYPEBOT_BUILDER_LOCALE.replace(/^\/+|\/+$/g, '')}/typebots/${(flowDetail.typebot_internal_id || '').trim()}/edit`}
+                          className="w-full h-[520px] border-0"
+                          allow="clipboard-read; clipboard-write; microphone; camera"
+                        />
+                      ) : (
+                        <div className="p-4 text-sm text-amber-800 dark:text-amber-200 bg-amber-50/50 dark:bg-amber-900/20">
+                          Para abrir o editor aqui, preencha o <strong>ID interno</strong> do fluxo no modal “Editar fluxo” e salve.
+                        </div>
+                      )}
                     </div>
                   </Card>
                 ) : (
