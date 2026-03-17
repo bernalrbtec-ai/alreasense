@@ -166,6 +166,56 @@ def _resolve_typebot_internal_id_from_public_id(flow: Flow) -> Optional[str]:
     return None
 
 
+def _resolve_typebot_public_id_from_internal_id(typebot_id: str) -> Optional[str]:
+    """
+    Quando o bot é criado via API admin, algumas versões podem retornar apenas o id interno.
+    Para executar via viewer (startChat), precisamos do publicId.
+    """
+    tid = (typebot_id or "").strip()
+    if not tid:
+        return None
+    admin_base = _get_typebot_admin_base()
+    api_key = (getattr(settings, "TYPEBOT_ADMIN_API_KEY", None) or "").strip()
+    if not admin_base or not api_key:
+        return None
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    # Tentativa 1: GET /typebots/<id>
+    try:
+        url = f"{admin_base}/typebots/{tid}"
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json() or {}
+        tb = data.get("typebot") if isinstance(data, dict) else None
+        tb = tb if isinstance(tb, dict) else data if isinstance(data, dict) else {}
+        pid = (tb.get("publicId") or tb.get("public_id") or tb.get("publicID") or "").strip()
+        return pid or None
+    except Exception:
+        pass
+    # Tentativa 2: GET /typebots e procurar pelo id
+    try:
+        url = f"{admin_base}/typebots"
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        items = data if isinstance(data, list) else data.get("typebots") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return None
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            internal = (it.get("id") or it.get("_id") or it.get("typebotId") or "").strip()
+            if internal != tid:
+                continue
+            pid = (it.get("publicId") or it.get("public_id") or it.get("publicID") or "").strip()
+            return pid or None
+    except Exception:
+        return None
+    return None
+
+
 def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
     """
     Garante que o Flow tenha um bot Typebot associado:
@@ -190,6 +240,13 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
                 try:
                     flow.typebot_internal_id = (existing_map.typebot_internal_id or "").strip()
                     flow.typebot_public_id = (existing_map.typebot_public_id or "").strip()
+                    # Se faltar publicId, tentar resolver via API admin usando o id interno
+                    if not flow.typebot_public_id:
+                        resolved = _resolve_typebot_public_id_from_internal_id(flow.typebot_internal_id)
+                        if resolved:
+                            flow.typebot_public_id = resolved
+                            existing_map.typebot_public_id = resolved
+                            existing_map.save(update_fields=["typebot_public_id", "updated_at"])
                     if (existing_map.typebot_public_id or "").strip() and not (flow.typebot_base_url or "").strip():
                         base = (getattr(settings, "TYPEBOT_VIEWER_BASE", None) or "").strip().rstrip("/")
                         flow.typebot_base_url = base
@@ -209,14 +266,18 @@ def ensure_typebot_bot_for_flow(flow: Flow) -> Flow:
                     if tenant:
                         ws = get_or_create_typebot_workspace(tenant)
                         if ws:
+                            resolved_public = (flow.typebot_public_id or "").strip() or (_resolve_typebot_public_id_from_internal_id((flow.typebot_internal_id or "").strip()) or "")
                             FlowTypebotMap.objects.create(
                                 tenant_id=flow.tenant_id,
                                 flow_id=flow.id,
                                 typebot_workspace_id=ws.workspace_id,
                                 typebot_internal_id=(flow.typebot_internal_id or "").strip(),
-                                typebot_public_id=(flow.typebot_public_id or "").strip(),
+                                typebot_public_id=resolved_public,
                                 bot_name=(flow.name or "").strip()[:255],
                             )
+                            if resolved_public and not (flow.typebot_public_id or "").strip():
+                                flow.typebot_public_id = resolved_public
+                                flow.save(update_fields=["typebot_public_id"])
                 except Exception:
                     pass
     except Exception:
