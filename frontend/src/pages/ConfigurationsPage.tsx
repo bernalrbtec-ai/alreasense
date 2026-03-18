@@ -742,6 +742,14 @@ export default function ConfigurationsPage() {
     }
   }, [activeTab, aiSubTab, selectedBusinessHoursDept, isTenantAdmin])
 
+  // Edge case: normalizar aiSubTab se for valor inválido (ex.: 'ia-assistente' de sessão antiga)
+  const validAiSubTabs = ['config', 'agentes', 'dify', 'rag-memories', 'auditoria-ia'] as const
+  useEffect(() => {
+    if (activeTab === 'ai' && !validAiSubTabs.includes(aiSubTab as typeof validAiSubTabs[number])) {
+      setAiSubTab('config')
+    }
+  }, [activeTab, aiSubTab])
+
   // Ao abrir o modal de templates WhatsApp (Meta), sincronizar status com a Meta e atualizar lista
   useEffect(() => {
     if (!showMetaTemplatesListModal || !hasMetaInstanceWithWaba) return
@@ -2876,7 +2884,7 @@ export default function ConfigurationsPage() {
                     <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 p-3">
                       <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                       <p className="text-sm text-amber-800 dark:text-amber-200">
-                        LibreChat indisponível no momento. As respostas da secretária usarão o fallback n8n quando necessário.
+                        LibreChat indisponível no momento. Configure a URL e a API key para listar e associar agentes.
                       </p>
                     </div>
                   )}

@@ -58,6 +58,12 @@ export default function IntegracaoInstrucoesPage() {
           correspondente (encerrar ou transferir). Funciona em <strong>Typebot</strong> e em <strong>agentes Dify</strong>.
         </p>
 
+        <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mt-4 mb-2">Onde usar</h3>
+        <ul className="list-disc list-inside text-gray-600 dark:text-gray-400 text-sm space-y-1 mb-4">
+          <li><strong>Typebot:</strong> inclua o JSON no texto da mensagem de um bloco (ex.: nó &quot;Mensagem&quot; ou &quot;Text&quot;). O Sense interpreta ao receber a resposta do fluxo.</li>
+          <li><strong>Dify:</strong> inclua o JSON no texto de saída do agente (ex.: na resposta final do assistente).</li>
+        </ul>
+
         <h3 className="text-base font-medium text-gray-900 dark:text-gray-100 mt-6 mb-2">Encerrar conversa</h3>
         <p className="text-gray-600 dark:text-gray-400 mb-2">
           Chaves aceitas: <InlineCode>closeTicket</InlineCode>, <InlineCode>encerrar</InlineCode>,{' '}
