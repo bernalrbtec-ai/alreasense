@@ -317,24 +317,32 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
 
 
 def _send_wa_reply(effective_instance, contact_phone: str, message: str, agent_app_id: str, conv_id: str) -> bool:
-    """Envia a resposta do Dify via Evolution API."""
+    """Envia a resposta do Dify via provider correto (Evolution ou Meta Cloud)."""
+    integration_type = getattr(effective_instance, 'integration_type', None) or 'evolution'
     logger.info(
-        "📤 [DIFY] Enviando resposta → conversa=%s agente=%s instancia=%s phone=%s msg_len=%s",
+        "📤 [DIFY] Enviando resposta → conversa=%s agente=%s instancia=%s provider=%s phone=%s msg_len=%s",
         conv_id, agent_app_id,
         getattr(effective_instance, 'id', '?'),
+        integration_type,
         contact_phone[:6] + '***' if contact_phone and len(contact_phone) > 6 else contact_phone,
         len(message)
     )
     try:
-        from apps.notifications.whatsapp_providers.evolution import EvolutionProvider
-        provider = EvolutionProvider(effective_instance)
+        from apps.notifications.whatsapp_providers.get_sender import get_sender
+        provider = get_sender(effective_instance)
+        if not provider:
+            logger.error(
+                "❌ [DIFY] Provider não disponível para instância %s (integration_type=%s)",
+                getattr(effective_instance, 'id', '?'), integration_type
+            )
+            return False
         ok, result = provider.send_text(phone=contact_phone, message=message)
         if not ok:
-            logger.error("❌ [DIFY] Falha ao enviar via Evolution: %s", result)
+            logger.error("❌ [DIFY] Falha ao enviar via %s: %s", integration_type, result)
             return False
         logger.info(
-            "✅ [DIFY] Resposta enviada na conversa %s (agente %s)",
-            conv_id, agent_app_id
+            "✅ [DIFY] Resposta enviada na conversa %s (agente %s via %s)",
+            conv_id, agent_app_id, integration_type
         )
         return True
     except Exception as exc:
