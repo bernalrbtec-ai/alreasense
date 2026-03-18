@@ -1760,6 +1760,7 @@ export default function ConfigurationsPage() {
       }
       if (!payload.public_url?.trim()) {
         showErrorToast('URL pública é obrigatória')
+        setDifySavingKey(null)
         return
       }
       if (editDifyApiKey.trim()) {
@@ -1786,9 +1787,18 @@ export default function ConfigurationsPage() {
     try {
       const { data } = await api.post('/ai/dify/catalog/sync-schema/', { catalog_id: catalogId })
       const schema: DifyInputField[] = data.input_schema || []
+      const synced: boolean = data.synced !== false
       setEditDifyInputSchema(schema)
+      // Preservar default_inputs existentes — não sobrescrever com o que veio do backend
+      // (o usuário pode ter valores preenchidos que ainda não foram salvos)
       setDifyCatalog(prev => prev.map(x => x.id === catalogId ? { ...x, input_schema: schema } : x))
-      showSuccessToast(schema.length > 0 ? `${schema.length} campo(s) sincronizado(s)` : 'Nenhum campo encontrado no agente Dify')
+      if (!synced) {
+        showErrorToast('Não foi possível contactar o Dify. Verifique a URL e a API key.')
+      } else if (schema.length > 0) {
+        showSuccessToast(`${schema.length} campo(s) sincronizado(s)`)
+      } else {
+        showSuccessToast('Agente Dify não possui campos de entrada configurados')
+      }
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao sincronizar schema')
     } finally {

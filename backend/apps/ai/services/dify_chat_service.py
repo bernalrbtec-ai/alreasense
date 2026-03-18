@@ -54,7 +54,11 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
             if placeholder in result:
                 try:
                     result = result.replace(placeholder, str(resolver(conversation)))
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "_resolve_inputs: erro ao resolver '%s' para conversa %s: %s",
+                        placeholder, getattr(conversation, 'id', '?'), exc
+                    )
                     result = result.replace(placeholder, '')
         resolved[key] = result
     return resolved

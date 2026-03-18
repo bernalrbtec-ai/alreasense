@@ -3120,14 +3120,35 @@ def agent_assignment_delete(request, assignment_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _normalize_dify_input_schema(raw_schema: list) -> list:
+    """
+    Normaliza o user_input_form do Dify, cujo formato é uma lista de wrappers onde
+    a chave é o tipo do campo:
+      [{"text-input": {"label": "...", "variable": "...", "required": true}}, ...]
+    Transforma em lista plana com campo "type" explícito:
+      [{"type": "text-input", "label": "...", "variable": "...", "required": true}, ...]
+    Campos sem estrutura reconhecida são ignorados para segurança.
+    """
+    result = []
+    for wrapper in (raw_schema or []):
+        if not isinstance(wrapper, dict):
+            continue
+        for field_type, field_data in wrapper.items():
+            if isinstance(field_data, dict) and 'variable' in field_data:
+                result.append({'type': field_type, **field_data})
+    return result
+
+
 def _fetch_and_save_input_schema(item) -> list:
     """
-    Busca user_input_form do agente Dify via GET /v1/parameters e salva em metadata['input_schema'].
+    Busca user_input_form do agente Dify via GET /v1/parameters, normaliza o formato
+    e salva em metadata['input_schema'].
     Falha silenciosamente (log warning) para nunca bloquear o cadastro.
-    Retorna a lista de campos obtida, ou [] em caso de erro/ausência.
+    Retorna a lista de campos normalizada, ou [] em caso de erro/ausência.
     """
     import httpx as _httpx
     from urllib.parse import urlparse as _urlparse
+    from django.utils import timezone as _tz
     try:
         parsed = _urlparse(item.public_url or '')
         if not (parsed.scheme and parsed.netloc):
@@ -3136,21 +3157,30 @@ def _fetch_and_save_input_schema(item) -> list:
         api_key = (getattr(item, 'api_key_encrypted', '') or '').strip()
         if not api_key:
             return []
-        with _httpx.Client(timeout=10) as client:
+        with _httpx.Client(timeout=5) as client:
             resp = client.get(
                 f"{base_url}/v1/parameters",
                 headers={'Authorization': f'Bearer {api_key}'},
             )
         if resp.status_code != 200:
             logger.warning(
-                "_fetch_and_save_input_schema: status %s para agente %s — schema nao sincronizado",
-                resp.status_code, getattr(item, 'id', '?')
+                "_fetch_and_save_input_schema: status %s para agente %s — schema nao sincronizado. body=%s",
+                resp.status_code, getattr(item, 'id', '?'), resp.text[:200]
             )
             return []
-        schema = resp.json().get('user_input_form', [])
+        try:
+            raw_schema = resp.json().get('user_input_form', [])
+        except Exception as json_exc:
+            logger.warning(
+                "_fetch_and_save_input_schema: resposta nao-JSON para agente %s: %s — body=%s",
+                getattr(item, 'id', '?'), json_exc, resp.text[:200]
+            )
+            return []
+        schema = _normalize_dify_input_schema(raw_schema)
         meta = dict(item.metadata or {})
         meta['input_schema'] = schema
         item.metadata = meta
+        item.updated_at = _tz.now()
         item.save(update_fields=['metadata', 'updated_at'])
         logger.info(
             "_fetch_and_save_input_schema: %d campos sincronizados para agente %s",
@@ -3475,7 +3505,13 @@ def dify_catalog(request):
             if 'default_inputs' not in patch_fields:
                 patch_fields.append("default_inputs")
     item.updated_at = timezone.now()
-    item.save(update_fields=patch_fields)
+    try:
+        item.save(update_fields=patch_fields)
+    except Exception as _save_exc:
+        from django.db.utils import ProgrammingError, OperationalError
+        if isinstance(_save_exc, (ProgrammingError, OperationalError)):
+            return _table_missing_response()
+        raise
 
     # Auto-binding por departamento (PATCH):
     # - Se setou dept padrão => upsert do vínculo desse dept
@@ -3554,8 +3590,18 @@ def dify_sync_schema(request):
         return Response({"error": "Tabela Dify não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     if not item:
         return Response({"error": "Agente não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    # Guardar metadata antes para detectar se houve alteração real
+    schema_before = list((item.metadata or {}).get('input_schema', []))
     schema = _fetch_and_save_input_schema(item)
-    return Response({"input_schema": schema, "synced": True})
+    # synced=True indica que a chamada ao Dify retornou algum resultado (mesmo vazio)
+    # synced=False indica que houve falha (sem api_key, URL inválida, Dify offline)
+    api_key = (getattr(item, 'api_key_encrypted', '') or '').strip()
+    synced = bool(item.public_url and api_key)
+    return Response({
+        "input_schema": schema,
+        "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
+        "synced": synced,
+    })
 
 
 @api_view(["GET", "PUT"])
