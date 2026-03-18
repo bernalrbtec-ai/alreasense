@@ -374,13 +374,17 @@ def maybe_handle_dify_takeover(
         # Tentar obter mensagem de fallback configurada nas settings do tenant
         fallback_msg = _get_dify_empty_response_fallback(tenant)
         if fallback_msg:
-            _send_wa_reply(effective_instance, contact_phone, fallback_msg, agent.dify_app_id, conv_id)
+            _save_and_send_reply(
+                conversation, fallback_msg, agent.dify_app_id, conv_id, effective_instance
+            )
         # Retornar True: a mensagem foi tratada pelo takeover (mesmo sem resposta útil)
         # para que o fluxo normal não processe esta mensagem em paralelo
         return True
 
-    # ── Fase 5: enviar resposta via Evolution API ─────────────────────────────────
-    return _send_wa_reply(effective_instance, contact_phone, dify_answer, agent.dify_app_id, conv_id)
+    # ── Fase 5: salvar no banco e enfileirar envio ────────────────────────────────
+    return _save_and_send_reply(
+        conversation, dify_answer, agent.dify_app_id, conv_id, effective_instance
+    )
 
 
 def _get_dify_empty_response_fallback(tenant) -> str:
@@ -470,35 +474,69 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
         return None, ''
 
 
-def _send_wa_reply(effective_instance, contact_phone: str, message: str, agent_app_id: str, conv_id: str) -> bool:
-    """Envia a resposta do Dify via provider correto (Evolution ou Meta Cloud)."""
-    integration_type = getattr(effective_instance, 'integration_type', None) or 'evolution'
+def _save_and_send_reply(
+    conversation, message: str, agent_app_id: str, conv_id: str, effective_instance=None
+) -> bool:
+    """
+    Salva a resposta do Dify no banco como Message outgoing/pending e enfileira o envio
+    via send_message_to_evolution.delay (mesmo fluxo usado por flow_engine e operadores humanos).
+
+    Isso garante que a resposta:
+    - Apareça no histórico do chat imediatamente (broadcast WebSocket)
+    - Seja enviada ao WhatsApp pelo worker assíncrono
+    - Tenha status atualizado (pending → sent/failed) após o envio
+
+    effective_instance: quando o agente Dify tem instância específica configurada, seu
+    instance_name é inserido no metadata como 'flow_prefer_instance_name' para que o
+    worker de envio use a instância correta (em vez de depender de conversation.instance_name).
+    """
+    from django.db import transaction
     logger.info(
-        "📤 [DIFY] Enviando resposta → conversa=%s agente=%s instancia=%s provider=%s phone=%s msg_len=%s",
-        conv_id, agent_app_id,
-        getattr(effective_instance, 'id', '?'),
-        integration_type,
-        (contact_phone[:4] + '***') if contact_phone and len(contact_phone) >= 4 else '***',
-        len(message)
+        "📤 [DIFY] Salvando resposta no banco → conversa=%s agente=%s msg_len=%s",
+        conv_id, agent_app_id, len(message)
     )
     try:
-        from apps.notifications.whatsapp_providers.get_sender import get_sender
-        provider = get_sender(effective_instance)
-        if not provider:
-            logger.error(
-                "❌ [DIFY] Provider não disponível para instância %s (integration_type=%s)",
-                getattr(effective_instance, 'id', '?'), integration_type
+        from apps.chat.models import Message
+        from apps.chat.tasks import send_message_to_evolution
+        from apps.chat.utils.websocket import broadcast_message_received
+
+        # Construir metadata: registra origem Dify e, quando o agente tem instância
+        # específica, instrui o worker a usá-la (via flow_prefer_instance_name).
+        meta: dict = {'source': 'dify', 'dify_agent_app_id': agent_app_id}
+        if effective_instance:
+            inst_name = getattr(effective_instance, 'instance_name', None) or ''
+            if inst_name:
+                meta['flow_prefer_instance_name'] = inst_name
+
+        with transaction.atomic():
+            msg = Message.objects.create(
+                conversation=conversation,
+                sender=None,  # bot — sem usuário humano
+                content=message,
+                direction='outgoing',
+                status='pending',
+                is_internal=False,
+                metadata=meta,
             )
-            return False
-        ok, result = provider.send_text(phone=contact_phone, message=message)
-        if not ok:
-            logger.error("❌ [DIFY] Falha ao enviar via %s: %s", integration_type, result)
-            return False
+            # Lançar envio somente após commit para garantir que a mensagem está no banco
+            msg_id = str(msg.id)
+            transaction.on_commit(lambda: send_message_to_evolution.delay(msg_id))
+
+        # Broadcast WebSocket fora da transaction (after commit)
+        # O worker também fará um broadcast ao marcar 'sent', mas este garante
+        # que a mensagem apareça no chat imediatamente com status 'pending'
+        try:
+            broadcast_message_received(msg)
+        except Exception as ws_exc:
+            logger.warning(
+                "⚠️ [DIFY] Broadcast WebSocket falhou (não crítico): %s", ws_exc
+            )
+
         logger.info(
-            "✅ [DIFY] Resposta enviada na conversa %s (agente %s via %s)",
-            conv_id, agent_app_id, integration_type
+            "✅ [DIFY] Resposta salva (message_id=%s) e enfileirada para envio → conversa=%s",
+            msg_id, conv_id
         )
         return True
     except Exception as exc:
-        logger.error("❌ [DIFY] Erro ao enviar mensagem (%s)", exc, exc_info=True)
+        logger.error("❌ [DIFY] Erro ao salvar/enfileirar resposta (%s)", exc, exc_info=True)
         return False
