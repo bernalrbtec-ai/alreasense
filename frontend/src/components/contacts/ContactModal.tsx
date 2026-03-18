@@ -350,19 +350,8 @@ export default function ContactModal({
               </div>
             </div>
 
-            {/* Row 3: Cidade | Data de Nascimento */}
+            {/* Row 3: Data de Nascimento | Cidade */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Cidade
-                </label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Data de Nascimento
@@ -377,22 +366,21 @@ export default function ContactModal({
                   <Calendar className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
                 </div>
               </div>
-            </div>
-
-            {/* Row 4: Quem Indicou | Estado */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Quem Indicou
+                  Cidade
                 </label>
                 <input
                   type="text"
-                  value={formData.referred_by}
-                  onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
-                  placeholder="Nome de quem indicou o contato"
+                  value={formData.city}
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
+            </div>
+
+            {/* Row 4: Estado | Quem Indicou */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Estado
@@ -409,6 +397,18 @@ export default function ContactModal({
                     <option key={uf} value={uf}>{uf}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Quem Indicou
+                </label>
+                <input
+                  type="text"
+                  value={formData.referred_by}
+                  onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
+                  placeholder="Nome de quem indicou o contato"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                />
               </div>
             </div>
 
