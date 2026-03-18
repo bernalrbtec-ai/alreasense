@@ -740,57 +740,35 @@ def gateway_test(request):
         if first_department:
             department_id = first_department.id
 
-    # simulate_production: quando True, envia o mesmo formato da produção (action=secretary, business_hours,
-    # departments, RAG, company_context). Usado nas abas Configuração e Homologação da BIA para que o JSON
-    # enviado ao webhook seja idêntico ao fluxo real. Quando False, envia payload simples (action=chat).
-    simulate_production = request.data.get("simulate_production") is True
-    if simulate_production:
-        logger.info(
-            "[GATEWAY TEST] simulate_production=true: enviando payload secretary (RAG, business_hours, company_context)"
-        )
-        secretary_profile = TenantSecretaryProfile.objects.filter(tenant=request.user.tenant).first()
-        signature_name = getattr(secretary_profile, "signature_name", None) if secretary_profile else None
-        payload = build_secretary_payload_for_test(
-            tenant=request.user.tenant,
-            message_text=message_text,
-            messages_list=messages_payload,
-            prompt=custom_prompt or "",
-            model=selected_model,
-            conversation_id=str(conversation_id),
-            message_id=str(message_id),
-            request_id=str(request_id),
-            trace_id=str(trace_id),
-            signature_name=signature_name,
-        )
-    else:
-        payload = {
-            "protocol_version": "v1",
-            "action": "chat",
-            "request_id": str(request_id),
-            "trace_id": str(trace_id),
-            "server_time_utc": _server_time_utc_iso(),
-            "tenant_id": str(request.user.tenant_id),
-            "conversation_id": str(conversation_id),
-            "contact_id": str(contact_id),
-            "department_id": str(department_id) if department_id else None,
-            "agent_id": str(agent_id) if agent_id else None,
-            "message": {
-                "id": str(message_id),
-                "direction": request.data.get("direction", "incoming"),
-                "content": message_text,
-                "created_at": timezone.now().isoformat(),
-            },
-            "metadata": {
-                "source": "test",
-                "model": selected_model,
-            },
-        }
-        if custom_prompt:
-            payload["prompt"] = custom_prompt
-        if knowledge_items_payload:
-            payload["knowledge_items"] = knowledge_items_payload
-        if messages_payload:
-            payload["messages"] = messages_payload
+    # simulate_production descontinuado: sempre usar payload simples (action=chat) para não depender da BIA.
+    payload = {
+        "protocol_version": "v1",
+        "action": "chat",
+        "request_id": str(request_id),
+        "trace_id": str(trace_id),
+        "server_time_utc": _server_time_utc_iso(),
+        "tenant_id": str(request.user.tenant_id),
+        "conversation_id": str(conversation_id),
+        "contact_id": str(contact_id),
+        "department_id": str(department_id) if department_id else None,
+        "agent_id": str(agent_id) if agent_id else None,
+        "message": {
+            "id": str(message_id),
+            "direction": request.data.get("direction", "incoming"),
+            "content": message_text,
+            "created_at": timezone.now().isoformat(),
+        },
+        "metadata": {
+            "source": "test",
+            "model": selected_model,
+        },
+    }
+    if custom_prompt:
+        payload["prompt"] = custom_prompt
+    if knowledge_items_payload:
+        payload["knowledge_items"] = knowledge_items_payload
+    if messages_payload:
+        payload["messages"] = messages_payload
 
     use_async = getattr(settings, 'GATEWAY_TEST_USE_ASYNC', False)
     job_id = None
@@ -1170,7 +1148,9 @@ def secretary_profile(request):
     GET: retorna o perfil da Secretária IA do tenant (form_data, use_memory, is_active).
     PUT: atualiza perfil; valida form_data e routing_keywords; ao ativar (is_active=True)
          pode disparar atualização do RAG (source=secretary) em background.
+    Feature descontinuada: retorna 410.
     """
+    return Response({"detail": "Feature descontinuada. Use Dify/Typebot."}, status=410)
     tenant = request.user.tenant
     if request.method == 'GET':
         profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
@@ -2982,7 +2962,8 @@ def librechat_health(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def secretary_metrics(request):
-    """GET: contadores de respostas da secretária por origem (LibreChat vs n8n)."""
+    """GET: contadores de respostas da secretária por origem (LibreChat vs n8n). Feature descontinuada: retorna 410."""
+    return Response({"detail": "Feature descontinuada."}, status=410)
     librechat_total = cache.get("ai:secretary:librechat_total", 0)
     n8n_total = cache.get("ai:secretary:n8n_total", 0)
     return Response({

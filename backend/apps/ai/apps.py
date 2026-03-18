@@ -31,7 +31,8 @@ class AiConfig(AppConfig):
         )
         if is_migration_script:
             return
-        if os.environ.get("DISABLE_SECRETARY_DELAY_RUNNER", "0") == "1":
-            logger.info("[AI] Secretary delay runner desabilitado por env")
-            return
-        _start_secretary_delay_executor()
+        # Secretária descontinuada: delay executor não é mais iniciado.
+        # if os.environ.get("DISABLE_SECRETARY_DELAY_RUNNER", "0") == "1":
+        #     logger.info("[AI] Secretary delay runner desabilitado por env")
+        #     return
+        # _start_secretary_delay_executor()

@@ -504,31 +504,8 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                     logger.exception("[META WEBHOOK] Erro ao broadcast message_received: %s", e)
             transaction.on_commit(_broadcast_after_commit)
 
-            # BIA (Secretária IA): disparar quando mensagem incoming no Inbox e secretária ativa (inclui conversas reabertas).
-            # Callback roda após commit; dispatch_secretary_async revalida condições e ignora grupos no worker.
-            if conversation.department_id is None:
-                _conv_id, _msg_id, _tenant_id = conversation.id, new_msg.id, tenant.id
-
-                def _dispatch_bia_after_commit():
-                    try:
-                        from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
-                        from apps.ai.secretary_service import dispatch_secretary_async
-                        if (
-                            TenantAiSettings.objects.filter(tenant_id=_tenant_id).filter(secretary_enabled=True).exists()
-                            and TenantSecretaryProfile.objects.filter(tenant_id=_tenant_id).filter(is_active=True).exists()
-                        ):
-                            conv = Conversation.objects.filter(pk=_conv_id).first()
-                            msg = Message.objects.filter(pk=_msg_id).first()
-                            if conv and msg:
-                                dispatch_secretary_async(conv, msg)
-                                logger.info(
-                                    "[META WEBHOOK] BIA disparada para conversation_id=%s message_id=%s (provider=meta)",
-                                    str(_conv_id),
-                                    str(_msg_id),
-                                )
-                    except Exception as e:
-                        logger.exception("[META WEBHOOK] Erro ao disparar BIA: %s", e)
-                transaction.on_commit(_dispatch_bia_after_commit)
+            # BIA (Secretária IA) descontinuada: callback de dispatch não é mais agendado.
+            # if conversation.department_id is None: ... transaction.on_commit(_dispatch_bia_after_commit) — removido.
 
             # Fluxo: Typebot (continueChat), fluxo Sense (lista/botão) ou menu de boas-vindas (mesmo comportamento do webhook Evolution)
             try:

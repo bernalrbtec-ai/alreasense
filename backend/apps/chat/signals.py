@@ -38,6 +38,8 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
         return
     if "g.us" in (instance.contact_phone or ""):
         return
+    # Pipeline de resumos descontinuado: não disparar mais resumos ao fechar conversa.
+    return
     from apps.ai.models import TenantSecretaryProfile
     from apps.chat.conversation_summary_pipeline import run_conversation_summary_pipeline
 

@@ -463,13 +463,7 @@ def _transcription_worker(
                 _broadcast_attachment_update(attachment, message, str(tenant_id))
                 logger.info("Audio transcription stored for attachment %s", attachment_id)
 
-                # BIA: re-dispatch para a secretária responder com base na transcrição.
-                if message and message.direction == "incoming":
-                    message = Message.objects.filter(id=message.id).select_related("conversation").first()
-                    conversation = message.conversation if message else None
-                    if conversation and "g.us" not in (conversation.contact_phone or ""):
-                        from apps.ai.secretary_service import dispatch_secretary_async
-                        dispatch_secretary_async(conversation, message)
+                # BIA re-dispatch descontinuado: secretária não responde mais após transcrição.
                 return
             except Exception as exc:
                 logger.error("Failed to run audio transcription attempt %s: %s", current_attempt, exc, exc_info=True)

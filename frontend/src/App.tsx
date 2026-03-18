@@ -42,8 +42,8 @@ const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPa
 const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
-const BiaAdminPage = lazy(() => import('./pages/BiaAdminPage'))
 const FlowPage = lazy(() => import('./pages/FlowPage'))
+const IntegracaoInstrucoesPage = lazy(() => import('./pages/IntegracaoInstrucoesPage'))
 
 // Components
 import Layout from './components/Layout'
@@ -225,12 +225,12 @@ function App() {
                   <FlowPage />
                 </Suspense>
               } />
-              <Route path="admin/bia" element={
+              <Route path="configurations/instrucoes" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
-                  <BiaAdminPage />
+                  <IntegracaoInstrucoesPage />
                 </Suspense>
               } />
-              
+              <Route path="admin/bia" element={<Navigate to="/configurations" replace />} />
               {/* Workflow - Chat e Agenda */}
               <Route path="chat" element={
                 <ProtectedChatRoute>

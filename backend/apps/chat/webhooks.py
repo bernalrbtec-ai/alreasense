@@ -2530,14 +2530,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             needs_update = True
         
         # ✅ Não tirar conversa do Inbox quando a BIA (secretária) está ativa: ela responde no Inbox
+        # Feature descontinuada: inbox_has_secretary forçado False para sempre aplicar default_department.
         if not created and default_department and not conversation.department and not from_me:
             inbox_has_secretary = False
             try:
                 from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
-                inbox_has_secretary = (
-                    TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
-                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
-                )
+                # Descontinuado: secretária desligada; sempre aplicar default_department.
+                # inbox_has_secretary = (
+                #     TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                #     and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                # )
             except Exception as _e:
                 logger.debug(
                     "📋 [ROUTING] Verificação secretária Inbox falhou (aplicando default_department): %s",
@@ -3635,12 +3637,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 from apps.chat.services.business_hours_service import BusinessHoursService
                 from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
 
-                # Se Inbox + secretária ativa: não enviar mensagem automática fora de horário; a secretária responde (com is_open/next_open_time no contexto)
-                secretary_responds_instead = (
-                    conversation.department_id is None
-                    and TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
-                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
-                )
+                # Descontinuado: secretária desligada; secretary_responds_instead sempre False.
+                # secretary_responds_instead = (
+                #     conversation.department_id is None
+                #     and TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                #     and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                # )
                 if secretary_responds_instead:
                     logger.info(f"⏰ [BUSINESS HOURS] Secretária ativa no Inbox: mensagem fora de horário será respondida pela secretária (sem mensagem automática)")
                 else:

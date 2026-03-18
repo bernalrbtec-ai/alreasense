@@ -56,7 +56,6 @@ import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
 import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
 import { RagMemoriesManager } from '../modules/ai/components/RagMemoriesManager'
-import BiaAdminPage from './BiaAdminPage'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { InstanceHealthModal } from '../components/instances/InstanceHealthModal'
 
@@ -254,17 +253,6 @@ interface DifyWaInstance {
   instance_name: string
 }
 
-interface SecretaryProfile {
-  form_data: Record<string, unknown>
-  prompt: string
-  signature_name: string
-  use_memory: boolean
-  is_active: boolean
-  inbox_idle_minutes: number
-  response_delay_seconds?: number
-  advanced_options?: Record<string, number> | null
-}
-
 interface GatewayAuditItem {
   id: number
   conversation_id: string | null
@@ -331,7 +319,7 @@ export default function ConfigurationsPage() {
   const isTenantAdmin = Boolean(user?.is_admin || user?.role === 'admin' || user?.is_superuser)
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'flow' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'ia-assistente' | 'agentes' | 'dify' | 'rag-memories' | 'auditoria-ia'>('config')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'agentes' | 'dify' | 'rag-memories' | 'auditoria-ia'>('config')
   // Estados para sub-tab Agentes (LibreChat)
   const [librechatAgents, setLibrechatAgents] = useState<Array<{ id: string; name: string }>>([])
   const [librechatAvailable, setLibrechatAvailable] = useState(false)
@@ -474,10 +462,6 @@ export default function ConfigurationsPage() {
   const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
   const [audioTestError, setAudioTestError] = useState<string | null>(null)
-  const [secretaryProfile, setSecretaryProfile] = useState<SecretaryProfile | null>(null)
-  const [secretaryProfileLoading, setSecretaryProfileLoading] = useState(false)
-  const [secretaryProfileSaving, setSecretaryProfileSaving] = useState(false)
-  const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
   const [audioTestLoading, setAudioTestLoading] = useState(false)
   const [isAudioRecording, setIsAudioRecording] = useState(false)
   const [audioRecordingTime, setAudioRecordingTime] = useState(0)
@@ -738,7 +722,6 @@ export default function ConfigurationsPage() {
     }
     if (activeTab === 'ai' && isTenantAdmin) {
       fetchAiSettings()
-      fetchSecretaryProfile()
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
     }
@@ -1633,42 +1616,6 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchSecretaryProfile = async () => {
-    try {
-      setSecretaryProfileLoading(true)
-      const response = await api.get('/ai/secretary/profile/')
-      const loadedProfile = {
-        form_data: response.data?.form_data ?? {},
-        prompt: response.data?.prompt ?? '',
-        signature_name: response.data?.signature_name ?? '',
-        use_memory: response.data?.use_memory ?? true,
-        is_active: response.data?.is_active ?? false,
-        inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
-        response_delay_seconds: response.data?.response_delay_seconds ?? 0,
-        advanced_options: (() => {
-          const o = response.data?.advanced_options
-          if (o != null && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, number>
-          return undefined
-        })(),
-      }
-      console.log('[SECRETARY FETCH] Dados carregados do servidor:', {
-        form_data_keys: Object.keys(loadedProfile.form_data),
-        form_data: loadedProfile.form_data,
-        is_active: loadedProfile.is_active
-      })
-      setSecretaryProfile(loadedProfile)
-      setSecretaryProfileErrors({})
-    } catch (error: any) {
-      console.error('Erro ao carregar perfil da secretária:', error)
-      setSecretaryProfile(null)
-      if (error.response?.status === 403) {
-        showErrorToast('Apenas administradores podem acessar esta configuração')
-      }
-    } finally {
-      setSecretaryProfileLoading(false)
-    }
-  }
-
   const fetchDifyCatalog = async () => {
     try {
       setDifyCatalogLoading(true)
@@ -1948,77 +1895,6 @@ export default function ConfigurationsPage() {
     setAssignmentToDelete({ id: assignment.id, scopeLabel })
   }
 
-  const handleSaveSecretaryProfile = async (profileOverride?: Partial<SecretaryProfile> | null) => {
-    if (!secretaryProfile) return
-    const profileToSave: SecretaryProfile =
-      profileOverride != null ? { ...secretaryProfile, ...profileOverride } : secretaryProfile
-    const errors: Record<string, string> = {}
-    if (profileToSave.inbox_idle_minutes < 0 || profileToSave.inbox_idle_minutes > 1440) {
-      errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
-    }
-    setSecretaryProfileErrors(errors)
-    if (Object.keys(errors).length > 0) return
-
-    const hadOverride = profileOverride != null
-    const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
-    try {
-      setSecretaryProfileSaving(true)
-      const payload = { ...profileToSave }
-      if (payload.advanced_options != null && typeof payload.advanced_options === 'object') {
-        const { num_ctx: _, ...rest } = payload.advanced_options as Record<string, unknown>
-        payload.advanced_options = Object.keys(rest).length ? rest : null
-      }
-      const response = await api.put('/ai/secretary/profile/', payload)
-
-      if (response.data) {
-        const savedProfile: SecretaryProfile = {
-          form_data: response.data?.form_data ?? {},
-          prompt: response.data?.prompt ?? '',
-          signature_name: response.data?.signature_name ?? '',
-          use_memory: response.data?.use_memory ?? true,
-          is_active: response.data?.is_active ?? false,
-          inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
-          response_delay_seconds: response.data?.response_delay_seconds ?? 0,
-          advanced_options: (() => {
-            const o = response.data?.advanced_options
-            if (o != null && typeof o === 'object' && !Array.isArray(o)) return o as Record<string, number>
-            return undefined
-          })(),
-        }
-        setSecretaryProfile(savedProfile)
-      }
-
-      setSecretaryProfileErrors({})
-      updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
-      // Persistir também o modelo do assistente: enviar o valor atual do select (não limpar se não estiver em aiModelOptions, para não sobrescrever com vazio).
-      if (aiSettings) {
-        try {
-          const secretaryModel = (aiSettings.secretary_model ?? '').trim()
-          const settingsRes = await api.put('/ai/settings/', {
-            ...aiSettings,
-            secretary_model: secretaryModel,
-            secretary_enabled: profileToSave.is_active,
-          })
-          if (settingsRes?.data) setAiSettings(settingsRes.data)
-        } catch (settingsErr: any) {
-          console.error('Erro ao salvar modelo do assistente:', settingsErr)
-          showErrorToast('salvar', 'Modelo do assistente', settingsErr)
-        }
-      }
-    } catch (error: any) {
-      if (hadOverride) {
-        setSecretaryProfile(secretaryProfile)
-      }
-      const apiErrors = error.response?.data?.errors || {}
-      if (apiErrors && typeof apiErrors === 'object') {
-        setSecretaryProfileErrors(apiErrors)
-      }
-      updateToastError(toastId, 'salvar', 'Perfil da Secretária', error)
-    } finally {
-      setSecretaryProfileSaving(false)
-    }
-  }
-
   const fetchAiModels = async (currentSettings?: AiSettings, overrideUrl?: string) => {
     try {
       setAiModelsLoading(true)
@@ -2230,6 +2106,13 @@ export default function ConfigurationsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Configurações</h1>
           <p className="text-gray-600 dark:text-gray-400">Gerencie suas instâncias, servidores e configurações</p>
+          <Link
+            to="/configurations/instrucoes"
+            className="inline-flex items-center gap-1.5 mt-2 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            <FileText className="h-4 w-4" />
+            Instruções para integração (Typebot / Dify)
+          </Link>
         </div>
       </div>
 
@@ -2929,14 +2812,6 @@ export default function ConfigurationsPage() {
             </button>
             <button
               type="button"
-              onClick={() => setAiSubTab('ia-assistente')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'ia-assistente' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
-            >
-              <MessageSquare className="h-4 w-4" />
-              Secretaria
-            </button>
-            <button
-              type="button"
               onClick={() => {
                 setAiSubTab('agentes')
                 setAgentsLoading(true)
@@ -2974,8 +2849,6 @@ export default function ConfigurationsPage() {
 
           {aiSubTab === 'rag-memories' ? (
             <RagMemoriesManager />
-          ) : aiSubTab === 'ia-assistente' ? (
-            <BiaAdminPage />
           ) : aiSubTab === 'agentes' ? (
             <div className="space-y-6">
               {(agentsLoading || assignmentsLoading) && agentAssignments.length === 0 && librechatAgents.length === 0 ? (
