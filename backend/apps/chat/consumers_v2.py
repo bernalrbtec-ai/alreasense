@@ -1329,6 +1329,19 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 is_internal=is_internal,
                 metadata=metadata
             )
+
+            # Humano interagiu na aplicação: se houver takeover Dify ativo, parar imediatamente.
+            # Regra: qualquer outgoing enviado pelo painel (inclui is_internal=True) encerra takeover.
+            try:
+                from apps.ai.services.dify_chat_service import _stop_active_dify_for_conversation
+
+                _stop_active_dify_for_conversation(str(conversation.id), str(conversation.tenant_id))
+            except Exception as _dify_stop_exc:
+                logger.warning(
+                    "⚠️ [CHAT WS V2] Falha ao parar takeover Dify (não crítico) conv=%s: %s",
+                    str(conversation.id),
+                    _dify_stop_exc,
+                )
             
             # Atribuição automática: primeiro a responder em conversa sem atendente fica atribuído
             if not is_internal and conversation.assigned_to_id is None:

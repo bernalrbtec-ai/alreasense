@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+import re
 from urllib.parse import urlparse
 
 import httpx
@@ -170,6 +171,74 @@ def _extract_dify_base_url(public_url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def _normalize_phone_for_dify_user(contact_phone: str) -> str:
+    """
+    Normaliza o telefone para uso no campo `user` do Dify:
+    - remove sufixos de WhatsApp (@g.us/@s.whatsapp.net)
+    - remove espaços e símbolos, preservando apenas dígitos
+    Retorna string curta/estável (máx ~32 chars) para evitar payloads enormes.
+    """
+    raw = (contact_phone or "").strip()
+    if not raw:
+        return ""
+    raw = raw.replace("@g.us", "").replace("@s.whatsapp.net", "").strip()
+    digits = re.sub(r"[^0-9]+", "", raw)
+    return digits[:32]
+
+
+def _normalize_dify_user(tenant_id: str, agent_app_id: str, contact_phone: str) -> str:
+    """
+    Identificador estável para memória do Dify, isolado por tenant + agente + telefone.
+    Ex.: sense:<tenant>:<agent>:<digits>
+    """
+    tid = (tenant_id or "").strip() or "t"
+    aid = (agent_app_id or "").strip() or "a"
+    phone = _normalize_phone_for_dify_user(contact_phone) or "p"
+    # manter compacto e com charset seguro
+    return f"sense:{tid}:{aid}:{phone}"
+
+
+def _fetch_dify_conversation_for_user(base_url: str, api_key: str, dify_user: str, agent_id) -> str | None:
+    """
+    Busca a conversa mais recente do Dify para um `user` estável.
+    Retorna dify_conversation_id ou None se não houver / em caso de erro.
+    """
+    if not (base_url and api_key and dify_user):
+        return None
+    url = f"{base_url}/v1/conversations"
+    try:
+        with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0)) as client:
+            resp = client.get(
+                url,
+                params={"user": dify_user, "limit": 1, "sort_by": "-updated_at"},
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            if resp.status_code != 200:
+                logger.warning(
+                    "⚠️ [DIFY] Falha ao buscar conversas por user (status=%s) agente=%s",
+                    resp.status_code,
+                    agent_id,
+                )
+                return None
+            data = resp.json()
+            # Dify costuma retornar {"data":[{...}]} ou lista direta dependendo da versão
+            items = None
+            if isinstance(data, dict):
+                items = data.get("data") if isinstance(data.get("data"), list) else data.get("conversations")
+            elif isinstance(data, list):
+                items = data
+            if not isinstance(items, list) or not items:
+                return None
+            first = items[0] if isinstance(items[0], dict) else None
+            if not first:
+                return None
+            conv_id = (first.get("id") or first.get("conversation_id") or "").strip()
+            return conv_id or None
+    except Exception as exc:
+        logger.warning("⚠️ [DIFY] Erro ao buscar conversa por user (%s): %s", dify_user, exc)
+        return None
+
+
 def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
     """
     Retorna o estado de takeover Dify ativo para a conversa, ou None.
@@ -256,6 +325,59 @@ def _update_dify_conversation_id(state_id: str, dify_conversation_id: str, tenan
             state_id, exc
         )
         return False
+
+
+def _stop_active_dify_for_conversation(conversation_id: str, tenant_id: str) -> bool:
+    """
+    Para o takeover Dify ativo de uma conversa (idempotente).
+
+    - Atualiza ai_dify_conversation_state.status='stopped' filtrando por tenant_id
+    - Em caso de sucesso (rowcount>0), emite broadcast WS para remover badge
+    """
+    if not conversation_id or not tenant_id:
+        return False
+    from django.db import transaction
+    try:
+        with transaction.atomic(), _conn.cursor() as cur:
+            cur.execute(
+                "UPDATE ai_dify_conversation_state "
+                "SET status = 'stopped', updated_at = now() "
+                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active'",
+                [str(conversation_id), str(tenant_id)],
+            )
+            affected = cur.rowcount
+    except Exception as exc:
+        logger.error(
+            "❌ [DIFY] Falha ao parar takeover (conversation=%s tenant=%s): %s",
+            conversation_id,
+            tenant_id,
+            exc,
+            exc_info=True,
+        )
+        return False
+
+    if affected and affected > 0:
+        try:
+            from apps.chat.utils.websocket import broadcast_to_tenant
+
+            broadcast_to_tenant(
+                tenant_id=str(tenant_id),
+                event_type="dify_agent_state_changed",
+                data={
+                    "conversation_id": str(conversation_id),
+                    "status": "stopped",
+                    "catalog_id": None,
+                    "display_name": "",
+                },
+            )
+        except Exception as ws_exc:
+            logger.warning(
+                "⚠️ [DIFY] Broadcast stop takeover falhou (não crítico) conv=%s: %s",
+                conversation_id,
+                ws_exc,
+            )
+        return True
+    return False
 
 
 def maybe_handle_dify_takeover(
@@ -348,22 +470,83 @@ def maybe_handle_dify_takeover(
     resolved = _resolve_inputs(getattr(agent, 'default_inputs', None) or {}, conversation)
     if resolved:
         logger.info("🤖 [DIFY] Inputs resolvidos (%d campos) para conversa=%s", len(resolved), conv_id)
+
+    dify_user = _normalize_dify_user(tenant_id, (agent.dify_app_id or ''), contact_phone)
+    effective_prev_conv_id = prev_dify_conv_id
+    if not effective_prev_conv_id:
+        # Tentar retomar memória do Dify por telefone (isolado por tenant+agente)
+        resumed = _fetch_dify_conversation_for_user(base_url, api_key, dify_user, agent.id)
+        if resumed:
+            effective_prev_conv_id = resumed
+            logger.info(
+                "🤖 [DIFY] Retomando conversa anterior por user (len=%s) → dify_conv_id=%s conversa=%s",
+                len(dify_user),
+                resumed,
+                conv_id,
+            )
+
     payload: dict = {
         'inputs': resolved,
         'query': msg_content,
         'response_mode': 'blocking',
-        'user': f"sense-{conv_id}",
+        'user': dify_user,
     }
-    if prev_dify_conv_id:
-        payload['conversation_id'] = prev_dify_conv_id
+    if effective_prev_conv_id:
+        payload['conversation_id'] = effective_prev_conv_id
 
-    dify_answer, new_dify_conv_id = _call_dify_api(base_url, api_key, payload, agent.id)
+    dify_answer, new_dify_conv_id, http_status, err_body = _call_dify_api(base_url, api_key, payload, agent.id)
     if dify_answer is None:
-        return False
+        # Se o conversation_id antigo for inválido/expirado, tentar 1x sem conversation_id.
+        if payload.get("conversation_id"):
+            logger.warning(
+                "⚠️ [DIFY] Falha com conversation_id; tentando novamente sem conversation_id. "
+                "conversa=%s status=%s",
+                conv_id,
+                http_status,
+            )
+            retry_payload = dict(payload)
+            retry_payload.pop("conversation_id", None)
+            dify_answer, new_dify_conv_id, http_status, err_body = _call_dify_api(
+                base_url, api_key, retry_payload, agent.id
+            )
+        if dify_answer is None:
+            return False
 
     # ── Fase 4: persistir dify_conversation_id (transaction curta) ───────────────
-    if new_dify_conv_id and new_dify_conv_id != prev_dify_conv_id:
+    # Importante: persistir ANTES de qualquer early-return por instrução, para manter memória.
+    if new_dify_conv_id and new_dify_conv_id != effective_prev_conv_id:
         _update_dify_conversation_id(state_id, new_dify_conv_id, tenant_id)
+
+    # ── Fase 4.5: instruções universais (transfer/close) ─────────────────────────
+    # Executa ações e remove trechos #{"..."} antes de salvar/enviar ao cliente.
+    try:
+        from apps.chat.services.flow_control import process_bot_control_instruction_single
+
+        cleaned_text, ctrl_meta = process_bot_control_instruction_single(
+            conversation, str(dify_answer or ""), source="dify"
+        )
+        dify_answer = cleaned_text
+        if ctrl_meta.get("recognized"):
+            logger.info(
+                "🤖 [DIFY] Instrução #{} processada (closed=%s transferred=%s) conversa=%s",
+                bool(ctrl_meta.get("closed")),
+                bool(ctrl_meta.get("transferred")),
+                conv_id,
+            )
+        if ctrl_meta.get("closed") or ctrl_meta.get("transferred"):
+            # Regra: após transferência/encerramento, parar takeover automaticamente.
+            _stop_active_dify_for_conversation(conv_id, tenant_id)
+        # Se fechou ou a instrução consumiu toda a mensagem, não enviar texto ao cliente.
+        if (ctrl_meta.get("closed") or ctrl_meta.get("transferred")) and not (dify_answer and dify_answer.strip()):
+            logger.info(
+                "🤖 [DIFY] Resposta consumida por instrução (closed=%s transferred=%s) — nada a enviar. conversa=%s",
+                bool(ctrl_meta.get("closed")),
+                bool(ctrl_meta.get("transferred")),
+                conv_id,
+            )
+            return True
+    except Exception as exc:
+        logger.warning("⚠️ [DIFY] Falha ao processar instruções #{}: %s", exc, exc_info=True)
 
     if not dify_answer:
         logger.warning(
@@ -430,11 +613,13 @@ def _resolve_wa_instance(agent, tenant, wa_instance, conversation):
     return None
 
 
-def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tuple[str | None, str]:
+def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tuple[str | None, str, int | None, str]:
     """
     Chama o endpoint /v1/chat-messages do Dify.
-    Retorna (answer, dify_conversation_id).
-    Retorna (None, '') em caso de erro (já logado).
+    Retorna (answer, dify_conversation_id, http_status, error_body).
+    - Em sucesso: (answer, conv_id, 200/201, '')
+    - Em erro HTTP: (None, '', status_code, body_preview)
+    - Em exceção: (None, '', None, str(exc))
     """
     url = f"{base_url}/v1/chat-messages"
     logger.info(
@@ -460,7 +645,7 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
                     "❌ [DIFY] status %s para agente %s: %s",
                     resp.status_code, agent_id, resp.text[:500]
                 )
-                return None, ''
+                return None, '', resp.status_code, (resp.text[:500] if isinstance(resp.text, str) else '')
             data = resp.json()
             answer = data.get('answer') or ''
             conv_id = data.get('conversation_id') or ''
@@ -468,10 +653,10 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
                 "🤖 [DIFY] answer_len=%s dify_conv_id=%s agente=%s",
                 len(answer), conv_id, agent_id
             )
-            return answer, conv_id
+            return answer, conv_id, resp.status_code, ''
     except Exception as exc:
         logger.error("❌ [DIFY] Erro na chamada Dify (%s)", exc, exc_info=True)
-        return None, ''
+        return None, '', None, str(exc)
 
 
 def _save_and_send_reply(

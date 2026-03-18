@@ -3139,6 +3139,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from apps.chat.models_flow import ConversationFlowState
         ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
         logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada (departamento, atendente e fluxo removidos)")
+
+        # Se havia takeover Dify ativo, parar e remover badge.
+        try:
+            from apps.ai.services.dify_chat_service import _stop_active_dify_for_conversation
+            _stop_active_dify_for_conversation(str(conversation.id), str(conversation.tenant_id))
+        except Exception as _dify_stop_exc:
+            logger.warning(
+                "⚠️ [CONVERSA] Falha ao parar takeover Dify (não crítico) conv=%s: %s",
+                str(conversation.id),
+                _dify_stop_exc,
+            )
         
         return Response(
             ConversationSerializer(conversation).data,
@@ -4516,6 +4527,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # ✅ FIX: Recarregar conversa do banco para garantir dados atualizados
         conversation.refresh_from_db()
+
+        # Humano executou ação de transferência no painel: parar takeover Dify se estiver ativo.
+        try:
+            from apps.ai.services.dify_chat_service import _stop_active_dify_for_conversation
+            _stop_active_dify_for_conversation(str(conversation.id), str(conversation.tenant_id))
+        except Exception as _dify_stop_exc:
+            logger.warning(
+                "⚠️ [TRANSFER] Falha ao parar takeover Dify (não crítico) conv=%s: %s",
+                str(conversation.id),
+                _dify_stop_exc,
+            )
+
         # Humano assumiu (transferência para agente): interromper fluxo Typebot/Flowise
         if conversation.assigned_to_id:
             from apps.chat.models_flow import ConversationFlowState
