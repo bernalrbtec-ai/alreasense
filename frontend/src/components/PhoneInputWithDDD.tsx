@@ -142,8 +142,8 @@ export function PhoneInputWithDDD({
   )
 
   return (
-    <div className={cn('flex flex-wrap gap-2', className)}>
-      <div className="flex flex-col gap-1 flex-shrink-0 w-[140px]">
+    <div className={cn('flex flex-nowrap items-stretch gap-2', className)}>
+      <div className="flex flex-col gap-1 flex-shrink-0 w-[130px] sm:w-[140px]">
         <label htmlFor={id ? `${id}-country` : undefined} className="sr-only">
           País
         </label>
@@ -174,7 +174,7 @@ export function PhoneInputWithDDD({
               value={selectedDddKey}
               onChange={handleDddSelect}
               disabled={disabled}
-              className={cn('w-[72px]', inputBaseCn)}
+              className={cn('w-[64px] sm:w-[72px]', inputBaseCn)}
               aria-label="DDD"
             >
               {BRAZIL_DDD_LIST.map((ddd) => (
@@ -186,7 +186,7 @@ export function PhoneInputWithDDD({
             </select>
           </div>
           {isOther && (
-            <div className="flex flex-col gap-1 flex-shrink-0 w-[60px]">
+            <div className="flex flex-col gap-1 flex-shrink-0 w-[52px] sm:w-[60px]">
               <label htmlFor={id ? `${id}-other-ddd` : undefined} className="sr-only">
                 DDD (outro)
               </label>
@@ -204,7 +204,7 @@ export function PhoneInputWithDDD({
               />
             </div>
           )}
-          <div className="flex-1 min-w-[120px] flex flex-col gap-1">
+          <div className="flex-1 min-w-0 flex flex-col gap-1">
             <label htmlFor={id ? `${id}-number` : undefined} className="sr-only">
               Número
             </label>
@@ -224,7 +224,7 @@ export function PhoneInputWithDDD({
           </div>
         </>
       ) : (
-        <div className="flex-1 min-w-[160px] flex flex-col gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
           <label htmlFor={id ? `${id}-national` : undefined} className="sr-only">
             Número (com código de área)
           </label>
