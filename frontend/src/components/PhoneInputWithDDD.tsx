@@ -90,6 +90,38 @@ export function PhoneInputWithDDD({
     onChange(buildE164International(dial, national))
   }
 
+  /**
+   * Autodetecção ao digitar diretamente no campo:
+   * - Se começar com "55" (sem +), tenta detectar: 55 + DDD(2) + número
+   * - Se tiver 10-11 dígitos, tenta detectar: DDD(2) + número (sem país)
+   *
+   * Devolve null quando não faz sentido ainda (evita inferir errado enquanto digita).
+   */
+  const inferBrazilFromDigits = (digitsRaw: string): { ddd: string; number: string } | null => {
+    const digits = (digitsRaw || '').replace(/\D/g, '')
+    if (!digits) return null
+
+    // Caso A: país "55" incluso (sem '+'): 55 + ddd + number
+    if (digits.startsWith('55') && digits.length >= 4) {
+      const ddd = digits.slice(2, 4)
+      if (BRAZIL_DDD_LIST.includes(ddd as any)) {
+        const number = digits.slice(4, 4 + 9) // 8 ou 9 dígitos
+        return { ddd, number }
+      }
+    }
+
+    // Caso B: DDD + number (sem país): 10-11 dígitos completos
+    if (digits.length >= 10 && digits.length <= 11) {
+      const ddd = digits.slice(0, 2)
+      if (BRAZIL_DDD_LIST.includes(ddd as any)) {
+        const number = digits.slice(2, 2 + 9) // 8 ou 9 dígitos
+        return { ddd, number }
+      }
+    }
+
+    return null
+  }
+
   const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const dial = e.target.value
     setSelectedCountryDial(dial)
@@ -122,15 +154,41 @@ export function PhoneInputWithDDD({
   }
 
   const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 11)
-    setNumberPart(raw)
-    notifyBrazil(effectiveDdd, raw)
+    // O componente está no modo Brasil: campo "Número" (que pode receber DDD completo também)
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 15)
+    const inferred = inferBrazilFromDigits(digits)
+    if (inferred) {
+      setSelectedCountryDial('55')
+      setSelectedDddKey(inferred.ddd)
+      setOtherDdd('')
+      setNumberPart(inferred.number)
+      notifyBrazil(inferred.ddd, inferred.number)
+      return
+    }
+
+    // Fallback: trata como "só o número" (sem DDD) e mantém o DDD selecionado
+    const numberOnly = digits.slice(0, 9)
+    setNumberPart(numberOnly)
+    notifyBrazil(effectiveDdd, numberOnly)
   }
 
   const handleNationalNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value.replace(/\D/g, '').slice(0, 15)
-    setNationalNumber(raw)
-    notifyInternational(selectedCountryDial, raw)
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 15)
+    // Se o usuário começar a digitar "55..." ou "DDD+numero" mesmo estando em outro país,
+    // tenta automaticamente migrar para Brasil (UX mais amigável).
+    const inferred = inferBrazilFromDigits(digits)
+    if (inferred) {
+      setSelectedCountryDial('55')
+      setSelectedDddKey(inferred.ddd)
+      setOtherDdd('')
+      setNationalNumber('')
+      setNumberPart(inferred.number)
+      notifyBrazil(inferred.ddd, inferred.number)
+      return
+    }
+
+    setNationalNumber(digits.slice(0, 15))
+    notifyInternational(selectedCountryDial, digits.slice(0, 15))
   }
 
   const inputBaseCn = cn(
