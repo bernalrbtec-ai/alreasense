@@ -4282,6 +4282,35 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         )
         return Response({'success': True, 'message': 'Agente parado.'}, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='dify-active-states')
+    def dify_active_states(self, request):
+        """
+        Retorna um mapa { conversation_id: display_name } de todas as conversas
+        do tenant que possuem um agente Dify ativo no momento.
+        Usado pela lista de conversas para exibir o badge de agente IA em massa.
+        """
+        tenant = getattr(request, 'tenant', None)
+        if not tenant:
+            return Response({}, status=status.HTTP_200_OK)
+        try:
+            from django.db import connection as _conn
+            with _conn.cursor() as cur:
+                cur.execute(
+                    "SELECT s.conversation_id, COALESCE(c.display_name, c.dify_app_id, 'Agente IA') "
+                    "FROM ai_dify_conversation_state s "
+                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id "
+                    "WHERE s.tenant_id = %s AND s.status = 'active'",
+                    [str(tenant.id)]
+                )
+                rows = cur.fetchall()
+            return Response(
+                {str(row[0]): row[1] for row in rows},
+                status=status.HTTP_200_OK
+            )
+        except Exception as exc:
+            logger.warning("dify_active_states error: %s", exc)
+            return Response({}, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):
         """

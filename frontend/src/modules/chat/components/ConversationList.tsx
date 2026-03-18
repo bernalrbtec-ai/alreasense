@@ -150,6 +150,19 @@ export function ConversationList() {
     fetchConversations();
   }, [hasLoaded, setConversations]);
 
+  // Buscar estados Dify ativos em massa após a primeira carga das conversas
+  useEffect(() => {
+    if (!hasLoaded) return;
+    api.get('/chat/conversations/dify-active-states/')
+      .then((res) => {
+        const map = res?.data as Record<string, string> | null;
+        if (!map) return;
+        const { setDifyActiveConversation } = useChatStore.getState();
+        Object.entries(map).forEach(([convId, name]) => setDifyActiveConversation(convId, name));
+      })
+      .catch(() => { /* silencioso — badge é best-effort */ });
+  }, [hasLoaded]);
+
   // ✅ NOVO: Buscar conversas quando mudar para "Minhas Conversas"
   useEffect(() => {
     if (activeDepartment?.id === 'my_conversations' && hasLoaded) {
