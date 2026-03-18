@@ -136,16 +136,19 @@ def maybe_handle_dify_takeover(
     conv_id = str(conversation.id)
     tenant_id = str(tenant.id)
 
+    logger.info("🤖 [DIFY] maybe_handle_dify_takeover → conversa=%s tenant=%s", conv_id, tenant_id)
+
     # Validações rápidas antes de qualquer I/O
     msg_content = (message.content or '').strip()
     if not msg_content:
+        logger.info("🤖 [DIFY] Mensagem vazia — ignorando conversa=%s", conv_id)
         return False
 
     # EC-B06: validar contact_phone ANTES de qualquer chamada externa
     contact_phone = (getattr(conversation, 'contact_phone', None) or '').strip()
     if not contact_phone:
         logger.warning(
-            "Dify takeover: sem telefone do contato para conversa %s — abortando antes do Dify",
+            "❌ [DIFY] Sem telefone do contato para conversa %s — abortando",
             conv_id
         )
         return False
@@ -272,37 +275,59 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
     Retorna (answer, dify_conversation_id).
     Retorna (None, '') em caso de erro (já logado).
     """
+    url = f"{base_url}/v1/chat-messages"
+    logger.info(
+        "🤖 [DIFY] Chamando API → agente=%s url=%s user=%s conv_id=%s api_key_len=%s",
+        agent_id, url, payload.get('user'), payload.get('conversation_id', '(nova)'), len(api_key)
+    )
     try:
-        with httpx.Client(timeout=30) as client:
+        with httpx.Client(timeout=60) as client:
             resp = client.post(
-                f"{base_url}/v1/chat-messages",
+                url,
                 json=payload,
                 headers={
                     'Authorization': f'Bearer {api_key}',
                     'Content-Type': 'application/json',
                 },
             )
+            logger.info(
+                "🤖 [DIFY] Resposta → status=%s agente=%s body_preview=%s",
+                resp.status_code, agent_id, resp.text[:300]
+            )
             if resp.status_code not in (200, 201):
                 logger.error(
-                    "Dify takeover: status %s para agente %s: %s",
-                    resp.status_code, agent_id, resp.text[:200]
+                    "❌ [DIFY] status %s para agente %s: %s",
+                    resp.status_code, agent_id, resp.text[:500]
                 )
                 return None, ''
             data = resp.json()
-            return (data.get('answer') or ''), (data.get('conversation_id') or '')
+            answer = data.get('answer') or ''
+            conv_id = data.get('conversation_id') or ''
+            logger.info(
+                "🤖 [DIFY] answer_len=%s dify_conv_id=%s agente=%s",
+                len(answer), conv_id, agent_id
+            )
+            return answer, conv_id
     except Exception as exc:
-        logger.error("Dify takeover: erro na chamada Dify (%s)", exc, exc_info=True)
+        logger.error("❌ [DIFY] Erro na chamada Dify (%s)", exc, exc_info=True)
         return None, ''
 
 
 def _send_wa_reply(effective_instance, contact_phone: str, message: str, agent_app_id: str, conv_id: str) -> bool:
     """Envia a resposta do Dify via Evolution API."""
+    logger.info(
+        "📤 [DIFY] Enviando resposta → conversa=%s agente=%s instancia=%s phone=%s msg_len=%s",
+        conv_id, agent_app_id,
+        getattr(effective_instance, 'id', '?'),
+        contact_phone[:6] + '***' if contact_phone and len(contact_phone) > 6 else contact_phone,
+        len(message)
+    )
     try:
         from apps.notifications.whatsapp_providers.evolution import EvolutionProvider
         provider = EvolutionProvider(effective_instance)
         ok, result = provider.send_text(phone=contact_phone, message=message)
         if not ok:
-            logger.error("Dify takeover: falha ao enviar via Evolution: %s", result)
+            logger.error("❌ [DIFY] Falha ao enviar via Evolution: %s", result)
             return False
         logger.info(
             "✅ [DIFY] Resposta enviada na conversa %s (agente %s)",
@@ -310,5 +335,5 @@ def _send_wa_reply(effective_instance, contact_phone: str, message: str, agent_a
         )
         return True
     except Exception as exc:
-        logger.error("Dify takeover: erro ao enviar mensagem (%s)", exc, exc_info=True)
+        logger.error("❌ [DIFY] Erro ao enviar mensagem (%s)", exc, exc_info=True)
         return False
