@@ -45,11 +45,20 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
     """
     if not raw_inputs or not isinstance(raw_inputs, dict):
         return {}
+    import json as _json
     resolved = {}
     for key, value in raw_inputs.items():
         if not isinstance(value, str):
-            # Dify espera strings em todos os campos de input — coerce tipos primitivos
-            resolved[key] = str(value) if value is not None else ''
+            # Dify espera strings em todos os campos de input.
+            # Tipos compostos (list, dict) são serializados como JSON para não gerar
+            # sintaxe Python (ex: "['a', 'b']" em vez de '["a", "b"]').
+            if isinstance(value, (list, dict)):
+                try:
+                    resolved[key] = _json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    resolved[key] = str(value)
+            else:
+                resolved[key] = str(value) if value is not None else ''
             continue
         result = value
         for placeholder, resolver in _DIFY_VAR_RESOLVERS.items():
@@ -76,10 +85,14 @@ def _get_audio_transcription(message_id: str, wait_secs: int = 15) -> str:
     - O N8N/Whisper pode levar vários segundos para responder
 
     Retorna '' nos seguintes casos (sem esperar o timeout completo quando possível):
-    - Attachment existe com processing_status='completed' mas transcription=None/''
-      → transcrição desabilitada no tenant ou sem suporte para esse tipo de áudio
+    - Attachment existe com processing_status em ('completed','failed','skipped') sem transcrição
+      → transcrição desabilitada, falhou ou foi pulada pelo tenant
     - Timeout esgotado sem resultado
     - Qualquer exceção de banco (não deve bloquear o fluxo)
+
+    Nota: NÃO filtra por media_type porque o campo está em metadata (JSONField), não em coluna
+    separada. O filtro apenas por message_id é suficiente — esta função só é chamada quando
+    _is_audio=True nos webhooks, garantindo que só chegam mensagens de áudio.
     """
     import time
     try:
@@ -91,6 +104,10 @@ def _get_audio_transcription(message_id: str, wait_secs: int = 15) -> str:
     if not message_id:
         return ''
 
+    # Estados terminais: quando o processing_status chegar a um desses valores sem transcrição,
+    # não há motivo para continuar o polling — a transcrição não vai aparecer.
+    _TERMINAL_STATUSES = {'completed', 'failed', 'skipped', 'error'}
+
     deadline = time.monotonic() + wait_secs
     attachment_seen = False  # rastreia se attachment já apareceu no banco
 
@@ -98,7 +115,6 @@ def _get_audio_transcription(message_id: str, wait_secs: int = 15) -> str:
         try:
             att = MessageAttachment.objects.filter(
                 message_id=message_id,
-                media_type__in=('audio', 'ptt'),
             ).only('transcription', 'processing_status').first()
         except Exception as exc:
             logger.warning(
@@ -115,12 +131,13 @@ def _get_audio_transcription(message_id: str, wait_secs: int = 15) -> str:
                     message_id, len(att.transcription)
                 )
                 return att.transcription.strip()
-            # Attachment completado mas sem transcrição → não vai chegar nunca
-            if getattr(att, 'processing_status', '') == 'completed':
+            # Status terminal sem transcrição → não vai mudar, sair imediatamente
+            ps = getattr(att, 'processing_status', '') or ''
+            if ps in _TERMINAL_STATUSES:
                 logger.info(
-                    "_get_audio_transcription: attachment completed sem transcrição "
-                    "(transcrição possivelmente desabilitada). message_id=%s",
-                    message_id
+                    "_get_audio_transcription: status terminal '%s' sem transcrição "
+                    "(desabilitada ou falhou). message_id=%s",
+                    ps, message_id
                 )
                 return ''
 

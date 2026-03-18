@@ -4245,12 +4245,23 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 default_inputs = agent.default_inputs if hasattr(agent, 'default_inputs') else {}
                 if not isinstance(default_inputs, dict):
                     default_inputs = {}
+                if not input_schema and agent.metadata is not None:
+                    # Schema vazio pode significar que o admin nunca sincronizou o agente —
+                    # campos obrigatórios são desconhecidos; logar para diagnóstico.
+                    logger.warning(
+                        "start_dify_agent: agente %s não tem input_schema sincronizado. "
+                        "Campos obrigatórios do Dify são desconhecidos.",
+                        agent.id
+                    )
+                # Usar f.get('variable') com guarda para evitar KeyError se item estiver malformado.
+                # Só inclui na lista campos que tenham 'variable' definido e não vazio.
                 missing_required = [
-                    f['variable']
+                    var
                     for f in input_schema
                     if isinstance(f, dict)
                     and f.get('required')
-                    and not str(default_inputs.get(f.get('variable', ''), '')).strip()
+                    and (var := f.get('variable', ''))
+                    and not str(default_inputs.get(var, '')).strip()
                 ]
         except Exception as _warn_exc:
             logger.warning("start_dify_agent: erro ao verificar campos required: %s", _warn_exc)
