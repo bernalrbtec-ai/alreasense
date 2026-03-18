@@ -312,12 +312,12 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
             if not in_farewell_window:
                 old_status = conversation.status
                 old_dept = conversation.department.name if conversation.department else 'Nenhum'
-                # Alinhado ao Evolution: se BIA ativa, reabrir no Inbox; senão respeitar default_department
-                from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
-                secretary_responds = (
-                    TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
-                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
-                )
+                # Feature descontinuada: secretária não responde mais; sempre usar default_department quando existir.
+                secretary_responds = False
+                # secretary_responds = (
+                #     TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                #     and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
+                # )
                 if secretary_responds:
                     conversation.department = None
                     conversation.status = 'pending'

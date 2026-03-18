@@ -40,11 +40,4 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
         return
     # Pipeline de resumos descontinuado: não disparar mais resumos ao fechar conversa.
     return
-    from apps.ai.models import TenantSecretaryProfile
-    from apps.chat.conversation_summary_pipeline import run_conversation_summary_pipeline
-
-    profile = TenantSecretaryProfile.objects.filter(tenant_id=instance.tenant_id).first()
-    if not profile or not getattr(profile, "use_memory", False):
-        return
-    run_conversation_summary_pipeline(str(instance.id))
 

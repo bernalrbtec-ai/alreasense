@@ -423,23 +423,23 @@ export default function ReportsPage() {
                           <div className="space-y-3 text-sm">
                             <div className="flex justify-between">
                               <span className="text-gray-600 dark:text-gray-400">Total no período</span>
-                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.total_period.toLocaleString('pt-BR')}</span>
+                              <span className="font-medium tabular-nums">{(messageMetrics.secretary_metrics.total_period ?? 0).toLocaleString('pt-BR')}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600 dark:text-gray-400">Média por dia</span>
-                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.avg_per_day.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
+                              <span className="font-medium tabular-nums">{(messageMetrics.secretary_metrics.avg_per_day ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600 dark:text-gray-400">Horário de pico</span>
-                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.peak_hour}h ({messageMetrics.secretary_metrics.peak_count.toLocaleString('pt-BR')} msg)</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.peak_hour ?? 0}h ({(messageMetrics.secretary_metrics.peak_count ?? 0).toLocaleString('pt-BR')} msg)</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600 dark:text-gray-400">Horário tranquilo</span>
-                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.quiet_hour}h ({messageMetrics.secretary_metrics.quiet_count.toLocaleString('pt-BR')} msg)</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.quiet_hour ?? 0}h ({(messageMetrics.secretary_metrics.quiet_count ?? 0).toLocaleString('pt-BR')} msg)</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-gray-600 dark:text-gray-400">Enviadas</span>
-                              <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{messageMetrics.secretary_metrics.sent.toLocaleString('pt-BR')}</span>
+                              <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{(messageMetrics.secretary_metrics.sent ?? 0).toLocaleString('pt-BR')}</span>
                             </div>
                           </div>
                         </Card>
@@ -506,12 +506,12 @@ export default function ReportsPage() {
                               data={Array.from({ length: 24 }, (_, h) => {
                                 const row: Record<string, string | number> = { hour: h, hourLabel: `${h}h` }
                                 ;(messageMetrics.series_by_hour_by_department ?? []).forEach((d) => {
-                                  const bh = d.by_hour.find((b) => b.hour === h)
-                                  row[d.department_name] = bh ? Math.round(bh.avg * 100) / 100 : 0
+                                  const bh = d.by_hour?.find((b) => b.hour === h)
+                                  row[d.department_name] = bh && typeof bh.avg === 'number' ? Math.round(bh.avg * 100) / 100 : 0
                                 })
-                                if (messageMetrics.secretary_metrics) {
+                                if (messageMetrics.secretary_metrics?.by_hour) {
                                   const bh = messageMetrics.secretary_metrics.by_hour.find((b) => b.hour === h)
-                                  row['Secretária'] = bh ? Math.round(bh.avg * 100) / 100 : 0
+                                  row['Secretária'] = bh && typeof bh.avg === 'number' ? Math.round(bh.avg * 100) / 100 : 0
                                 }
                                 return row
                               })}
