@@ -143,7 +143,7 @@ export function PhoneInputWithDDD({
 
   return (
     <div className={cn('flex flex-nowrap items-stretch gap-2', className)}>
-      <div className="flex flex-col gap-1 flex-shrink-0 w-[130px] sm:w-[140px]">
+      <div className="flex flex-col gap-1 flex-shrink-0 w-[90px] sm:w-[100px]">
         <label htmlFor={id ? `${id}-country` : undefined} className="sr-only">
           País
         </label>
@@ -152,7 +152,7 @@ export function PhoneInputWithDDD({
           value={selectedCountryDial}
           onChange={handleCountryChange}
           disabled={disabled}
-          className={inputBaseCn}
+          className={cn('truncate', inputBaseCn)}
           aria-label="País"
         >
           {COUNTRY_OPTIONS_FOR_DROPDOWN.map((c) => (
