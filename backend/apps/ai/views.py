@@ -3135,7 +3135,8 @@ def _normalize_dify_input_schema(raw_schema: list) -> list:
             continue
         for field_type, field_data in wrapper.items():
             if isinstance(field_data, dict) and 'variable' in field_data:
-                result.append({'type': field_type, **field_data})
+                # field_type sempre prevalece sobre qualquer chave 'type' que possa vir dentro do field_data
+                result.append({**field_data, 'type': field_type})
     return result
 
 
@@ -3590,8 +3591,6 @@ def dify_sync_schema(request):
         return Response({"error": "Tabela Dify não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
     if not item:
         return Response({"error": "Agente não encontrado."}, status=status.HTTP_404_NOT_FOUND)
-    # Guardar metadata antes para detectar se houve alteração real
-    schema_before = list((item.metadata or {}).get('input_schema', []))
     schema = _fetch_and_save_input_schema(item)
     # synced=True indica que a chamada ao Dify retornou algum resultado (mesmo vazio)
     # synced=False indica que houve falha (sem api_key, URL inválida, Dify offline)
@@ -3735,8 +3734,13 @@ def dify_test_connection(request):
     base_url = ""
     api_key = ""
 
+    from django.db.utils import ProgrammingError, OperationalError
+
     if catalog_id:
-        item = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
+        try:
+            item = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
+        except (ProgrammingError, OperationalError):
+            return Response({"ok": False, "detail": "Tabela Dify não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         if not item:
             return Response({"ok": False, "detail": "Agente Dify não encontrado para este tenant."}, status=status.HTTP_400_BAD_REQUEST)
         # EC-B11: se o agente não tem public_url, retornar erro explícito ao invés
@@ -3761,7 +3765,10 @@ def dify_test_connection(request):
             )
         api_key = (getattr(item, "api_key_encrypted", "") or "").strip()
     else:
-        settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+        try:
+            settings_obj = DifySettings.objects.filter(tenant=tenant).first()
+        except (ProgrammingError, OperationalError):
+            return Response({"ok": False, "detail": "Tabela Dify não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
         base_url = (getattr(settings_obj, "base_url", "") if settings_obj else "") or ""
         base_url = base_url.strip().rstrip("/")
         # Fallback: API key via billing_tenant_product (Tenant.get_product_api_key)

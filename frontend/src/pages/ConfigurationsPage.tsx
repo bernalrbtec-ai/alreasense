@@ -1731,6 +1731,14 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const closeEditDifyModal = () => {
+    setEditDifyOpen(false)
+    setEditingDifyItemId(null)
+    setEditDifyInputSchema([])
+    setEditDifyDefaultInputs({})
+    setEditDifySyncingSchema(false)
+  }
+
   const openEditDifyItem = (item: DifyCatalogItem) => {
     setEditingDifyItemId(item.id)
     setEditDifyAppId(item.dify_app_id || '')
@@ -1766,15 +1774,19 @@ export default function ConfigurationsPage() {
       if (editDifyApiKey.trim()) {
         payload.api_key = editDifyApiKey.trim()
       }
-      payload.default_inputs = editDifyDefaultInputs
+      // Só envia default_inputs se o usuário tem campos visíveis OU valores já configurados,
+      // evitando apagar dados existentes no banco ao salvar sem ter sincronizado o schema.
+      if (editDifyInputSchema.length > 0 || Object.keys(editDifyDefaultInputs).length > 0) {
+        payload.default_inputs = editDifyDefaultInputs
+      }
       // C15: usar resposta do PATCH diretamente — atualização otimista sem refetch
       const { data: updated } = await api.patch('/ai/dify/catalog/', payload)
       setDifyCatalog(prev => prev.map(x => x.id === editingDifyItemId ? { ...x, ...updated } : x))
       if (updated.input_schema) setEditDifyInputSchema(updated.input_schema)
-      if (updated.default_inputs) setEditDifyDefaultInputs(updated.default_inputs)
+      // Atualiza default_inputs mesmo quando vier {} (vazio intencional)
+      if (updated.default_inputs !== undefined) setEditDifyDefaultInputs(updated.default_inputs)
       showSuccessToast(updated.warning ? `Agente atualizado (⚠️ ${updated.warning})` : 'Agente atualizado')
-      setEditDifyOpen(false)
-      setEditingDifyItemId(null)
+      closeEditDifyModal()
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao salvar agente')
     } finally {
@@ -1789,8 +1801,9 @@ export default function ConfigurationsPage() {
       const schema: DifyInputField[] = data.input_schema || []
       const synced: boolean = data.synced !== false
       setEditDifyInputSchema(schema)
-      // Preservar default_inputs existentes — não sobrescrever com o que veio do backend
-      // (o usuário pode ter valores preenchidos que ainda não foram salvos)
+      // Remover chaves órfãs: variáveis que não existem mais no schema novo
+      const validVars = new Set(schema.map((f: DifyInputField) => f.variable))
+      setEditDifyDefaultInputs(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => validVars.has(k))))
       setDifyCatalog(prev => prev.map(x => x.id === catalogId ? { ...x, input_schema: schema } : x))
       if (!synced) {
         showErrorToast('Não foi possível contactar o Dify. Verifique a URL e a API key.')
@@ -3247,7 +3260,7 @@ export default function ConfigurationsPage() {
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
                   className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-                  onClick={() => setEditDifyOpen(false)}
+                  onClick={() => closeEditDifyModal()}
                   role="dialog"
                   aria-modal="true"
                 >
@@ -3262,7 +3275,7 @@ export default function ConfigurationsPage() {
                     <Card className="flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden">
                       <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 shrink-0">
                         <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar agente</h2>
-                        <button type="button" onClick={() => setEditDifyOpen(false)} className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
+                        <button type="button" onClick={() => closeEditDifyModal()} className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
                       </div>
                       <div className="overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
                         <div>
@@ -3333,7 +3346,7 @@ export default function ConfigurationsPage() {
                               variant="outline"
                               size="sm"
                               onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
-                              disabled={editDifySyncingSchema}
+                              disabled={editDifySyncingSchema || !!difySavingKey}
                               className="shrink-0 text-xs"
                             >
                               {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
@@ -3369,15 +3382,24 @@ export default function ConfigurationsPage() {
                                       <textarea
                                         value={editDifyDefaultInputs[field.variable] ?? ''}
                                         onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        placeholder={`Ex: {{contact_name}}`}
+                                        placeholder="Ex: {{contact_name}}"
                                         rows={2}
                                         className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-y"
                                       />
-                                    ) : (
+                                    ) : field.type === 'number' ? (
                                       <Input
+                                        type="number"
                                         value={editDifyDefaultInputs[field.variable] ?? ''}
                                         onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        placeholder={`Ex: {{contact_name}}`}
+                                        placeholder="Ex: 30"
+                                      />
+                                    ) : (
+                                      <Input
+                                        type="text"
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        placeholder="Ex: {{contact_name}}"
+                                        maxLength={field.max_length}
                                       />
                                     )}
                                   </div>
@@ -3399,7 +3421,7 @@ export default function ConfigurationsPage() {
                         <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="ml-auto text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
                           {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => setEditDifyOpen(false)}>Cancelar</Button>
+                        <Button type="button" variant="outline" onClick={() => closeEditDifyModal()}>Cancelar</Button>
                       </div>
                     </Card>
                   </motion.div>

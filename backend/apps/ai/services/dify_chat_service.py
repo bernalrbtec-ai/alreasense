@@ -41,8 +41,9 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
     Substitui variáveis dinâmicas nos valores de raw_inputs usando os dados da conversation.
     Suporta múltiplos placeholders no mesmo valor de string.
     Valores não-string são passados sem modificação.
+    Ignora raw_inputs que não seja dict (proteção contra dados corrompidos).
     """
-    if not raw_inputs:
+    if not raw_inputs or not isinstance(raw_inputs, dict):
         return {}
     resolved = {}
     for key, value in raw_inputs.items():
@@ -122,7 +123,10 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
                 conversation_id
             )
     except Exception as exc:
-        logger.warning("_get_active_dify_state error: %s", exc)
+        logger.error(
+            "❌ [DIFY] _get_active_dify_state erro de banco para conversa %s: %s",
+            conversation_id, exc, exc_info=True
+        )
     return None
 
 
@@ -143,6 +147,13 @@ def _update_dify_conversation_id(state_id: str, dify_conversation_id: str, tenan
                 "WHERE id = %s AND tenant_id = %s",
                 [dify_conversation_id, state_id, tenant_id]
             )
+            if cur.rowcount == 0:
+                logger.warning(
+                    "⚠️ [DIFY] _update_dify_conversation_id: nenhuma linha atualizada "
+                    "(state_id=%s tenant=%s) — estado pode ter sido removido entre as fases.",
+                    state_id, tenant_id
+                )
+                return False
         return True
     except Exception as exc:
         logger.error(
@@ -180,7 +191,7 @@ def maybe_handle_dify_takeover(
     logger.info("🤖 [DIFY] maybe_handle_dify_takeover → conversa=%s tenant=%s", conv_id, tenant_id)
 
     # Validações rápidas antes de qualquer I/O
-    msg_content = (message.content or '').strip()
+    msg_content = str(message.content or '').strip()
     if not msg_content:
         logger.info("🤖 [DIFY] Mensagem vazia — ignorando conversa=%s", conv_id)
         return False
@@ -326,7 +337,7 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
         agent_id, url, payload.get('user'), payload.get('conversation_id', '(nova)'), len(api_key)
     )
     try:
-        with httpx.Client(timeout=60) as client:
+        with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=55.0, write=10.0, pool=5.0)) as client:
             resp = client.post(
                 url,
                 json=payload,
