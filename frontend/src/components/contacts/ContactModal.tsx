@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useRef, useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { PhoneInputWithDDD } from '../PhoneInputWithDDD'
@@ -63,6 +63,7 @@ export default function ContactModal({
   onSuccess,
   overlayClassName
 }: ContactModalProps) {
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
@@ -81,6 +82,18 @@ export default function ContactModal({
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#3b82f6')
   const [isLoading, setIsLoading] = useState(false)
+  const [touched, setTouched] = useState<{ name?: boolean; phone?: boolean; email?: boolean }>({})
+
+  const errors = useMemo(() => {
+    const out: Record<string, string> = {}
+    if (!(formData.name || '').trim()) out.name = 'Informe o nome.'
+    if (!(formData.phone || '').trim()) out.phone = 'Informe o telefone.'
+    else if (!isValidE164(formData.phone)) out.phone = 'Telefone inválido. Selecione país e DDD e digite o número.'
+    if ((formData.email || '').trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((formData.email || '').trim())) {
+      out.email = 'E-mail inválido.'
+    }
+    return out
+  }, [formData.name, formData.phone, formData.email])
 
   // Carregar tags ao abrir modal
   useEffect(() => {
@@ -124,6 +137,9 @@ export default function ContactModal({
           tag_ids: []
         })
       }
+      setTouched({})
+      // Foco no nome melhora velocidade de cadastro
+      setTimeout(() => nameInputRef.current?.focus(), 50)
     }
   }, [isOpen, contact, initialPhone, initialName])
 
@@ -165,10 +181,12 @@ export default function ContactModal({
     
     if (!formData.name.trim()) {
       showErrorToast('salvar', 'Contato', { message: 'Nome é obrigatório' })
+      setTouched((t) => ({ ...t, name: true }))
       return
     }
     if (!formData.phone.trim() || !isValidE164(formData.phone)) {
       showErrorToast('salvar', 'Contato', { message: 'Informe o telefone com país, DDD e número no formato internacional' })
+      setTouched((t) => ({ ...t, phone: true }))
       return
     }
 
@@ -220,6 +238,7 @@ export default function ContactModal({
     })
     setNewTagName('')
     setNewTagColor('#3b82f6')
+    setTouched({})
     onClose()
   }
 
@@ -269,7 +288,7 @@ export default function ContactModal({
               </div>
             )}
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Nome *
@@ -277,10 +296,16 @@ export default function ContactModal({
                 <input
                   type="text"
                   required
+                  ref={nameInputRef}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                  aria-invalid={!!(touched.name && errors.name)}
                   className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
+                {touched.name && errors.name ? (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.name}</p>
+                ) : null}
               </div>
 
               <div>
@@ -293,7 +318,18 @@ export default function ContactModal({
                   defaultDdd="17"
                   required
                   placeholder="99999-9999"
+                  inputClassName={touched.phone && errors.phone ? 'border-red-500 focus:ring-red-500' : undefined}
                 />
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  {touched.phone && errors.phone ? (
+                    <p className="text-xs text-red-600 dark:text-red-400">{errors.phone}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Selecione país e DDD. Digite só os números.</p>
+                  )}
+                  {(formData.phone || '').trim() ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{formData.phone}</p>
+                  ) : null}
+                </div>
               </div>
 
               <div>
@@ -304,8 +340,13 @@ export default function ContactModal({
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                  aria-invalid={!!(touched.email && errors.email)}
                   className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
+                {touched.email && errors.email ? (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email}</p>
+                ) : null}
               </div>
 
               <div>
@@ -336,14 +377,18 @@ export default function ContactModal({
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Estado
                 </label>
-                <input
-                  type="text"
-                  maxLength={2}
+                <select
                   value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
-                  placeholder="SP"
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                  className="w-full rounded-md border border-border bg-background text-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                >
+                  <option value="">Selecione</option>
+                  {[
+                    'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+                  ].map((uf) => (
+                    <option key={uf} value={uf}>{uf}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -448,7 +493,7 @@ export default function ContactModal({
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-4 border-t border-border">
               <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
                 Cancelar
               </Button>
