@@ -1287,7 +1287,7 @@ export function ChatWindow() {
                 }`}
               >
                 <Bot className="w-4 h-4" />
-                Agentes Dify
+                Agentes
                 {difyActiveState?.status === 'active' && (
                   <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Agente ativo" />
                 )}
@@ -1387,7 +1387,7 @@ export function ChatWindow() {
               </>
             )}
 
-            {/* Tab: Agentes Dify */}
+            {/* Tab: Agentes */}
             {startFlowModalTab === 'dify' && (
               <>
                 <div className="p-5 overflow-y-auto flex-1">
@@ -1438,7 +1438,7 @@ export function ChatWindow() {
                     </div>
                   ) : difyAgents.length === 0 ? (
                     <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
-                      <p>Nenhum agente Dify cadastrado.</p>
+                      <p>Nenhum agente cadastrado.</p>
                       <p className="text-xs">Em <strong>Configurações &gt; IA &gt; Dify</strong>, cadastre um agente para usar aqui.</p>
                     </div>
                   ) : (
@@ -1454,12 +1454,12 @@ export function ChatWindow() {
                               onChange={() => setSelectedDifyAgentId(a.id)}
                               className="mt-1"
                             />
+                            <Bot className="w-4 h-4 shrink-0 text-gray-500 dark:text-gray-400" />
                             <div className="flex-1 min-w-0">
                               <span className="font-medium text-gray-900 dark:text-gray-100">{a.display_name}</span>
                               {a.description && (
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{a.description}</p>
                               )}
-                              <p className="text-xs font-mono text-gray-400 dark:text-gray-500 mt-0.5">{a.dify_app_id}</p>
                             </div>
                           </label>
                         </li>
