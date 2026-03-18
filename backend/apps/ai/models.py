@@ -465,6 +465,8 @@ class DifyAppCatalogItem(models.Model):
     # Instância WhatsApp preferencial para este agente (opcional)
     whatsapp_instance_id = models.UUIDField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
+    # Valores padrão dos campos de entrada; suporta variáveis {{contact_name}}, etc.
+    default_inputs = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

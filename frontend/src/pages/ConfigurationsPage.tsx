@@ -223,6 +223,16 @@ interface AiSettings {
   n8n_models_webhook_url: string
 }
 
+interface DifyInputField {
+  type: 'text-input' | 'paragraph' | 'select' | 'number' | string
+  label: string
+  variable: string
+  required: boolean
+  max_length?: number
+  options?: string[]
+  default?: string
+}
+
 interface DifyCatalogItem {
   id: string
   dify_app_id: string
@@ -233,6 +243,8 @@ interface DifyCatalogItem {
   has_api_key?: boolean
   default_department_id?: string | null
   whatsapp_instance_id?: string | null
+  input_schema?: DifyInputField[]
+  default_inputs?: Record<string, string>
 }
 
 interface DifyWaInstance {
@@ -361,6 +373,9 @@ export default function ConfigurationsPage() {
   const [editDifyHasApiKey, setEditDifyHasApiKey] = useState(false)
   const [editDifyDefaultDepartmentId, setEditDifyDefaultDepartmentId] = useState<string>('')
   const [editDifyWaInstanceId, setEditDifyWaInstanceId] = useState<string>('')
+  const [editDifyInputSchema, setEditDifyInputSchema] = useState<DifyInputField[]>([])
+  const [editDifyDefaultInputs, setEditDifyDefaultInputs] = useState<Record<string, string>>({})
+  const [editDifySyncingSchema, setEditDifySyncingSchema] = useState(false)
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -1726,6 +1741,8 @@ export default function ConfigurationsPage() {
     setEditDifyApiKey('')
     setEditDifyDefaultDepartmentId(item.default_department_id || '')
     setEditDifyWaInstanceId(item.whatsapp_instance_id || '')
+    setEditDifyInputSchema(item.input_schema || [])
+    setEditDifyDefaultInputs(item.default_inputs || {})
     setEditDifyOpen(true)
   }
 
@@ -1748,9 +1765,12 @@ export default function ConfigurationsPage() {
       if (editDifyApiKey.trim()) {
         payload.api_key = editDifyApiKey.trim()
       }
+      payload.default_inputs = editDifyDefaultInputs
       // C15: usar resposta do PATCH diretamente — atualização otimista sem refetch
       const { data: updated } = await api.patch('/ai/dify/catalog/', payload)
       setDifyCatalog(prev => prev.map(x => x.id === editingDifyItemId ? { ...x, ...updated } : x))
+      if (updated.input_schema) setEditDifyInputSchema(updated.input_schema)
+      if (updated.default_inputs) setEditDifyDefaultInputs(updated.default_inputs)
       showSuccessToast(updated.warning ? `Agente atualizado (⚠️ ${updated.warning})` : 'Agente atualizado')
       setEditDifyOpen(false)
       setEditingDifyItemId(null)
@@ -1758,6 +1778,21 @@ export default function ConfigurationsPage() {
       showErrorToast(e.response?.data?.error || 'Erro ao salvar agente')
     } finally {
       setDifySavingKey(null)
+    }
+  }
+
+  const syncDifySchema = async (catalogId: string) => {
+    setEditDifySyncingSchema(true)
+    try {
+      const { data } = await api.post('/ai/dify/catalog/sync-schema/', { catalog_id: catalogId })
+      const schema: DifyInputField[] = data.input_schema || []
+      setEditDifyInputSchema(schema)
+      setDifyCatalog(prev => prev.map(x => x.id === catalogId ? { ...x, input_schema: schema } : x))
+      showSuccessToast(schema.length > 0 ? `${schema.length} campo(s) sincronizado(s)` : 'Nenhum campo encontrado no agente Dify')
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao sincronizar schema')
+    } finally {
+      setEditDifySyncingSchema(false)
     }
   }
 
@@ -3272,6 +3307,74 @@ export default function ConfigurationsPage() {
                             ))}
                           </select>
                           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o agente envia.</p>
+                        </div>
+
+                        {/* Parâmetros de entrada */}
+                        <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Parâmetros de entrada</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Campos do agente Dify. Use variáveis: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_phone}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{conversation_id}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{department_name}}'}</code>
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
+                              disabled={editDifySyncingSchema}
+                              className="shrink-0 text-xs"
+                            >
+                              {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
+                            </Button>
+                          </div>
+                          {editDifyInputSchema.length === 0 ? (
+                            <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                              Nenhum campo detectado. Clique em "Sincronizar campos" para buscar os inputs do agente Dify.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {editDifyInputSchema.map((field) => {
+                                const fieldLabel = (typeof field.label === 'object' && field.label !== null)
+                                  ? ((field.label as any)['en-US'] || (field.label as any)['pt-BR'] || Object.values(field.label as any)[0] || field.variable)
+                                  : (field.label || field.variable)
+                                return (
+                                  <div key={field.variable}>
+                                    <Label>
+                                      {fieldLabel}
+                                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                                      <span className="ml-1 text-gray-400 dark:text-gray-500 font-normal text-xs">({field.variable})</span>
+                                    </Label>
+                                    {field.type === 'select' && field.options ? (
+                                      <select
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                                      >
+                                        <option value="">-- selecione --</option>
+                                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                      </select>
+                                    ) : field.type === 'paragraph' ? (
+                                      <textarea
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        placeholder={`Ex: {{contact_name}}`}
+                                        rows={2}
+                                        className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-y"
+                                      />
+                                    ) : (
+                                      <Input
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        placeholder={`Ex: {{contact_name}}`}
+                                      />
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">

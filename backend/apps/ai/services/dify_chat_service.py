@@ -25,6 +25,41 @@ class DifyMessageStub:
     content: str
 
 
+_DIFY_VAR_RESOLVERS: dict = {
+    '{{contact_name}}': lambda conv: getattr(conv, 'contact_name', '') or '',
+    '{{contact_phone}}': lambda conv: getattr(conv, 'contact_phone', '') or '',
+    '{{conversation_id}}': lambda conv: str(conv.id),
+    '{{department_name}}': lambda conv: (
+        getattr(conv, 'department_name', '') or
+        (getattr(conv, 'department', None) and getattr(conv.department, 'name', '')) or ''
+    ),
+}
+
+
+def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
+    """
+    Substitui variáveis dinâmicas nos valores de raw_inputs usando os dados da conversation.
+    Suporta múltiplos placeholders no mesmo valor de string.
+    Valores não-string são passados sem modificação.
+    """
+    if not raw_inputs:
+        return {}
+    resolved = {}
+    for key, value in raw_inputs.items():
+        if not isinstance(value, str):
+            resolved[key] = value
+            continue
+        result = value
+        for placeholder, resolver in _DIFY_VAR_RESOLVERS.items():
+            if placeholder in result:
+                try:
+                    result = result.replace(placeholder, str(resolver(conversation)))
+                except Exception:
+                    result = result.replace(placeholder, '')
+        resolved[key] = result
+    return resolved
+
+
 def _extract_dify_base_url(public_url: str) -> str:
     """
     Extrai a base URL da URL pública do agente Dify.
@@ -201,8 +236,11 @@ def maybe_handle_dify_takeover(
         return False
 
     # ── Fase 3: chamada HTTP ao Dify ─────────────────────────────────────────────
+    resolved = _resolve_inputs(getattr(agent, 'default_inputs', None) or {}, conversation)
+    if resolved:
+        logger.info("🤖 [DIFY] Inputs resolvidos (%d campos) para conversa=%s", len(resolved), conv_id)
     payload: dict = {
-        'inputs': {},
+        'inputs': resolved,
         'query': msg_content,
         'response_mode': 'blocking',
         'user': f"sense-{conv_id}",

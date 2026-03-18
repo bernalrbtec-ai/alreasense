@@ -3120,6 +3120,51 @@ def agent_assignment_delete(request, assignment_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def _fetch_and_save_input_schema(item) -> list:
+    """
+    Busca user_input_form do agente Dify via GET /v1/parameters e salva em metadata['input_schema'].
+    Falha silenciosamente (log warning) para nunca bloquear o cadastro.
+    Retorna a lista de campos obtida, ou [] em caso de erro/ausência.
+    """
+    import httpx as _httpx
+    from urllib.parse import urlparse as _urlparse
+    try:
+        parsed = _urlparse(item.public_url or '')
+        if not (parsed.scheme and parsed.netloc):
+            return []
+        base_url = f"{parsed.scheme}://{parsed.netloc}"
+        api_key = (getattr(item, 'api_key_encrypted', '') or '').strip()
+        if not api_key:
+            return []
+        with _httpx.Client(timeout=10) as client:
+            resp = client.get(
+                f"{base_url}/v1/parameters",
+                headers={'Authorization': f'Bearer {api_key}'},
+            )
+        if resp.status_code != 200:
+            logger.warning(
+                "_fetch_and_save_input_schema: status %s para agente %s — schema nao sincronizado",
+                resp.status_code, getattr(item, 'id', '?')
+            )
+            return []
+        schema = resp.json().get('user_input_form', [])
+        meta = dict(item.metadata or {})
+        meta['input_schema'] = schema
+        item.metadata = meta
+        item.save(update_fields=['metadata', 'updated_at'])
+        logger.info(
+            "_fetch_and_save_input_schema: %d campos sincronizados para agente %s",
+            len(schema), getattr(item, 'id', '?')
+        )
+        return schema
+    except Exception as exc:
+        logger.warning(
+            "_fetch_and_save_input_schema falhou para agente %s: %s",
+            getattr(item, 'id', '?'), exc
+        )
+        return []
+
+
 def _dify_audit(
     tenant,
     user,
@@ -3230,6 +3275,8 @@ def dify_catalog(request):
                         "default_department_id": str(it.default_department_id) if it.default_department_id else None,
                         "whatsapp_instance_id": str(it.whatsapp_instance_id) if getattr(it, "whatsapp_instance_id", None) else None,
                         "metadata": it.metadata or {},
+                        "input_schema": (it.metadata or {}).get('input_schema', []),
+                        "default_inputs": it.default_inputs if hasattr(it, 'default_inputs') else {},
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
                     }
@@ -3338,6 +3385,8 @@ def dify_catalog(request):
                 "default_department_id": str(dept_uuid) if dept_uuid else None,
             },
         )
+        # Sincronizar schema de inputs do Dify (silencioso — nao bloqueia o cadastro)
+        _post_input_schema = _fetch_and_save_input_schema(item)
         resp_data = {
             "id": str(item.id),
             "dify_app_id": item.dify_app_id,
@@ -3349,6 +3398,8 @@ def dify_catalog(request):
             "default_department_id": str(item.default_department_id) if item.default_department_id else None,
             "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
             "metadata": item.metadata or {},
+            "input_schema": _post_input_schema,
+            "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
         }
         if _binding_warning:
             resp_data["warning"] = _binding_warning
@@ -3416,6 +3467,13 @@ def dify_catalog(request):
         # Só atualiza a chave se vier uma string não-vazia (evita apagar chave existente)
         item.api_key_encrypted = str(api_key_raw).strip()
         patch_fields.append("api_key_encrypted")
+    # default_inputs: aceita qualquer dict; ignora se não enviado
+    if "default_inputs" in data:
+        raw_di = data.get("default_inputs")
+        if isinstance(raw_di, dict):
+            item.default_inputs = raw_di
+            if 'default_inputs' not in patch_fields:
+                patch_fields.append("default_inputs")
     item.updated_at = timezone.now()
     item.save(update_fields=patch_fields)
 
@@ -3449,6 +3507,12 @@ def dify_catalog(request):
         catalog_id=item.id,
         payload={"display_name": item.display_name, "is_active": bool(item.is_active)},
     )
+    # Re-sincronizar schema quando public_url ou api_key forem alterados
+    _patch_resync = "public_url" in data or (api_key_raw is not None and str(api_key_raw).strip())
+    if _patch_resync:
+        _patch_input_schema = _fetch_and_save_input_schema(item)
+    else:
+        _patch_input_schema = (item.metadata or {}).get('input_schema', [])
     patch_resp = {
         "id": str(item.id),
         "dify_app_id": item.dify_app_id,
@@ -3460,10 +3524,38 @@ def dify_catalog(request):
         "default_department_id": str(item.default_department_id) if item.default_department_id else None,
         "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
         "metadata": item.metadata or {},
+        "input_schema": _patch_input_schema,
+        "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
     }
     if _patch_binding_warning:
         patch_resp["warning"] = _patch_binding_warning
     return Response(patch_resp)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def dify_sync_schema(request):
+    """
+    POST /ai/dify/catalog/sync-schema/
+    Body: { "catalog_id": "<uuid>" }
+    Re-sincroniza o schema de inputs do agente Dify via /v1/parameters.
+    Retorna { "input_schema": [...], "synced": true/false }.
+    """
+    from django.db.utils import ProgrammingError, OperationalError
+
+    tenant = request.user.tenant
+    data = request.data or {}
+    catalog_id = _parse_uuid(data.get("catalog_id"))
+    if not catalog_id:
+        return Response({"error": "catalog_id (UUID) é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        item = DifyAppCatalogItem.objects.filter(id=catalog_id, tenant=tenant).first()
+    except (ProgrammingError, OperationalError):
+        return Response({"error": "Tabela Dify não disponível."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    if not item:
+        return Response({"error": "Agente não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+    schema = _fetch_and_save_input_schema(item)
+    return Response({"input_schema": schema, "synced": True})
 
 
 @api_view(["GET", "PUT"])
