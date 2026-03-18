@@ -4161,7 +4161,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     "SELECT s.catalog_id, s.dify_conversation_id, s.status, "
                     "COALESCE(c.display_name, c.dify_app_id, '') "
                     "FROM ai_dify_conversation_state s "
-                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id "
+                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id AND c.tenant_id = s.tenant_id "
                     "WHERE s.conversation_id = %s AND s.tenant_id = %s AND s.status = 'active' LIMIT 1",
                     [str(conversation.id), str(tenant.id)]
                 )
@@ -4296,9 +4296,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             from django.db import connection as _conn
             with _conn.cursor() as cur:
                 cur.execute(
+                    # Dupla garantia de tenant: s.tenant_id = %s (estado) e c.tenant_id = %s (catálogo)
+                    # Isso impede que um catalog_id de outro tenant apareça como display_name
                     "SELECT s.conversation_id, COALESCE(c.display_name, c.dify_app_id, 'Agente IA') "
                     "FROM ai_dify_conversation_state s "
-                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id "
+                    "LEFT JOIN ai_dify_app_catalog c ON c.id = s.catalog_id AND c.tenant_id = s.tenant_id "
                     "WHERE s.tenant_id = %s AND s.status = 'active'",
                     [str(tenant.id)]
                 )

@@ -87,20 +87,22 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
     return None
 
 
-def _update_dify_conversation_id(state_id: str, dify_conversation_id: str) -> bool:
+def _update_dify_conversation_id(state_id: str, dify_conversation_id: str, tenant_id: str) -> bool:
     """
     Persiste o dify_conversation_id para manter continuidade da sessão.
+    Filtra por tenant_id além de state_id para garantir isolamento entre tenants.
     Retorna True se bem-sucedido.
     """
     from django.db import transaction
     try:
         # C2: transaction.atomic() garante commit explícito
+        # Isolamento: WHERE id AND tenant_id evita que um state_id de outro tenant seja atualizado
         with transaction.atomic(), _conn.cursor() as cur:
             cur.execute(
                 "UPDATE ai_dify_conversation_state "
                 "SET dify_conversation_id = %s, updated_at = now() "
-                "WHERE id = %s",
-                [dify_conversation_id, state_id]
+                "WHERE id = %s AND tenant_id = %s",
+                [dify_conversation_id, state_id, tenant_id]
             )
         return True
     except Exception as exc:
@@ -214,7 +216,7 @@ def maybe_handle_dify_takeover(
 
     # ── Fase 4: persistir dify_conversation_id (transaction curta) ───────────────
     if new_dify_conv_id and new_dify_conv_id != prev_dify_conv_id:
-        _update_dify_conversation_id(state_id, new_dify_conv_id)
+        _update_dify_conversation_id(state_id, new_dify_conv_id, tenant_id)
 
     if not dify_answer:
         logger.warning(
