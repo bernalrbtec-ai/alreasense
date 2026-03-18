@@ -59,13 +59,21 @@ function normalizeMessageId(id: string | undefined | null): string {
 
 const TRANSFER_PREFIX = 'Conversa transferida:';
 
-/** Extrai linhas "De:" e "Para:" de texto de transferência */
-function parseTransferLines(content: string): { de: string; para: string } {
+const MAX_TRANSFER_RESUMO_DISPLAY = 500;
+
+/** Extrai linhas "De:", "Para:" e "Resumo:" de texto de transferência */
+function parseTransferLines(content: string): { de: string; para: string; resumo: string } {
   const deMatch = content.match(/De:\s*(.+?)(?=\n|$)/i);
   const paraMatch = content.match(/Para:\s*(.+?)(?=\n|$)/i);
+  const resumoMatch = content.match(/Resumo:\s*([\s\S]*)$/im);
+  let resumo = resumoMatch ? resumoMatch[1].trim() : '';
+  if (resumo.length > MAX_TRANSFER_RESUMO_DISPLAY) {
+    resumo = resumo.slice(0, MAX_TRANSFER_RESUMO_DISPLAY) + '…';
+  }
   return {
     de: deMatch ? deMatch[1].trim() : '',
     para: paraMatch ? paraMatch[1].trim() : '',
+    resumo,
   };
 }
 
@@ -96,9 +104,10 @@ function buildDisplayItems(messages: Message[]): Array<{ type: 'message'; messag
     }
     const first = parseTransferLines(group[0].content || '');
     const last = parseTransferLines(group[group.length - 1].content || '');
+    const resumo = first.resumo || last.resumo || '';
     const hasValidMerge = first.de !== '' || last.para !== '';
     const mergedContent = hasValidMerge
-      ? `${TRANSFER_PREFIX}\nDe: ${first.de}\nPara: ${last.para}`
+      ? `${TRANSFER_PREFIX}\nDe: ${first.de}\nPara: ${last.para}${resumo ? `\nResumo: ${resumo}` : ''}`
       : (group[0].content || TRANSFER_PREFIX);
     items.push({ type: 'transfer_merged', messages: group, mergedContent });
     i++;

@@ -4,6 +4,7 @@ Controle universal de automações por instruções embutidas em texto.
 Formato suportado:
   #{"closeTicket": true}
   #{"transferTo": "Departamento"}
+  #{"transferTo": "Departamento", "summary": "opcional"}  (ou "resumo")
 
 Objetivo:
 - Reaproveitar o mesmo parser/ações para múltiplos motores (Typebot, Dify, etc.)
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any, Iterable
 
 from django.db import transaction
@@ -29,6 +31,9 @@ MAX_INSTRUCTION_JSON_LENGTH = 500
 # Chaves reconhecidas no JSON da instrução
 CLOSE_KEYS = ("closeTicket", "encerrar", "closeConversation")
 TRANSFER_KEYS = ("transferTo", "transferToDepartment")
+
+# Limite do resumo na mensagem interna de transferência (evita payloads enormes)
+MAX_TRANSFER_SUMMARY_LENGTH = 500
 
 
 def _find_matching_brace(text: str, open_pos: int) -> int:
@@ -109,8 +114,29 @@ def close_conversation_from_bot(conversation: Conversation, source: str = "bot")
         return False
 
 
-def transfer_conversation_to_department(conversation: Conversation, department_name: str, source: str = "bot") -> bool:
-    """Transfere conversa para o departamento identificado pelo nome (tenant + name__iexact)."""
+def _normalize_transfer_summary(raw: str | None) -> str | None:
+    """Normaliza o resumo para exibição na mensagem interna: uma linha, truncado. Retorna None se vazio."""
+    if raw is None:
+        return None
+    s = (raw if isinstance(raw, str) else str(raw)).strip()
+    if not s:
+        return None
+    # Remove null bytes e caracteres de controle (evita quebra de exibição/DB)
+    s = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", s)
+    s = re.sub(r"[\r\n]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    if not s:
+        return None
+    return s[:MAX_TRANSFER_SUMMARY_LENGTH] if len(s) > MAX_TRANSFER_SUMMARY_LENGTH else s
+
+
+def transfer_conversation_to_department(
+    conversation: Conversation,
+    department_name: str,
+    source: str = "bot",
+    summary: str | None = None,
+) -> bool:
+    """Transfere conversa para o departamento identificado pelo nome (tenant + name__iexact). Opcional: summary para a mensagem interna."""
     if not conversation or not getattr(conversation, "tenant_id", None):
         return False
     name = (department_name if isinstance(department_name, str) else str(department_name)).strip()
@@ -148,6 +174,9 @@ def transfer_conversation_to_department(conversation: Conversation, department_n
             f"Para: {dept.name} (Não atribuído)\n"
             f"(por {(source or 'bot').capitalize()})"
         )
+        summary_normalized = _normalize_transfer_summary(summary)
+        if summary_normalized:
+            transfer_msg = f"{transfer_msg}\nResumo: {summary_normalized}"
         Message.objects.create(
             conversation=conversation,
             sender=None,
@@ -284,7 +313,13 @@ def process_bot_control_instruction_single(
                     meta["recognized"] = True
                     meta["transferred"] = True
                     meta["transfer_to"] = name
-                    transfer_conversation_to_department(conversation, name, source=source)
+                    summary_raw = obj.get("summary") or obj.get("resumo")
+                    summary_val = None
+                    if summary_raw is not None and isinstance(summary_raw, (str, int, float, bool)):
+                        s = (summary_raw if isinstance(summary_raw, str) else str(summary_raw)).strip()
+                        if s:
+                            summary_val = s
+                    transfer_conversation_to_department(conversation, name, source=source, summary=summary_val)
                 before = cleaned[:idx].rstrip()
                 after = cleaned[pos:].lstrip()
                 cleaned = f"{before}\n{after}".strip() if before and after else (before or after)
