@@ -23,10 +23,13 @@ export const VALUE_OTHER_DDD = '__outro__'
 /** Converte valor E.164 (+5517999999999) em { ddd, number } (só dígitos no number). */
 export function parseE164ToDDDAndNumber(e164: string): { ddd: string; number: string } {
   const digits = (e164 || '').replace(/\D/g, '')
-  if (digits.startsWith('55') && digits.length >= 12) {
-    const ddd = digits.slice(2, 4)
-    const number = digits.slice(4)
-    return { ddd, number }
+  // Se já começa com o código do país 55, sempre interprete como:
+  // 55 + DDD(2) + número (mesmo que ainda esteja incompleto enquanto digita).
+  // Isso evita o bug de tratar "55" como DDD quando o número está parcial.
+  if (digits.startsWith('55')) {
+    const ddd = digits.length >= 4 ? digits.slice(2, 4) : DEFAULT_DDD
+    const number = digits.length > 4 ? digits.slice(4) : ''
+    return { ddd: ddd || DEFAULT_DDD, number }
   }
   if (digits.length >= 10) {
     const ddd = digits.slice(0, 2)

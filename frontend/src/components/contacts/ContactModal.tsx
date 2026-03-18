@@ -310,6 +310,23 @@ export default function ContactModal({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onBlur={() => setTouched((t) => ({ ...t, email: true }))}
+                  aria-invalid={!!(touched.email && errors.email)}
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                />
+                {touched.email && errors.email ? (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email}</p>
+                ) : null}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Telefone *
                 </label>
                 <PhoneInputWithDDD
@@ -330,23 +347,6 @@ export default function ContactModal({
                     <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">{formData.phone}</p>
                   ) : null}
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  onBlur={() => setTouched((t) => ({ ...t, email: true }))}
-                  aria-invalid={!!(touched.email && errors.email)}
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
-                {touched.email && errors.email ? (
-                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email}</p>
-                ) : null}
               </div>
 
               <div>
