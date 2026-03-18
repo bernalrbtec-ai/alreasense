@@ -42,7 +42,7 @@ interface MessageInputProps {
 }
 
 export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendMessageWithContacts, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
-  const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
+  const { activeConversation, replyToMessage, clearReply, addMessage, difyActiveConversations } = useChatStore();
   const { user } = useAuthStore();
   const allowMetaInteractiveButtons = user?.allow_meta_interactive_buttons !== false;
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
@@ -52,6 +52,16 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
   const [message, setMessage] = useState('');
   const [mentions, setMentions] = useState<string[]>([]); // ✅ NOVO: Lista de números mencionados
   const [sending, setSending] = useState(false);
+  const [showAutomationStopConfirm, setShowAutomationStopConfirm] = useState(false);
+  const [pendingSendPayload, setPendingSendPayload] = useState<{
+    content: string;
+    includeSignature: boolean;
+    isInternal: boolean;
+    replyToMessageId?: string;
+    mentions?: string[];
+    mentionEveryone?: boolean;
+  } | null>(null);
+  const pendingAutomationActionRef = useRef<null | (() => Promise<void>)>(null);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -191,6 +201,52 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       });
     }
   }, [message, mentions, conversationId]);
+
+  const activeDifyName = conversationId ? difyActiveConversations?.[String(conversationId)] : undefined;
+
+  const stopDifyIfActive = useCallback(async () => {
+    if (!conversationId) return;
+    if (!activeDifyName) return;
+    try {
+      await api.post(`/chat/conversations/${conversationId}/stop-dify-agent/`);
+    } catch {
+      // best-effort: backend também para no outgoing, aqui é UX
+    }
+  }, [conversationId, activeDifyName]);
+
+  const requestActionWithAutomationGuard = useCallback((action: () => Promise<void>) => {
+    if (activeDifyName) {
+      pendingAutomationActionRef.current = action;
+      setPendingSendPayload(null);
+      setShowAutomationStopConfirm(true);
+      return;
+    }
+    void action();
+  }, [activeDifyName]);
+
+  const requestSendWithAutomationGuard = useCallback((payload: {
+    content: string;
+    includeSignature: boolean;
+    isInternal: boolean;
+    replyToMessageId?: string;
+    mentions?: string[];
+    mentionEveryone?: boolean;
+  }) => {
+    if (activeDifyName) {
+      setPendingSendPayload(payload);
+      pendingAutomationActionRef.current = null;
+      setShowAutomationStopConfirm(true);
+      return false;
+    }
+    return sendMessage(
+      payload.content,
+      payload.includeSignature,
+      payload.isInternal,
+      payload.replyToMessageId,
+      payload.mentions,
+      payload.mentionEveryone,
+    );
+  }, [activeDifyName, sendMessage]);
 
   // Limpar timeout de digitando ao desmontar
   useEffect(() => {
@@ -337,6 +393,26 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
       if (hasFiles) {
+        if (activeDifyName) {
+          const caption = hasText ? message.trim() : '';
+          const files = [...selectedFiles];
+          requestActionWithAutomationGuard(async () => {
+            await stopDifyIfActive();
+            if (files.length === 1) {
+              await handleFileUpload(files[0], caption);
+            } else {
+              await handleBatchUpload(files, caption);
+            }
+            setSelectedFiles([]);
+            if (replyToMessage) clearReply();
+            if (caption) {
+              setMessage('');
+              setMentions([]);
+              if (conversationId) messageByConversationRef.current.delete(conversationId);
+            }
+          });
+          return;
+        }
         if (selectedFiles.length === 1) {
           await handleFileUpload(selectedFiles[0], hasText ? message.trim() : '');
         } else {
@@ -361,7 +437,14 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         const hasEveryone = /@everyone\b/i.test(messageText);
         const mentionsToSend = activeConversation?.conversation_type === 'group' && (mentions.length > 0 || hasEveryone) ? mentions : undefined;
         const mentionEveryone = activeConversation?.conversation_type === 'group' && hasEveryone;
-        const success = sendMessage(messageText, includeSignature, false, replyToId, mentionsToSend, mentionEveryone);
+        const success = requestSendWithAutomationGuard({
+          content: messageText,
+          includeSignature,
+          isInternal: false,
+          replyToMessageId: replyToId,
+          mentions: mentionsToSend,
+          mentionEveryone,
+        });
         if (success) {
           setMessage('');
           setMentions([]);
@@ -374,6 +457,48 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     } catch (error: any) {
       console.error('Erro ao enviar mensagem/arquivo:', error);
       toast.error('Erro ao enviar');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const confirmStopAutomationAndSend = async () => {
+    const pendingAction = pendingAutomationActionRef.current;
+    if (pendingAction) {
+      setShowAutomationStopConfirm(false);
+      pendingAutomationActionRef.current = null;
+      setPendingSendPayload(null);
+      try {
+        setSending(true);
+        await pendingAction();
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+    const payload = pendingSendPayload;
+    setShowAutomationStopConfirm(false);
+    setPendingSendPayload(null);
+    if (!payload) return;
+    try {
+      setSending(true);
+      await stopDifyIfActive();
+      const ok = sendMessage(
+        payload.content,
+        payload.includeSignature,
+        payload.isInternal,
+        payload.replyToMessageId,
+        payload.mentions,
+        payload.mentionEveryone,
+      );
+      if (ok) {
+        setMessage('');
+        setMentions([]);
+        if (conversationId) messageByConversationRef.current.delete(conversationId);
+        if (replyToMessage) clearReply();
+      } else {
+        toast.error('Erro ao enviar mensagem. WebSocket desconectado.', { duration: 4000, position: 'bottom-right' });
+      }
     } finally {
       setSending(false);
     }
@@ -586,6 +711,61 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
 
   return (
     <>
+    {showAutomationStopConfirm && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+        role="dialog"
+        aria-modal="true"
+        onClick={() => { setShowAutomationStopConfirm(false); setPendingSendPayload(null); }}
+      >
+        <div
+          className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden bg-white dark:bg-gray-800"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <PenTool className="w-5 h-5 text-amber-700 dark:text-amber-300" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">Você vai assumir a conversa</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">O assistente será desativado</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setShowAutomationStopConfirm(false); setPendingSendPayload(null); }}
+              className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              aria-label="Fechar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="px-5 py-4 space-y-3">
+            <p className="text-sm text-gray-700 dark:text-gray-200">
+              Existe um agente ativo nesta conversa (<strong>{activeDifyName}</strong>). Se você enviar a mensagem, o agente/fluxo será desativado por segurança.
+            </p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setShowAutomationStopConfirm(false); setPendingSendPayload(null); }}
+                className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={sending}
+                onClick={() => { void confirmStopAutomationAndSend(); }}
+                className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50"
+              >
+                {sending ? 'Enviando…' : 'Sim, enviar e desativar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="relative">
       {/* ✅ NOVO: Preview de mensagem respondida */}
       {replyToMessage && (
@@ -847,8 +1027,11 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         conversationId={conversationId}
         onSelectTemplate={(templateId, bodyParams) => {
           if (sendMessageAsTemplate) {
-            sendMessageAsTemplate(conversationId, templateId, bodyParams);
-            setShowTemplateModal(false);
+            requestActionWithAutomationGuard(async () => {
+              await stopDifyIfActive();
+              sendMessageAsTemplate(conversationId, templateId, bodyParams);
+              setShowTemplateModal(false);
+            });
           }
         }}
       />
@@ -930,11 +1113,14 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
                   toast.error('Preencha o texto e pelo menos 1 botão com id e título únicos.');
                   return;
                 }
-                sendMessageWithButtons(conversationId, body, list);
-                setShowButtonsModal(false);
-                setButtonsBodyText('');
-                setButtonsList([{ id: 'btn1', title: '' }]);
-                toast.success('Mensagem com botões enviada.');
+                requestActionWithAutomationGuard(async () => {
+                  await stopDifyIfActive();
+                  sendMessageWithButtons(conversationId, body, list);
+                  setShowButtonsModal(false);
+                  setButtonsBodyText('');
+                  setButtonsList([{ id: 'btn1', title: '' }]);
+                  toast.success('Mensagem com botões enviada.');
+                });
               }}
               disabled={!isConnected || !buttonsBodyText.trim() || buttonsList.every(b => !b.title.trim())}
               className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
@@ -1073,15 +1259,18 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
                   return;
                 }
                 const replyToId = replyToMessage?.id ? String(replyToMessage.id) : undefined;
-                sendMessageWithList(conversationId, body, btn, sections, listHeaderText.trim() || undefined, listFooterText.trim() || undefined, replyToId);
-                setShowListModal(false);
-                setListBodyText('');
-                setListButtonText('');
-                setListHeaderText('');
-                setListFooterText('');
-                setListSections([{ title: 'Opções', rows: [{ id: 'opt1', title: '', description: '' }] }]);
-                clearReply();
-                toast.success('Mensagem com lista enviada.');
+                requestActionWithAutomationGuard(async () => {
+                  await stopDifyIfActive();
+                  sendMessageWithList(conversationId, body, btn, sections, listHeaderText.trim() || undefined, listFooterText.trim() || undefined, replyToId);
+                  setShowListModal(false);
+                  setListBodyText('');
+                  setListButtonText('');
+                  setListHeaderText('');
+                  setListFooterText('');
+                  setListSections([{ title: 'Opções', rows: [{ id: 'opt1', title: '', description: '' }] }]);
+                  clearReply();
+                  toast.success('Mensagem com lista enviada.');
+                });
               }}
               disabled={!isConnected || !listBodyText.trim() || !listButtonText.trim() || listSections.every(s => s.rows.every(r => !r.title.trim()))}
               className="px-3 py-1.5 rounded-lg bg-violet-600 text-white disabled:opacity-50"
@@ -1190,17 +1379,20 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
                 if (!toSend || !conversationId) return;
                 setContactSending(true);
                 try {
-                  const ok = sendMessageWithContacts(conversationId, [toSend], replyToId);
-                  if (ok) {
-                    setShowContactModal(false);
-                    setContactSelected(null);
-                    setContactManualName('');
-                    setContactManualPhone('');
-                    clearReply();
-                    toast.success('Contato enviado.');
-                  } else {
-                    toast.error('Não foi possível enviar. Verifique a conexão.');
-                  }
+                  requestActionWithAutomationGuard(async () => {
+                    await stopDifyIfActive();
+                    const ok = sendMessageWithContacts(conversationId, [toSend!], replyToId);
+                    if (ok) {
+                      setShowContactModal(false);
+                      setContactSelected(null);
+                      setContactManualName('');
+                      setContactManualPhone('');
+                      clearReply();
+                      toast.success('Contato enviado.');
+                    } else {
+                      toast.error('Não foi possível enviar. Verifique a conexão.');
+                    }
+                  });
                 } finally {
                   setContactSending(false);
                 }

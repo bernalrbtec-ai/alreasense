@@ -686,23 +686,25 @@ export function ConversationList() {
                   </div>
                 )}
 
-                {/* Aviso: Fulano está atendendo (mostra também no Inbox) */}
-                {conversationItem.assigned_to && activeDepartment?.id !== 'my_conversations' && activeDepartment?.id !== 'groups' && (
-                  <div className="flex items-center gap-1 mb-1">
-                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
-                      👤 {(conversationItem.assigned_to_data?.first_name || conversationItem.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
-                    </span>
-                  </div>
-                )}
-
-                {/* Badge: agente Dify ativo nesta conversa */}
-                {difyActiveConversations[String(conversationItem.id)] && (
+                {/* Badge: agente Dify ativo nesta conversa (prioridade sobre "Fulano está atendendo") */}
+                {difyActiveConversations[String(conversationItem.id)] ? (
                   <div className="flex items-center gap-1 mb-1">
                     <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded text-[10px] font-medium">
                       <Bot className="w-3 h-3" />
-                      {difyActiveConversations[String(conversationItem.id)]}
+                      {difyActiveConversations[String(conversationItem.id)]} está atendendo
                     </span>
                   </div>
+                ) : (
+                  <>
+                    {/* Aviso: Fulano está atendendo (mostra também no Inbox) */}
+                    {conversationItem.assigned_to && activeDepartment?.id !== 'my_conversations' && activeDepartment?.id !== 'groups' && (
+                      <div className="flex items-center gap-1 mb-1">
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
+                          👤 {(conversationItem.assigned_to_data?.first_name || conversationItem.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
+                        </span>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Última mensagem + Badge de não lidas */}

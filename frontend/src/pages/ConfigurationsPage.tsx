@@ -237,6 +237,7 @@ interface DifyCatalogItem {
   id: string
   dify_app_id: string
   display_name: string
+  signature_name?: string
   is_active: boolean
   description?: string
   public_url?: string
@@ -357,6 +358,7 @@ export default function ConfigurationsPage() {
   // Criar agente – modal
   const [difyCreateOpen, setDifyCreateOpen] = useState(false)
   const [newDifyDisplayName, setNewDifyDisplayName] = useState('')
+  const [newDifySignatureName, setNewDifySignatureName] = useState('')
   const [newDifyDescription, setNewDifyDescription] = useState('')
   const [newDifyPublicUrl, setNewDifyPublicUrl] = useState('')
   const [newDifyApiKey, setNewDifyApiKey] = useState('')
@@ -367,6 +369,7 @@ export default function ConfigurationsPage() {
   const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
   const [editDifyAppId, setEditDifyAppId] = useState('')
   const [editDifyDisplayName, setEditDifyDisplayName] = useState('')
+  const [editDifySignatureName, setEditDifySignatureName] = useState('')
   const [editDifyDescription, setEditDifyDescription] = useState('')
   const [editDifyPublicUrl, setEditDifyPublicUrl] = useState('')
   const [editDifyApiKey, setEditDifyApiKey] = useState('')
@@ -1690,6 +1693,7 @@ export default function ConfigurationsPage() {
 
   const createDifyCatalogItem = async () => {
     const display_name = newDifyDisplayName.trim()
+    const signature_name = newDifySignatureName.trim()
     const description = newDifyDescription.trim()
     const public_url = newDifyPublicUrl.trim()
     const api_key = newDifyApiKey.trim()
@@ -1702,9 +1706,10 @@ export default function ConfigurationsPage() {
     setDifySavingKey('catalog_create')
     try {
       // C15: usar resposta do POST diretamente — atualização otimista sem refetch
-      const { data: created } = await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      const { data: created } = await api.post('/ai/dify/catalog/', { display_name, signature_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
       setDifyCatalog(prev => [created, ...prev])
       setNewDifyDisplayName('')
+      setNewDifySignatureName('')
       setNewDifyDescription('')
       setNewDifyPublicUrl('')
       setNewDifyApiKey('')
@@ -1741,12 +1746,14 @@ export default function ConfigurationsPage() {
     setEditDifyDefaultInputs({})
     setEditDifySyncingSchema(false)
     setEditDifySchemaSynced(false)
+    setEditDifySignatureName('')
   }
 
   const openEditDifyItem = (item: DifyCatalogItem) => {
     setEditingDifyItemId(item.id)
     setEditDifyAppId(item.dify_app_id || '')
     setEditDifyDisplayName(item.display_name || '')
+    setEditDifySignatureName(item.signature_name || '')
     setEditDifyDescription(item.description || '')
     setEditDifyPublicUrl(item.public_url || '')
     setEditDifyHasApiKey(Boolean(item.has_api_key))
@@ -1765,6 +1772,7 @@ export default function ConfigurationsPage() {
       const payload: any = {
         id: editingDifyItemId,
         display_name: editDifyDisplayName,
+        signature_name: editDifySignatureName,
         description: editDifyDescription,
         public_url: editDifyPublicUrl,
         default_department_id: editDifyDefaultDepartmentId || null,
@@ -3138,6 +3146,13 @@ export default function ConfigurationsPage() {
                       <Input value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
                     </div>
                     <div>
+                      <Label>Assinatura (nome exibido) (opcional)</Label>
+                      <Input value={newDifySignatureName} onChange={(e) => setNewDifySignatureName(e.target.value)} placeholder="Ex: Bia" />
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Se vazio, usamos o nome do agente. A assinatura é aplicada no envio ao WhatsApp.
+                      </p>
+                    </div>
+                    <div>
                       <Label>URL pública do app <span className="text-red-500">*</span></Label>
                       <Input value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">O app_id é extraído automaticamente da URL.</p>
@@ -3291,6 +3306,13 @@ export default function ConfigurationsPage() {
                         <div>
                           <Label>Nome (opcional)</Label>
                           <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
+                        </div>
+                        <div>
+                          <Label>Assinatura (nome exibido) (opcional)</Label>
+                          <Input value={editDifySignatureName} onChange={(e) => setEditDifySignatureName(e.target.value)} placeholder="Ex: Bia" />
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Se vazio, usamos o nome do agente. A assinatura é aplicada no envio ao WhatsApp.
+                          </p>
                         </div>
                         <div>
                           <Label>URL pública do app <span className="text-red-500">*</span></Label>

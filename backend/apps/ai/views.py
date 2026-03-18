@@ -3305,6 +3305,7 @@ def dify_catalog(request):
                         "id": str(it.id),
                         "dify_app_id": it.dify_app_id,
                         "display_name": it.display_name,
+                        "signature_name": getattr(it, "signature_name", "") or "",
                         "description": it.description or "",
                         "public_url": it.public_url or "",
                         "is_active": bool(it.is_active),
@@ -3330,6 +3331,7 @@ def dify_catalog(request):
         return _table_missing_response()
     if request.method == "POST":
         display_name = str(data.get("display_name") or "").strip()
+        signature_name = str(data.get("signature_name") or "").strip()
         public_url = str(data.get("public_url") or "").strip()
         description = str(data.get("description") or "").strip()
         default_department_id = data.get("default_department_id")
@@ -3393,8 +3395,9 @@ def dify_catalog(request):
         )
         # encrypt field cuida da criptografia em repouso
         item.api_key_encrypted = api_key
+        item.signature_name = signature_name
         item.updated_at = timezone.now()
-        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "whatsapp_instance_id", "api_key_encrypted", "updated_at"])
+        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "whatsapp_instance_id", "api_key_encrypted", "signature_name", "updated_at"])
 
         # Auto-binding por departamento (opcional): se default_department_id foi definido,
         # faz upsert do vínculo do departamento para este catálogo.
@@ -3428,6 +3431,7 @@ def dify_catalog(request):
             "id": str(item.id),
             "dify_app_id": item.dify_app_id,
             "display_name": item.display_name,
+            "signature_name": getattr(item, "signature_name", "") or "",
             "description": item.description or "",
             "public_url": item.public_url or "",
             "is_active": bool(item.is_active),
@@ -3452,6 +3456,8 @@ def dify_catalog(request):
     prev_default_dept_id = item.default_department_id
     if "display_name" in data:
         item.display_name = str(data.get("display_name") or "").strip()
+    if "signature_name" in data:
+        item.signature_name = str(data.get("signature_name") or "").strip()
     if "description" in data:
         item.description = str(data.get("description") or "").strip()
     if "public_url" in data:
@@ -3495,7 +3501,7 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
-    patch_fields = ["display_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
+    patch_fields = ["display_name", "signature_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
     # dify_app_id só entra em patch_fields se public_url foi enviada (e portanto o app_id foi reextrado)
     if "public_url" in data:
         patch_fields.append("dify_app_id")
@@ -3561,6 +3567,7 @@ def dify_catalog(request):
         "id": str(item.id),
         "dify_app_id": item.dify_app_id,
         "display_name": item.display_name,
+        "signature_name": getattr(item, "signature_name", "") or "",
         "description": item.description or "",
         "public_url": item.public_url or "",
         "is_active": bool(item.is_active),

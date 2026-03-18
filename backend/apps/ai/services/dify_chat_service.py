@@ -685,18 +685,36 @@ def _save_and_send_reply(
         from apps.chat.tasks import send_message_to_evolution
         from apps.chat.utils.websocket import broadcast_message_received
 
-        # Construir metadata: registra origem Dify e, quando o agente tem instância
-        # específica, instrui o worker a usá-la (via flow_prefer_instance_name).
-        meta: dict = {'source': 'dify', 'dify_agent_app_id': agent_app_id}
+        # Construir metadata: registra origem Dify e inclui assinatura por padrão.
+        # A assinatura final é aplicada no worker usando (sender_name + include_signature).
+        meta: dict = {
+            'source': 'dify',
+            'dify_agent_app_id': agent_app_id,
+            'include_signature': True,
+        }
         if effective_instance:
             inst_name = getattr(effective_instance, 'instance_name', None) or ''
             if inst_name:
                 meta['flow_prefer_instance_name'] = inst_name
 
+        # Nome para assinatura: preferir o configurado no agente; fallback para app_id.
+        signature_name = ''
+        try:
+            from apps.ai.models import DifyAppCatalogItem
+            item = DifyAppCatalogItem.objects.filter(
+                tenant_id=getattr(conversation, 'tenant_id', None),
+                dify_app_id=agent_app_id,
+            ).only('signature_name', 'display_name').first()
+            if item:
+                signature_name = (getattr(item, 'signature_name', '') or '').strip() or (getattr(item, 'display_name', '') or '').strip()
+        except Exception:
+            signature_name = ''
+
         with transaction.atomic():
             msg = Message.objects.create(
                 conversation=conversation,
                 sender=None,  # bot — sem usuário humano
+                sender_name=(signature_name or agent_app_id)[:255],
                 content=message,
                 direction='outgoing',
                 status='pending',

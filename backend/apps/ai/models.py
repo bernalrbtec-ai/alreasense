@@ -467,6 +467,8 @@ class DifyAppCatalogItem(models.Model):
     metadata = models.JSONField(default=dict, blank=True)
     # Valores padrão dos campos de entrada; suporta variáveis {{contact_name}}, etc.
     default_inputs = models.JSONField(default=dict, blank=True)
+    # Nome exibido na assinatura das mensagens do agente (WhatsApp). Se vazio, usa display_name.
+    signature_name = models.CharField(max_length=100, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
