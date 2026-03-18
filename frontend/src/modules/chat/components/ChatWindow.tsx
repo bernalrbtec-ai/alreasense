@@ -1015,10 +1015,11 @@ export function ChatWindow() {
               {/* Badge de agente Dify ativo */}
               {difyHeaderState && (
                 <span
-                  title={`Agente Dify ativo: ${difyHeaderState.display_name}`}
+                  title={`Agente IA ativo: ${difyHeaderState.display_name}`}
                   className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full text-xs font-medium cursor-default"
                 >
                   <Bot className="w-3 h-3" />
+                  <span className="text-green-500 dark:text-green-400 font-semibold">Agente IA:</span>
                   {difyHeaderState.display_name}
                 </span>
               )}
