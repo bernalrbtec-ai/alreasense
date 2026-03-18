@@ -48,7 +48,8 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
     resolved = {}
     for key, value in raw_inputs.items():
         if not isinstance(value, str):
-            resolved[key] = value
+            # Dify espera strings em todos os campos de input — coerce tipos primitivos
+            resolved[key] = str(value) if value is not None else ''
             continue
         result = value
         for placeholder, resolver in _DIFY_VAR_RESOLVERS.items():
@@ -300,8 +301,8 @@ def _get_dify_empty_response_fallback(tenant) -> str:
         settings_obj = DifySettings.objects.filter(tenant=tenant).first()
         if settings_obj and getattr(settings_obj, 'empty_response_fallback', None):
             return settings_obj.empty_response_fallback.strip()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Dify: falha ao buscar fallback de resposta vazia: %s", exc)
     # Sem fallback configurado → não enviar nada (evitar spam de mensagens genéricas)
     return ''
 
@@ -316,6 +317,13 @@ def _resolve_wa_instance(agent, tenant, wa_instance, conversation):
             ).first()
             if inst:
                 return inst
+            # Instância configurada existe mas está inativa — não usar fallback silencioso
+            logger.warning(
+                "Dify takeover: instância WA configurada (id=%s) está inativa ou não encontrada "
+                "para agente %s — abortando envio.",
+                agent.whatsapp_instance_id, getattr(agent, 'id', '?')
+            )
+            return None
         if wa_instance:
             return wa_instance
         from apps.chat.instance_resolution import get_effective_wa_instance_for_conversation
@@ -346,7 +354,7 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
                     'Content-Type': 'application/json',
                 },
             )
-            logger.info(
+            logger.debug(
                 "🤖 [DIFY] Resposta → status=%s agente=%s body_preview=%s",
                 resp.status_code, agent_id, resp.text[:300]
             )
@@ -377,7 +385,7 @@ def _send_wa_reply(effective_instance, contact_phone: str, message: str, agent_a
         conv_id, agent_app_id,
         getattr(effective_instance, 'id', '?'),
         integration_type,
-        contact_phone[:6] + '***' if contact_phone and len(contact_phone) > 6 else contact_phone,
+        (contact_phone[:4] + '***') if contact_phone and len(contact_phone) >= 4 else '***',
         len(message)
     )
     try:

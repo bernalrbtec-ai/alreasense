@@ -376,6 +376,9 @@ export default function ConfigurationsPage() {
   const [editDifyInputSchema, setEditDifyInputSchema] = useState<DifyInputField[]>([])
   const [editDifyDefaultInputs, setEditDifyDefaultInputs] = useState<Record<string, string>>({})
   const [editDifySyncingSchema, setEditDifySyncingSchema] = useState(false)
+  // Rastreia se uma sincronização de schema ocorreu nessa sessão de edição.
+  // Necessário para saber se devemos enviar default_inputs={} mesmo quando schema veio [].
+  const [editDifySchemaSynced, setEditDifySchemaSynced] = useState(false)
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -1737,6 +1740,7 @@ export default function ConfigurationsPage() {
     setEditDifyInputSchema([])
     setEditDifyDefaultInputs({})
     setEditDifySyncingSchema(false)
+    setEditDifySchemaSynced(false)
   }
 
   const openEditDifyItem = (item: DifyCatalogItem) => {
@@ -1774,9 +1778,9 @@ export default function ConfigurationsPage() {
       if (editDifyApiKey.trim()) {
         payload.api_key = editDifyApiKey.trim()
       }
-      // Só envia default_inputs se o usuário tem campos visíveis OU valores já configurados,
-      // evitando apagar dados existentes no banco ao salvar sem ter sincronizado o schema.
-      if (editDifyInputSchema.length > 0 || Object.keys(editDifyDefaultInputs).length > 0) {
+      // Enviar default_inputs se: há campos visíveis, há valores configurados, ou schema foi
+      // sincronizado nessa sessão (garante que schema=[] limpe dados obsoletos no banco).
+      if (editDifyInputSchema.length > 0 || Object.keys(editDifyDefaultInputs).length > 0 || editDifySchemaSynced) {
         payload.default_inputs = editDifyDefaultInputs
       }
       // C15: usar resposta do PATCH diretamente — atualização otimista sem refetch
@@ -1805,6 +1809,7 @@ export default function ConfigurationsPage() {
       const validVars = new Set(schema.map((f: DifyInputField) => f.variable))
       setEditDifyDefaultInputs(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => validVars.has(k))))
       setDifyCatalog(prev => prev.map(x => x.id === catalogId ? { ...x, input_schema: schema } : x))
+      if (synced) setEditDifySchemaSynced(true)
       if (!synced) {
         showErrorToast('Não foi possível contactar o Dify. Verifique a URL e a API key.')
       } else if (schema.length > 0) {
@@ -3384,6 +3389,7 @@ export default function ConfigurationsPage() {
                                         onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
                                         placeholder="Ex: {{contact_name}}"
                                         rows={2}
+                                        maxLength={field.max_length}
                                         className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-y"
                                       />
                                     ) : field.type === 'number' ? (

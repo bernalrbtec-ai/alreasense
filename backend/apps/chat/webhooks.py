@@ -4092,7 +4092,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # 🤖 Dify takeover: encaminhar mensagem ao agente Dify se ativo.
                 # Executa em thread separada para não segurar a transação atômica
                 # (chamadas HTTP ao Dify podem levar até 30s).
-                if conversation_type == 'individual':
+                # Tipos não-textuais sem conteúdo legível (sticker, localização, contato)
+                # não devem ser enviados ao Dify — texto vazio será descartado no serviço,
+                # mas texto placeholder como "🎨 Figurinha" ou "📍 Localização" chegaria ao agente.
+                _DIFY_SKIP_TYPES = {'stickerMessage', 'locationMessage', 'contactsArrayMessage', 'contactMessage'}
+                if conversation_type == 'individual' and message_type not in _DIFY_SKIP_TYPES:
                     _conversation_id = str(conversation.id)
                     _tenant_id = str(tenant.id)
                     _message_content = str(getattr(message, 'content', '') or '')
@@ -4145,7 +4149,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as _exc:
                             logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)
 
-                    _launch_dify_thread(_run_dify_takeover)
+                    transaction.on_commit(lambda: _launch_dify_thread(_run_dify_takeover))
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)

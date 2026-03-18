@@ -574,12 +574,22 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                                 message=DifyMessageStub(content=_msg_content),
                                 wa_instance=_wa_inst,
                             )
+                        else:
+                            logger.warning(
+                                "🤖 [DIFY-META] Thread: conversa não encontrada ou sem tenant → conv_id=%s",
+                                _conv_id
+                            )
                     except Exception as _exc:
                         logger.error("❌ [DIFY-META] Erro no takeover (thread): %s", _exc, exc_info=True)
 
                 def _launch_dify_meta_after_commit():
-                    t = threading.Thread(target=_run_dify_takeover_meta, daemon=True)
-                    t.start()
+                    try:
+                        from apps.chat.webhooks import _launch_dify_thread
+                        _launch_dify_thread(_run_dify_takeover_meta)
+                    except Exception as _le:
+                        import threading as _t
+                        t = _t.Thread(target=_run_dify_takeover_meta, daemon=True)
+                        t.start()
 
                 transaction.on_commit(_launch_dify_meta_after_commit)
 

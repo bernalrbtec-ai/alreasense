@@ -3140,12 +3140,16 @@ def _normalize_dify_input_schema(raw_schema: list) -> list:
     return result
 
 
-def _fetch_and_save_input_schema(item) -> list:
+_DIFY_HTTP_TIMEOUT = 10  # segundos — usado em fetch de schema e test-connection
+
+
+def _fetch_and_save_input_schema(item) -> list | None:
     """
     Busca user_input_form do agente Dify via GET /v1/parameters, normaliza o formato
     e salva em metadata['input_schema'].
     Falha silenciosamente (log warning) para nunca bloquear o cadastro.
-    Retorna a lista de campos normalizada, ou [] em caso de erro/ausência.
+    Retorna a lista de campos normalizada (pode ser []) em sucesso,
+    ou None quando a chamada à API falhou (sem URL, sem chave, erro de rede, status != 200).
     """
     import httpx as _httpx
     from urllib.parse import urlparse as _urlparse
@@ -3153,12 +3157,12 @@ def _fetch_and_save_input_schema(item) -> list:
     try:
         parsed = _urlparse(item.public_url or '')
         if not (parsed.scheme and parsed.netloc):
-            return []
+            return None
         base_url = f"{parsed.scheme}://{parsed.netloc}"
         api_key = (getattr(item, 'api_key_encrypted', '') or '').strip()
         if not api_key:
-            return []
-        with _httpx.Client(timeout=5) as client:
+            return None
+        with _httpx.Client(timeout=_DIFY_HTTP_TIMEOUT) as client:
             resp = client.get(
                 f"{base_url}/v1/parameters",
                 headers={'Authorization': f'Bearer {api_key}'},
@@ -3168,7 +3172,7 @@ def _fetch_and_save_input_schema(item) -> list:
                 "_fetch_and_save_input_schema: status %s para agente %s — schema nao sincronizado. body=%s",
                 resp.status_code, getattr(item, 'id', '?'), resp.text[:200]
             )
-            return []
+            return None
         try:
             raw_schema = resp.json().get('user_input_form', [])
         except Exception as json_exc:
@@ -3176,7 +3180,7 @@ def _fetch_and_save_input_schema(item) -> list:
                 "_fetch_and_save_input_schema: resposta nao-JSON para agente %s: %s — body=%s",
                 getattr(item, 'id', '?'), json_exc, resp.text[:200]
             )
-            return []
+            return None
         schema = _normalize_dify_input_schema(raw_schema)
         meta = dict(item.metadata or {})
         meta['input_schema'] = schema
@@ -3193,7 +3197,7 @@ def _fetch_and_save_input_schema(item) -> list:
             "_fetch_and_save_input_schema falhou para agente %s: %s",
             getattr(item, 'id', '?'), exc
         )
-        return []
+        return None
 
 
 def _dify_audit(
@@ -3429,7 +3433,7 @@ def dify_catalog(request):
             "default_department_id": str(item.default_department_id) if item.default_department_id else None,
             "whatsapp_instance_id": str(item.whatsapp_instance_id) if getattr(item, "whatsapp_instance_id", None) else None,
             "metadata": item.metadata or {},
-            "input_schema": _post_input_schema,
+            "input_schema": _post_input_schema if _post_input_schema is not None else [],
             "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
         }
         if _binding_warning:
@@ -3547,7 +3551,8 @@ def dify_catalog(request):
     # Re-sincronizar schema quando public_url ou api_key forem alterados
     _patch_resync = "public_url" in data or (api_key_raw is not None and str(api_key_raw).strip())
     if _patch_resync:
-        _patch_input_schema = _fetch_and_save_input_schema(item)
+        _fetched = _fetch_and_save_input_schema(item)
+        _patch_input_schema = _fetched if _fetched is not None else (item.metadata or {}).get('input_schema', [])
     else:
         _patch_input_schema = (item.metadata or {}).get('input_schema', [])
     patch_resp = {
@@ -3592,12 +3597,11 @@ def dify_sync_schema(request):
     if not item:
         return Response({"error": "Agente não encontrado."}, status=status.HTTP_404_NOT_FOUND)
     schema = _fetch_and_save_input_schema(item)
-    # synced=True indica que a chamada ao Dify retornou algum resultado (mesmo vazio)
-    # synced=False indica que houve falha (sem api_key, URL inválida, Dify offline)
-    api_key = (getattr(item, 'api_key_encrypted', '') or '').strip()
-    synced = bool(item.public_url and api_key)
+    # synced=True indica que a chamada ao Dify foi bem-sucedida (schema pode ser [] se agente sem campos)
+    # synced=False indica falha real (sem api_key, URL inválida, Dify offline, status != 200)
+    synced = schema is not None
     return Response({
-        "input_schema": schema,
+        "input_schema": schema if schema is not None else (item.metadata or {}).get('input_schema', []),
         "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
         "synced": synced,
     })
@@ -3629,7 +3633,7 @@ def dify_assignments(request):
         ]
         dept_map = {}
         if dept_ids:
-            for d in Department.objects.filter(id__in=dept_ids):
+            for d in Department.objects.filter(id__in=dept_ids, tenant=tenant):
                 dept_map[str(d.id)] = d.name
         out = []
         for a in assignments:
@@ -3794,7 +3798,7 @@ def dify_test_connection(request):
     headers = {"Authorization": f"Bearer {api_key}"}
     try:
         import httpx as _httpx
-        with _httpx.Client(timeout=10) as client:
+        with _httpx.Client(timeout=_DIFY_HTTP_TIMEOUT) as client:
             resp = client.get(url, headers=headers)
         if resp.status_code >= 400:
             detail = (resp.text or "")[:300]
