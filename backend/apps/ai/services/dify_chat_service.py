@@ -159,6 +159,7 @@ def maybe_handle_dify_takeover(
     with transaction.atomic():
         state = _get_active_dify_state(conv_id, tenant_id)
         if not state:
+            logger.info("🤖 [DIFY] Sem agente ativo para conversa=%s — ignorando", conv_id)
             return False
         # Capturar tudo que precisamos DENTRO do lock antes de sair da transaction
         state_id = state['state_id']
