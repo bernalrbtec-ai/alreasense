@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -540,6 +541,47 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                     )
             except Exception as e:
                 logger.exception("[META WEBHOOK] Erro ao processar fluxo (Typebot/flow/menu): %s", e)
+
+            # Dify takeover: encaminhar mensagem ao agente Dify ativo (se houver).
+            # Só para conversas individuais (grupos não suportados).
+            # Executa em thread separada após commit para não bloquear o webhook.
+            if getattr(conversation, 'conversation_type', 'individual') == 'individual':
+                _conv_id = str(conversation.id)
+                _tenant_id = str(tenant.id)
+                _msg_content = str(new_msg.content or '')
+                _wa_instance_id = str(wa_instance.id)
+
+                def _run_dify_takeover_meta():
+                    try:
+                        from django.db import close_old_connections
+                        close_old_connections()
+                        from apps.ai.services.dify_chat_service import (
+                            maybe_handle_dify_takeover,
+                            DifyMessageStub,
+                        )
+                        from apps.chat.models import Conversation as _Conv
+                        from apps.notifications.models import WhatsAppInstance as _WAI
+                        _conv = _Conv.objects.select_related('tenant').filter(id=_conv_id).first()
+                        if _conv and _conv.tenant_id:
+                            _wa_inst = _WAI.objects.filter(id=_wa_instance_id).first()
+                            logger.info(
+                                "🤖 [DIFY-META] Thread iniciada → conv=%s tenant=%s wa=%s",
+                                _conv_id, _tenant_id, _wa_instance_id
+                            )
+                            maybe_handle_dify_takeover(
+                                tenant=_conv.tenant,
+                                conversation=_conv,
+                                message=DifyMessageStub(content=_msg_content),
+                                wa_instance=_wa_inst,
+                            )
+                    except Exception as _exc:
+                        logger.error("❌ [DIFY-META] Erro no takeover (thread): %s", _exc, exc_info=True)
+
+                def _launch_dify_meta_after_commit():
+                    t = threading.Thread(target=_run_dify_takeover_meta, daemon=True)
+                    t.start()
+
+                transaction.on_commit(_launch_dify_meta_after_commit)
 
             # Mídia Meta: criar placeholder (se possível) e sempre enfileirar download via Graph API
             if msg_type in ('image', 'video', 'document', 'audio') and metadata_extra.get('meta_media_id'):
