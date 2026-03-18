@@ -8,5 +8,5 @@ ALTER TABLE ai_dify_app_catalog
 
 COMMENT ON COLUMN ai_dify_app_catalog.default_inputs IS
     'Valores padrão dos campos de entrada do agente Dify.
-     Suporta variáveis: {{contact_name}}, {{contact_phone}}, {{conversation_id}}, {{department_name}}.
+     Suporta variáveis: {{tenant_name}}, {{contact_name}}, {{contact_phone}}, {{conversation_id}}, {{department_name}}, {{is_open}}.
      Schema dos campos disponível em metadata->input_schema (sincronizado via /v1/parameters).';

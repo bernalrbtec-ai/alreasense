@@ -3365,7 +3365,7 @@ export default function ConfigurationsPage() {
                             <div>
                               <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Parâmetros de entrada</p>
                               <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Campos do agente Dify. Use variáveis: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_phone}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{conversation_id}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{department_name}}'}</code>
+                                Campos do agente Dify. Use variáveis: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{tenant_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{is_open}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_phone}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{conversation_id}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{department_name}}'}</code>
                               </p>
                             </div>
                             <Button

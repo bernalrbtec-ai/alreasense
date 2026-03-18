@@ -13,6 +13,8 @@ import httpx
 
 from django.db import connection as _conn
 
+from apps.chat.services.business_hours_service import BusinessHoursService
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,12 +29,24 @@ class DifyMessageStub:
 
 
 _DIFY_VAR_RESOLVERS: dict = {
+    '{{tenant_name}}': lambda conv: getattr(getattr(conv, 'tenant', None), 'name', '') or '',
     '{{contact_name}}': lambda conv: getattr(conv, 'contact_name', '') or '',
     '{{contact_phone}}': lambda conv: getattr(conv, 'contact_phone', '') or '',
     '{{conversation_id}}': lambda conv: str(conv.id),
     '{{department_name}}': lambda conv: (
         getattr(conv, 'department_name', '') or
         (getattr(conv, 'department', None) and getattr(conv.department, 'name', '')) or ''
+    ),
+    '{{is_open}}': lambda conv: (
+        # Se por algum motivo não houver tenant na conversation, não bloqueamos o fluxo.
+        (
+            'true' if getattr(conv, 'tenant', None) is None else (
+                'true' if BusinessHoursService.is_business_hours(
+                    getattr(conv, 'tenant', None),
+                    getattr(conv, 'department', None),
+                )[0] else 'false'
+            )
+        )
     ),
 }
 
@@ -47,6 +61,8 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
     if not raw_inputs or not isinstance(raw_inputs, dict):
         return {}
     import json as _json
+    # Cacheia placeholders para evitar chamadas repetidas (ex: is_open consulta DB).
+    var_cache: dict[str, str] = {}
     resolved = {}
     for key, value in raw_inputs.items():
         if not isinstance(value, str):
@@ -65,7 +81,9 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
         for placeholder, resolver in _DIFY_VAR_RESOLVERS.items():
             if placeholder in result:
                 try:
-                    result = result.replace(placeholder, str(resolver(conversation)))
+                    if placeholder not in var_cache:
+                        var_cache[placeholder] = str(resolver(conversation))
+                    result = result.replace(placeholder, var_cache[placeholder])
                 except Exception as exc:
                     logger.warning(
                         "_resolve_inputs: erro ao resolver '%s' para conversa %s: %s",
