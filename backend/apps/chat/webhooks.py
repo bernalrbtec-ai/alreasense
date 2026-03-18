@@ -4099,7 +4099,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # localização e contatos têm textos ricos — nenhum deve chegar ao Dify.
                 # Áudio é tratado separadamente via transcrição assíncrona.
                 _DIFY_SKIP_TYPES = {'stickerMessage', 'locationMessage', 'contactsArrayMessage', 'contactMessage'}
-                if conversation_type == 'individual' and message_type not in _DIFY_SKIP_TYPES:
+                if msg_created and conversation_type == 'individual' and message_type not in _DIFY_SKIP_TYPES:
                     _conversation_id = str(conversation.id)
                     _tenant_id = str(tenant.id)
                     _message_content = str(getattr(message, 'content', '') or '')
