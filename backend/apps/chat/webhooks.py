@@ -4095,17 +4095,22 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Tipos não-textuais sem conteúdo legível (sticker, localização, contato)
                 # não devem ser enviados ao Dify — texto vazio será descartado no serviço,
                 # mas texto placeholder como "🎨 Figurinha" ou "📍 Localização" chegaria ao agente.
+                # Tipos sem conteúdo textual útil: sticker tem placeholder "🎨 Figurinha",
+                # localização e contatos têm textos ricos — nenhum deve chegar ao Dify.
+                # Áudio é tratado separadamente via transcrição assíncrona.
                 _DIFY_SKIP_TYPES = {'stickerMessage', 'locationMessage', 'contactsArrayMessage', 'contactMessage'}
                 if conversation_type == 'individual' and message_type not in _DIFY_SKIP_TYPES:
                     _conversation_id = str(conversation.id)
                     _tenant_id = str(tenant.id)
                     _message_content = str(getattr(message, 'content', '') or '')
-                    # A2: capturar apenas o ID do wa_instance para evitar objeto ORM stale na thread
+                    # Capturar ID e tipo para a thread — evitar objeto ORM stale
                     _wa_instance_id = str(wa_instance.id) if wa_instance else None
+                    _message_id = str(message.id) if getattr(message, 'id', None) else None
+                    _is_audio = (message_type == 'audioMessage')
 
                     logger.info(
-                        "🤖 [DIFY] Lançando thread takeover → conv=%s tenant=%s msg_len=%s wa=%s",
-                        _conversation_id, _tenant_id, len(_message_content), _wa_instance_id
+                        "🤖 [DIFY] Lançando thread takeover → conv=%s tenant=%s msg_len=%s wa=%s audio=%s",
+                        _conversation_id, _tenant_id, len(_message_content), _wa_instance_id, _is_audio
                     )
 
                     def _run_dify_takeover():
@@ -4115,8 +4120,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             from apps.ai.services.dify_chat_service import (
                                 maybe_handle_dify_takeover,
                                 DifyMessageStub,
+                                _get_audio_transcription,
                             )
                             from apps.chat.models import Conversation as _Conv
+
+                            # Para áudio: aguardar transcrição antes de enviar ao Dify.
+                            # O MessageAttachment é criado por media_tasks em thread separada,
+                            # portanto pode não existir ainda neste momento.
+                            effective_content = _message_content
+                            if _is_audio and not effective_content and _message_id:
+                                transcription = _get_audio_transcription(_message_id)
+                                if transcription:
+                                    effective_content = f"[Áudio] {transcription}"
+                                else:
+                                    logger.info(
+                                        "🤖 [DIFY] Áudio sem transcrição disponível — ignorando. "
+                                        "conv=%s message_id=%s",
+                                        _conversation_id, _message_id
+                                    )
+                                    return  # não enviar áudio sem texto ao Dify
+
                             # D4: select_related('tenant') evita query extra para recarregar o tenant
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
                             logger.info(
@@ -4138,7 +4161,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 maybe_handle_dify_takeover(
                                     tenant=_tenant,
                                     conversation=_conv,
-                                    message=DifyMessageStub(content=_message_content),
+                                    message=DifyMessageStub(content=effective_content),
                                     wa_instance=_wa_inst,
                                 )
                             else:

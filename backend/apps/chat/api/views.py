@@ -4234,6 +4234,27 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return Response({'success': False, 'message': 'Erro ao salvar estado do agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         display_name = agent.display_name or agent.dify_app_id
+
+        # Verificar campos obrigatórios do schema Dify sem valor configurado.
+        # Aviso não-bloqueante: o operador pode prosseguir mas é alertado previamente,
+        # evitando que erros 400 do Dify ocorram silenciosamente em produção.
+        missing_required: list[str] = []
+        try:
+            input_schema = (agent.metadata or {}).get('input_schema', [])
+            if isinstance(input_schema, list):
+                default_inputs = agent.default_inputs if hasattr(agent, 'default_inputs') else {}
+                if not isinstance(default_inputs, dict):
+                    default_inputs = {}
+                missing_required = [
+                    f['variable']
+                    for f in input_schema
+                    if isinstance(f, dict)
+                    and f.get('required')
+                    and not str(default_inputs.get(f.get('variable', ''), '')).strip()
+                ]
+        except Exception as _warn_exc:
+            logger.warning("start_dify_agent: erro ao verificar campos required: %s", _warn_exc)
+
         # Notificar todos os operadores do tenant em tempo real (badge do header)
         _broadcast_dify_state(
             tenant_id=str(tenant.id),
@@ -4242,12 +4263,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             catalog_id=str(agent.id),
             display_name=display_name,
         )
-        return Response({
+        resp_data = {
             'success': True,
             'message': f'Agente "{display_name}" iniciado.',
             'catalog_id': str(agent.id),
             'display_name': display_name,
-        }, status=status.HTTP_200_OK)
+        }
+        if missing_required:
+            resp_data['warning'] = (
+                f'Campos obrigatórios sem valor padrão: {", ".join(missing_required)}. '
+                'Configure os valores em Configurações → Agentes Dify antes de usar.'
+            )
+        return Response(resp_data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='stop-dify-agent')
     def stop_dify_agent(self, request, pk=None):

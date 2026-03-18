@@ -1512,6 +1512,9 @@ export function ChatWindow() {
                               setDifyHeaderState({ display_name: agentName });
                               setDifyActiveConversation(conversationId, agentName);
                               toast.success(res.data.message || 'Agente trocado.');
+                              if (res.data.warning) {
+                                toast(res.data.warning, { icon: '⚠️', duration: 7000 })
+                              }
                               closeStartFlowModal();
                             } else {
                               toast.error(res?.data?.message || 'Erro ao trocar agente.');
@@ -1556,6 +1559,9 @@ export function ChatWindow() {
                             setDifyHeaderState({ display_name: agentName });
                             setDifyActiveConversation(conversationId, agentName);
                             toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
+                            if (res.data.warning) {
+                              toast(res.data.warning, { icon: '⚠️', duration: 7000 })
+                            }
                             closeStartFlowModal();
                           } else {
                             toast.error(res?.data?.message || 'Erro ao iniciar agente.');

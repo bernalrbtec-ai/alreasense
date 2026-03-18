@@ -66,6 +66,81 @@ def _resolve_inputs(raw_inputs: dict, conversation) -> dict:
     return resolved
 
 
+def _get_audio_transcription(message_id: str, wait_secs: int = 15) -> str:
+    """
+    Aguarda e retorna a transcrição de áudio de um MessageAttachment.
+
+    Faz polling no banco por até wait_secs segundos, necessário porque:
+    - O MessageAttachment é criado por media_tasks.py em thread separada (download S3)
+    - A transcrição é disparada só após o download estar completo
+    - O N8N/Whisper pode levar vários segundos para responder
+
+    Retorna '' nos seguintes casos (sem esperar o timeout completo quando possível):
+    - Attachment existe com processing_status='completed' mas transcription=None/''
+      → transcrição desabilitada no tenant ou sem suporte para esse tipo de áudio
+    - Timeout esgotado sem resultado
+    - Qualquer exceção de banco (não deve bloquear o fluxo)
+    """
+    import time
+    try:
+        from apps.chat.models import MessageAttachment
+    except ImportError:
+        logger.warning("_get_audio_transcription: não foi possível importar MessageAttachment")
+        return ''
+
+    if not message_id:
+        return ''
+
+    deadline = time.monotonic() + wait_secs
+    attachment_seen = False  # rastreia se attachment já apareceu no banco
+
+    while time.monotonic() < deadline:
+        try:
+            att = MessageAttachment.objects.filter(
+                message_id=message_id,
+                media_type__in=('audio', 'ptt'),
+            ).only('transcription', 'processing_status').first()
+        except Exception as exc:
+            logger.warning(
+                "_get_audio_transcription: erro ao buscar attachment (message_id=%s): %s",
+                message_id, exc
+            )
+            return ''
+
+        if att is not None:
+            attachment_seen = True
+            if att.transcription and att.transcription.strip():
+                logger.info(
+                    "_get_audio_transcription: transcrição obtida (message_id=%s len=%s)",
+                    message_id, len(att.transcription)
+                )
+                return att.transcription.strip()
+            # Attachment completado mas sem transcrição → não vai chegar nunca
+            if getattr(att, 'processing_status', '') == 'completed':
+                logger.info(
+                    "_get_audio_transcription: attachment completed sem transcrição "
+                    "(transcrição possivelmente desabilitada). message_id=%s",
+                    message_id
+                )
+                return ''
+
+        time.sleep(1.5)
+
+    if attachment_seen:
+        logger.warning(
+            "_get_audio_transcription: timeout (%ss) — attachment encontrado mas sem transcrição. "
+            "message_id=%s",
+            wait_secs, message_id
+        )
+    else:
+        logger.warning(
+            "_get_audio_transcription: timeout (%ss) — attachment nunca criado. "
+            "Download provavelmente falhou. message_id=%s",
+            wait_secs, message_id
+        )
+    return ''
+
+
 def _extract_dify_base_url(public_url: str) -> str:
     """
     Extrai a base URL da URL pública do agente Dify.
@@ -92,17 +167,10 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
     """
     try:
         with _conn.cursor() as cur:
-            # Primeiro: verificar se existe linha ativa (sem lock) para distinguir os casos
-            cur.execute(
-                "SELECT id FROM ai_dify_conversation_state "
-                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
-                [str(conversation_id), str(tenant_id)]
-            )
-            exists = cur.fetchone()
-            if not exists:
-                return None  # Sem agente ativo — silencioso
-
-            # Linha existe: tentar adquirir o lock
+            # Caminho principal: tentar adquirir o lock diretamente em uma única query.
+            # Elimina a race condition do SELECT duplo anterior: entre o SELECT de existência
+            # e o SELECT FOR UPDATE, a linha poderia ser deletada (stop-dify-agent), causando
+            # falso log "mensagem descartada por outro worker".
             cur.execute(
                 "SELECT id, catalog_id, dify_conversation_id "
                 "FROM ai_dify_conversation_state "
@@ -117,12 +185,20 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
                     'catalog_id': str(row[1]),
                     'dify_conversation_id': row[2],
                 }
-            # Linha existe mas lock não obtido → outro worker processando esta conversa
-            logger.warning(
-                "⚡ [DIFY] Conversa %s já está sendo processada por outro worker — "
-                "mensagem descartada para evitar resposta duplicada.",
-                conversation_id
+            # Lock não obtido ou linha não existe — segundo SELECT apenas para log de diagnóstico.
+            # Inconsistência momentânea aqui é aceitável (só afeta o nível do log, não o comportamento).
+            cur.execute(
+                "SELECT 1 FROM ai_dify_conversation_state "
+                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
+                [str(conversation_id), str(tenant_id)]
             )
+            if cur.fetchone():
+                logger.warning(
+                    "⚡ [DIFY] Conversa %s já está sendo processada por outro worker — "
+                    "mensagem descartada para evitar resposta duplicada.",
+                    conversation_id
+                )
+            # else: sem agente ativo — silencioso (return None abaixo)
     except Exception as exc:
         logger.error(
             "❌ [DIFY] _get_active_dify_state erro de banco para conversa %s: %s",
