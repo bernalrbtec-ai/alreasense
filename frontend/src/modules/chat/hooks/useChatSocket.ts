@@ -338,10 +338,20 @@ export function useChatSocket(conversationId?: string) {
     const handleDifyAgentStateChanged = (data: WebSocketMessage) => {
       const convId = data.conversation_id as string | undefined;
       if (!convId) return;
+
+      // 1) Atualizar store global (para badge na lista de conversas, em qualquer conversa)
+      const { setDifyActiveConversation } = useChatStore.getState();
+      const eventStatus = data.status as string | undefined;
+      const displayName = eventStatus === 'active'
+        ? ((data.display_name as string | undefined) || 'Agente IA')
+        : null;
+      setDifyActiveConversation(convId, displayName);
+
+      // 2) Emitir evento customizado para o ChatWindow atualizar seu estado local (badge do header)
       const { activeConversation } = useChatStore.getState();
-      if (!activeConversation?.id || String(activeConversation.id) !== String(convId)) return;
-      // Emitir evento customizado para o ChatWindow escutar sem prop drilling
-      window.dispatchEvent(new CustomEvent('dify_agent_state_changed', { detail: data }));
+      if (activeConversation?.id && String(activeConversation.id) === String(convId)) {
+        window.dispatchEvent(new CustomEvent('dify_agent_state_changed', { detail: data }));
+      }
     };
 
     // Registrar listeners

@@ -84,6 +84,11 @@ interface ChatState {
   } | null;
   setInstanceStatusAlert: (alert: ChatState['instanceStatusAlert']) => void;
 
+  // Agentes Dify ativos por conversa (conversationId → display_name)
+  // Usado pela lista de conversas para mostrar o badge "🤖 Assiste" igual ao "👤 X está atendendo"
+  difyActiveConversations: Record<string, string>;
+  setDifyActiveConversation: (conversationId: string, displayName: string | null) => void;
+
   // Reset
   reset: () => void;
 }
@@ -668,6 +673,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setInstanceStatusAlert: (alert) => set({ instanceStatusAlert: alert }),
 
+  // Dify active conversations
+  difyActiveConversations: {},
+  setDifyActiveConversation: (conversationId, displayName) => set((state) => {
+    const next = { ...state.difyActiveConversations };
+    if (displayName) {
+      next[conversationId] = displayName;
+    } else {
+      delete next[conversationId];
+    }
+    return { difyActiveConversations: next };
+  }),
+
   // Reset
   reset: () => set({
     departments: [],
@@ -681,6 +698,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     replyToMessage: null,
     instanceStatusAlert: null,
     openInSpyMode: false,
-    waitingForResponseMode: false
+    waitingForResponseMode: false,
+    difyActiveConversations: {},
   })
 }));

@@ -27,7 +27,7 @@ const getMediaProxyUrl = (externalUrl: string) => {
 const noopTyping = () => {};
 
 export function ChatWindow() {
-  const { activeConversation, setActiveConversation, openInSpyMode, replyToMessage, clearReply } = useChatStore();
+  const { activeConversation, setActiveConversation, openInSpyMode, replyToMessage, clearReply, setDifyActiveConversation } = useChatStore();
   const { user } = useAuthStore();
   // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
   const permissions = usePermissions();
@@ -725,13 +725,15 @@ export function ChatWindow() {
         if (cancelled) return;
         const data = res?.data as any;
         const active = data?.active_state;
-        setDifyHeaderState(active?.status === 'active' ? { display_name: active.display_name || 'Dify' } : null);
+        const activeName = active?.status === 'active' ? (active.display_name || 'Agente IA') : null;
+        setDifyHeaderState(activeName ? { display_name: activeName } : null);
+        setDifyActiveConversation(conversationId, activeName);
         // Pré-popular difyActiveState para quando o modal abrir (evita fetch extra se estado não mudou)
         if (active?.status === 'active') {
           setDifyActiveState(active);
         }
       })
-      .catch(() => { if (!cancelled) { setDifyHeaderState(null); setDifyActiveState(null); } });
+      .catch(() => { if (!cancelled) { setDifyHeaderState(null); setDifyActiveState(null); setDifyActiveConversation(conversationId, null); } });
     return () => { cancelled = true; };
   }, [conversationId]);
 
@@ -1019,7 +1021,6 @@ export function ChatWindow() {
                   className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full text-xs font-medium cursor-default"
                 >
                   <Bot className="w-3 h-3" />
-                  <span className="text-green-500 dark:text-green-400 font-semibold">Agente IA:</span>
                   {difyHeaderState.display_name}
                 </span>
               )}
@@ -1412,6 +1413,7 @@ export function ChatWindow() {
                               setDifyActiveState(null);
                               setSelectedDifyAgentId(null);
                               setDifyHeaderState(null);
+                              setDifyActiveConversation(conversationId, null);
                             } else {
                               toast.error(res?.data?.message || 'Erro ao parar agente.');
                             }
@@ -1503,11 +1505,12 @@ export function ChatWindow() {
                               catalog_id: agentIdToActivate,
                             });
                             if (res?.data?.success) {
-                              const agentName = difyAgents.find(a => a.id === agentIdToActivate)?.display_name || res.data.display_name || 'Dify';
+                              const agentName = difyAgents.find(a => a.id === agentIdToActivate)?.display_name || res.data.display_name || 'Agente IA';
                               const newActive = { catalog_id: agentIdToActivate, status: 'active', display_name: agentName };
                               // C5: atualizar estado local imediatamente após troca/reativação
                               setDifyActiveState(newActive);
                               setDifyHeaderState({ display_name: agentName });
+                              setDifyActiveConversation(conversationId, agentName);
                               toast.success(res.data.message || 'Agente trocado.');
                               closeStartFlowModal();
                             } else {
@@ -1546,11 +1549,12 @@ export function ChatWindow() {
                             catalog_id: targetAgentId,
                           });
                           if (res?.data?.success) {
-                            const agentName = difyAgents.find(a => a.id === targetAgentId)?.display_name || res.data.display_name || 'Dify';
+                            const agentName = difyAgents.find(a => a.id === targetAgentId)?.display_name || res.data.display_name || 'Agente IA';
                             const newActive = { catalog_id: targetAgentId, status: 'active', display_name: agentName };
                             // C5: atualizar estado local imediatamente para evitar double-activation
                             setDifyActiveState(newActive);
                             setDifyHeaderState({ display_name: agentName });
+                            setDifyActiveConversation(conversationId, agentName);
                             toast.success(res.data.message || 'Agente iniciado. As respostas serão enviadas automaticamente.');
                             closeStartFlowModal();
                           } else {

@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente otimizado com memoização
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Search, Plus, User, Eye, CircleDot } from 'lucide-react';
+import { Search, Plus, User, Eye, CircleDot, Bot } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { shallow } from 'zustand/shallow';
@@ -37,6 +37,7 @@ export function ConversationList() {
     activeDepartment,
     waitingForResponseMode,
     setWaitingForResponseMode,
+    difyActiveConversations,
   } = useChatStore(
     (state) => ({
       conversations: state.conversations,
@@ -48,6 +49,7 @@ export function ConversationList() {
       activeDepartment: state.activeDepartment,
       waitingForResponseMode: state.waitingForResponseMode,
       setWaitingForResponseMode: state.setWaitingForResponseMode,
+      difyActiveConversations: state.difyActiveConversations,
     }),
     shallow // ✅ Comparação shallow para evitar re-renders quando objetos não mudaram
   );
@@ -676,6 +678,16 @@ export function ConversationList() {
                   <div className="flex items-center gap-1 mb-1">
                     <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
                       👤 {(conversationItem.assigned_to_data?.first_name || conversationItem.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
+                    </span>
+                  </div>
+                )}
+
+                {/* Badge: agente Dify ativo nesta conversa */}
+                {difyActiveConversations[String(conversationItem.id)] && (
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded text-[10px] font-medium">
+                      <Bot className="w-3 h-3" />
+                      {difyActiveConversations[String(conversationItem.id)]}
                     </span>
                   </div>
                 )}
