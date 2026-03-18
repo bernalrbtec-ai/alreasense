@@ -4099,6 +4099,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     # A2: capturar apenas o ID do wa_instance para evitar objeto ORM stale na thread
                     _wa_instance_id = str(wa_instance.id) if wa_instance else None
 
+                    logger.info(
+                        "🤖 [DIFY] Lançando thread takeover → conv=%s tenant=%s msg_len=%s wa=%s",
+                        _conversation_id, _tenant_id, len(_message_content), _wa_instance_id
+                    )
+
                     def _run_dify_takeover():
                         try:
                             from django.db import close_old_connections
@@ -4110,6 +4115,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             from apps.chat.models import Conversation as _Conv
                             # D4: select_related('tenant') evita query extra para recarregar o tenant
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
+                            logger.info(
+                                "🤖 [DIFY] Thread iniciada → conv_found=%s tenant_id=%s",
+                                _conv is not None,
+                                str(_conv.tenant_id) if _conv else 'N/A'
+                            )
                             if _conv and _conv.tenant_id:
                                 _tenant = _conv.tenant  # já carregado pelo select_related
                                 # Recarregar wa_instance com conexão fresca da thread
@@ -4117,11 +4127,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 if _wa_instance_id:
                                     from apps.notifications.models import WhatsAppInstance as _WAI
                                     _wa_inst = _WAI.objects.filter(id=_wa_instance_id).first()
+                                logger.info(
+                                    "🤖 [DIFY] Chamando maybe_handle_dify_takeover → wa_inst=%s",
+                                    str(_wa_inst.id) if _wa_inst else 'None'
+                                )
                                 maybe_handle_dify_takeover(
                                     tenant=_tenant,
                                     conversation=_conv,
                                     message=DifyMessageStub(content=_message_content),
                                     wa_instance=_wa_inst,
+                                )
+                            else:
+                                logger.warning(
+                                    "🤖 [DIFY] Thread: conversa não encontrada ou sem tenant → conv_id=%s",
+                                    _conversation_id
                                 )
                         except Exception as _exc:
                             logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)
