@@ -851,6 +851,19 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         except Exception as e:
             logger.warning("[CHAT WS V2] instance_status_changed send failed: %s", e)
 
+    async def dify_agent_state_changed(self, event):
+        """Broadcast quando agente Dify é ativado ou parado numa conversa."""
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'dify_agent_state_changed',
+                'conversation_id': event.get('conversation_id'),
+                'status': event.get('status'),
+                'catalog_id': event.get('catalog_id'),
+                'display_name': event.get('display_name', ''),
+            }))
+        except Exception as e:
+            logger.warning("[CHAT WS V2] dify_agent_state_changed send failed: %s", e)
+
     # Database queries (sync_to_async)
     
     def _decode_jwt_payload_unsafe(self, token):
