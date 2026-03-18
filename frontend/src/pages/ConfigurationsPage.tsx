@@ -3416,7 +3416,7 @@ export default function ConfigurationsPage() {
                         </div>
                       </div>
                       <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
-                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`} className="min-w-[100px]">
+                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}` || editDifySyncingSchema} className="min-w-[100px]">
                           {difySavingKey === `catalog_edit_${editingDifyItemId}` ? <LoadingSpinner size="sm" className="mr-1" /> : null}
                           {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando…' : 'Salvar'}
                         </Button>

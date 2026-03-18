@@ -609,6 +609,10 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                         from apps.chat.webhooks import _launch_dify_thread
                         _launch_dify_thread(_run_dify_takeover_meta)
                     except Exception as _le:
+                        logger.error(
+                            "❌ [DIFY-META] _launch_dify_thread falhou, usando fallback (sem WeakSet): %s",
+                            _le, exc_info=True
+                        )
                         import threading as _t
                         t = _t.Thread(target=_run_dify_takeover_meta, daemon=True)
                         t.start()

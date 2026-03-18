@@ -322,7 +322,7 @@ def maybe_handle_dify_takeover(
             is_active=True,
         )
     except Exception as exc:
-        logger.warning("Dify takeover: agente não encontrado (%s)", exc)
+        logger.warning("Dify takeover: agente não encontrado (catalog_id=%s): %s", catalog_id, exc, exc_info=True)
         return False
 
     base_url = _extract_dify_base_url(agent.public_url or '')
@@ -422,7 +422,7 @@ def _resolve_wa_instance(agent, tenant, wa_instance, conversation):
         from apps.chat.instance_resolution import get_effective_wa_instance_for_conversation
         return get_effective_wa_instance_for_conversation(conversation)
     except Exception as exc:
-        logger.warning("Dify takeover: erro ao resolver instância (%s)", exc)
+        logger.warning("Dify takeover: erro ao resolver instância: %s", exc, exc_info=True)
     return None
 
 

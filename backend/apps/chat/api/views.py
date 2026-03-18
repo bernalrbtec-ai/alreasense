@@ -2,6 +2,8 @@
 Views para o módulo Flow Chat.
 Integra com permissões multi-tenant e departamentos.
 """
+from __future__ import annotations
+
 import logging
 import os
 import asyncio
@@ -4304,7 +4306,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 )
                 affected = cur.rowcount
         except Exception as exc:
-            logger.error("stop_dify_agent DB error: %s", exc)
+            logger.error("stop_dify_agent DB error: %s", exc, exc_info=True)
             return Response({'success': False, 'message': 'Erro ao parar agente.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         if affected == 0:
