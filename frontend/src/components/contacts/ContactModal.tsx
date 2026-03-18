@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, Calendar } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { PhoneInputWithDDD } from '../PhoneInputWithDDD'
 import { isValidE164, rawInputToE164 } from '../../lib/phoneDDD'
@@ -258,16 +258,15 @@ export default function ContactModal({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* ✅ NOVO: Foto de perfil (apenas ao editar) */}
+            {/* Foto de perfil (apenas ao editar) */}
             {contact?.id && contact?.profile_pic_url && (
-              <div className="flex items-center gap-4 pb-4 border-b">
+              <div className="flex items-center gap-4 pb-4 border-b border-border">
                 <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gray-200 dark:bg-gray-600 overflow-hidden">
                   <img
                     src={getMediaProxyUrl(contact.profile_pic_url) || ''}
                     alt={contact.name}
                     className="w-full h-full object-cover"
                     onError={(e) => {
-                      // Fallback se imagem não carregar
                       const target = e.currentTarget as HTMLImageElement;
                       target.style.display = 'none';
                       const parent = target.parentElement;
@@ -287,27 +286,29 @@ export default function ContactModal({
                 </div>
               </div>
             )}
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Nome *
-                </label>
-                <input
-                  type="text"
-                  required
-                  ref={nameInputRef}
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  onBlur={() => setTouched((t) => ({ ...t, name: true }))}
-                  aria-invalid={!!(touched.name && errors.name)}
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
-                {touched.name && errors.name ? (
-                  <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.name}</p>
-                ) : null}
-              </div>
 
+            {/* Row 1: Nome (largura total) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Nome *
+              </label>
+              <input
+                type="text"
+                required
+                ref={nameInputRef}
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onBlur={() => setTouched((t) => ({ ...t, name: true }))}
+                aria-invalid={!!(touched.name && errors.name)}
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+              />
+              {touched.name && errors.name ? (
+                <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.name}</p>
+              ) : null}
+            </div>
+
+            {/* Row 2: Email | Telefone */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Email
@@ -324,7 +325,6 @@ export default function ContactModal({
                   <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.email}</p>
                 ) : null}
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Telefone *
@@ -348,19 +348,10 @@ export default function ContactModal({
                   ) : null}
                 </div>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Data de Nascimento
-                </label>
-                <input
-                  type="date"
-                  value={formData.birth_date}
-                  onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
-              </div>
-
+            {/* Row 3: Cidade | Data de Nascimento */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Cidade
@@ -372,7 +363,36 @@ export default function ContactModal({
                   className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Data de Nascimento
+                </label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={formData.birth_date}
+                    onChange={(e) => setFormData({ ...formData, birth_date: e.target.value })}
+                    className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background [color-scheme:inherit]"
+                  />
+                  <Calendar className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" aria-hidden />
+                </div>
+              </div>
+            </div>
 
+            {/* Row 4: Quem Indicou | Estado */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Quem Indicou
+                </label>
+                <input
+                  type="text"
+                  value={formData.referred_by}
+                  onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
+                  placeholder="Nome de quem indicou o contato"
+                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Estado
@@ -390,21 +410,9 @@ export default function ContactModal({
                   ))}
                 </select>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Quem Indicou
-                </label>
-                <input
-                  type="text"
-                  value={formData.referred_by}
-                  onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
-                  placeholder="Nome de quem indicou o contato"
-                  className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
-                />
-              </div>
             </div>
 
+            {/* Row 5: Observações (largura total) */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Observações
@@ -413,7 +421,7 @@ export default function ContactModal({
                 rows={3}
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background"
+                className="w-full rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background resize-y"
               />
             </div>
 
