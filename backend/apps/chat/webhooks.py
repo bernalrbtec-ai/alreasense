@@ -4123,6 +4123,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 maybe_handle_dify_takeover,
                                 DifyMessageStub,
                                 _get_audio_transcription,
+                                ensure_active_dify_state_for_conversation,
                             )
                             from apps.chat.models import Conversation as _Conv
 
@@ -4141,6 +4142,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                         _conversation_id, _message_id
                                     )
                                     return  # não enviar áudio sem texto ao Dify
+                            # Edge case: placeholders de mídia sem texto útil não devem ativar takeover.
+                            normalized_content = (effective_content or "").strip().lower()
+                            if normalized_content in {"[image]", "[video]", "[document]", "[audio]"}:
+                                logger.info(
+                                    "dify_auto_start_skipped reason=non_text_placeholder tenant=%s conversation=%s content=%s",
+                                    _tenant_id,
+                                    _conversation_id,
+                                    normalized_content,
+                                )
+                                return
 
                             # D4: select_related('tenant') evita query extra para recarregar o tenant
                             _conv = _Conv.objects.select_related('tenant').filter(id=_conversation_id).first()
@@ -4151,6 +4162,59 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             )
                             if _conv and _conv.tenant_id:
                                 _tenant = _conv.tenant  # já carregado pelo select_related
+                                # Guardrail: takeover Dify é apenas para mensagens incoming de cliente.
+                                if getattr(message, "direction", "incoming") != "incoming":
+                                    logger.info(
+                                        "dify_auto_start_skipped reason=non_incoming tenant=%s conversation=%s direction=%s",
+                                        str(_tenant.id),
+                                        _conversation_id,
+                                        str(getattr(message, "direction", "")),
+                                    )
+                                    return
+                                if getattr(message, "is_internal", False):
+                                    logger.info(
+                                        "dify_auto_start_skipped reason=internal_message tenant=%s conversation=%s",
+                                        str(_tenant.id),
+                                        _conversation_id,
+                                    )
+                                    return
+                                # Guardrail: não auto-ativar/rodar Dify quando há atendimento humano ativo.
+                                if getattr(_conv, "assigned_to_id", None):
+                                    logger.info(
+                                        "dify_auto_start_skipped reason=assigned_to_human tenant=%s conversation=%s assigned_to=%s",
+                                        str(_tenant.id),
+                                        _conversation_id,
+                                        str(getattr(_conv, "assigned_to_id", "")),
+                                    )
+                                    return
+
+                                logger.info(
+                                    "dify_auto_start_attempt tenant=%s conversation=%s department=%s",
+                                    str(_tenant.id),
+                                    _conversation_id,
+                                    str(getattr(_conv, "department_id", "") or ""),
+                                )
+                                ensure_result = ensure_active_dify_state_for_conversation(
+                                    tenant=_tenant,
+                                    conversation=_conv,
+                                )
+                                if ensure_result:
+                                    if ensure_result.get("activated"):
+                                        logger.info(
+                                            "dify_auto_start_success tenant=%s conversation=%s catalog_id=%s display_name=%s",
+                                            str(_tenant.id),
+                                            _conversation_id,
+                                            ensure_result.get("catalog_id", ""),
+                                            ensure_result.get("display_name", ""),
+                                        )
+                                    else:
+                                        logger.info(
+                                            "dify_auto_start_skipped reason=already_active tenant=%s conversation=%s catalog_id=%s",
+                                            str(_tenant.id),
+                                            _conversation_id,
+                                            ensure_result.get("catalog_id", ""),
+                                        )
+
                                 # Recarregar wa_instance com conexão fresca da thread
                                 _wa_inst = None
                                 if _wa_instance_id:
@@ -4160,11 +4224,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                     "🤖 [DIFY] Chamando maybe_handle_dify_takeover → wa_inst=%s",
                                     str(_wa_inst.id) if _wa_inst else 'None'
                                 )
-                                maybe_handle_dify_takeover(
+                                handled = maybe_handle_dify_takeover(
                                     tenant=_tenant,
                                     conversation=_conv,
                                     message=DifyMessageStub(content=effective_content),
                                     wa_instance=_wa_inst,
+                                )
+                                logger.info(
+                                    "dify_takeover_result tenant=%s conversation=%s handled=%s",
+                                    str(_tenant.id),
+                                    _conversation_id,
+                                    bool(handled),
                                 )
                             else:
                                 logger.warning(

@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from django.conf import settings
 from django.db import connection as _conn
 
 from apps.chat.services.business_hours_service import BusinessHoursService
@@ -309,6 +310,229 @@ def _get_active_dify_state(conversation_id: str, tenant_id: str) -> dict | None:
             conversation_id, exc, exc_info=True
         )
     return None
+
+
+def _is_dify_auto_start_globally_enabled() -> bool:
+    """
+    Kill switch global para auto-start Dify.
+    Se ausente em settings, assume habilitado para não quebrar comportamento atual.
+    """
+    return bool(getattr(settings, "DIFY_AUTO_START_ENABLED", True))
+
+
+def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | None:
+    """
+    Resolve o agent Dify aplicável para uma conversa com base em DifyAssignment.
+
+    Prioridade:
+    1) scope=department quando conversation.department_id existe
+    2) scope=inbox quando conversation.department_id é nulo
+
+    Também valida:
+    - Dify habilitado no tenant (DifySettings.enabled)
+    - catálogo ativo
+    """
+    try:
+        from apps.ai.models import DifyAssignment, DifySettings
+    except Exception as exc:
+        logger.warning("⚠️ [DIFY] resolve assignment: models indisponíveis: %s", exc)
+        return None
+
+    tenant_id = str(getattr(tenant, "id", "") or "")
+    conv_id = str(getattr(conversation, "id", "") or "")
+    dept_id = getattr(conversation, "department_id", None)
+
+    if not tenant_id or not conv_id:
+        return None
+
+    if not _is_dify_auto_start_globally_enabled():
+        logger.info(
+            "dify_auto_start_skipped reason=global_flag_disabled tenant=%s conversation=%s",
+            tenant_id,
+            conv_id,
+        )
+        return None
+
+    try:
+        settings_obj = DifySettings.objects.filter(tenant=tenant).only("enabled").first()
+        if not settings_obj or not bool(getattr(settings_obj, "enabled", False)):
+            logger.info(
+                "dify_auto_start_skipped reason=dify_disabled tenant=%s conversation=%s",
+                tenant_id,
+                conv_id,
+            )
+            return None
+    except Exception as exc:
+        logger.warning("⚠️ [DIFY] resolve assignment: erro lendo DifySettings: %s", exc)
+        return None
+
+    try:
+        assignment = None
+        if dept_id:
+            assignment = (
+                DifyAssignment.objects.select_related("catalog")
+                .filter(
+                    tenant=tenant,
+                    scope_type=DifyAssignment.SCOPE_DEPARTMENT,
+                    scope_id=dept_id,
+                    catalog__is_active=True,
+                )
+                .first()
+            )
+        else:
+            assignment = (
+                DifyAssignment.objects.select_related("catalog")
+                .filter(
+                    tenant=tenant,
+                    scope_type=DifyAssignment.SCOPE_INBOX,
+                    scope_id__isnull=True,
+                    catalog__is_active=True,
+                )
+                .first()
+            )
+
+        if not assignment or not getattr(assignment, "catalog_id", None):
+            logger.info(
+                "dify_auto_start_skipped reason=no_assignment tenant=%s conversation=%s department=%s",
+                tenant_id,
+                conv_id,
+                str(dept_id) if dept_id else "",
+            )
+            return None
+
+        display_name = ""
+        if getattr(assignment, "catalog", None):
+            display_name = (
+                getattr(assignment.catalog, "display_name", "")
+                or getattr(assignment.catalog, "dify_app_id", "")
+                or ""
+            ).strip()
+
+        return {
+            "catalog_id": str(assignment.catalog_id),
+            "display_name": display_name or "Agente IA",
+            "scope_type": assignment.scope_type,
+            "scope_id": str(assignment.scope_id) if assignment.scope_id else None,
+        }
+    except Exception as exc:
+        logger.warning("⚠️ [DIFY] resolve assignment: erro ao buscar vínculo: %s", exc, exc_info=True)
+        return None
+
+
+def ensure_active_dify_state_for_conversation(
+    tenant,
+    conversation,
+    *,
+    started_by_user_id=None,
+    assignment: dict | None = None,
+) -> dict | None:
+    """
+    Garante estado ativo em ai_dify_conversation_state para uma conversa.
+
+    Regras:
+    - Se já existe estado ativo, NÃO sobrescreve catálogo.
+    - Se não existe ativo e há assignment válido, faz UPSERT idempotente.
+    - Retorna metadata do estado ativo final.
+    """
+    from django.db import transaction
+
+    tenant_id = str(getattr(tenant, "id", "") or "")
+    conv_id = str(getattr(conversation, "id", "") or "")
+    if not tenant_id or not conv_id:
+        return None
+
+    if assignment is None:
+        assignment = resolve_dify_assignment_for_conversation(tenant, conversation)
+    if not assignment:
+        return None
+
+    catalog_id = str(assignment.get("catalog_id") or "").strip()
+    if not catalog_id:
+        return None
+
+    try:
+        with transaction.atomic(), _conn.cursor() as cur:
+            cur.execute(
+                "SELECT catalog_id, status FROM ai_dify_conversation_state "
+                "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
+                [conv_id, tenant_id],
+            )
+            row = cur.fetchone()
+            if row:
+                return {
+                    "activated": False,
+                    "already_active": True,
+                    "catalog_id": str(row[0]),
+                    "status": row[1] or "active",
+                    "display_name": assignment.get("display_name") or "Agente IA",
+                }
+
+            cur.execute(
+                "INSERT INTO ai_dify_conversation_state "
+                "(id, tenant_id, conversation_id, catalog_id, status, started_by_user_id, started_at, updated_at) "
+                "VALUES (gen_random_uuid(), %s, %s, %s, 'active', %s, now(), now()) "
+                "ON CONFLICT (conversation_id) DO UPDATE SET "
+                "catalog_id = EXCLUDED.catalog_id, status = 'active', started_by_user_id = EXCLUDED.started_by_user_id, "
+                "updated_at = now(), dify_conversation_id = NULL "
+                "WHERE ai_dify_conversation_state.status <> 'active' "
+                "RETURNING catalog_id, status",
+                [tenant_id, conv_id, catalog_id, started_by_user_id],
+            )
+            upsert_row = cur.fetchone()
+
+            if not upsert_row:
+                cur.execute(
+                    "SELECT catalog_id, status FROM ai_dify_conversation_state "
+                    "WHERE conversation_id = %s AND tenant_id = %s AND status = 'active' LIMIT 1",
+                    [conv_id, tenant_id],
+                )
+                final_row = cur.fetchone()
+                if final_row:
+                    return {
+                        "activated": False,
+                        "already_active": True,
+                        "catalog_id": str(final_row[0]),
+                        "status": final_row[1] or "active",
+                        "display_name": assignment.get("display_name") or "Agente IA",
+                    }
+                return None
+    except Exception as exc:
+        logger.error(
+            "❌ [DIFY] ensure active state falhou tenant=%s conversation=%s: %s",
+            tenant_id,
+            conv_id,
+            exc,
+            exc_info=True,
+        )
+        return None
+
+    try:
+        from apps.chat.utils.websocket import broadcast_to_tenant
+
+        broadcast_to_tenant(
+            tenant_id=tenant_id,
+            event_type="dify_agent_state_changed",
+            data={
+                "conversation_id": conv_id,
+                "status": "active",
+                "catalog_id": catalog_id,
+                "display_name": assignment.get("display_name") or "Agente IA",
+            },
+        )
+    except Exception as ws_exc:
+        logger.warning(
+            "⚠️ [DIFY] Broadcast auto-start falhou (não crítico) conv=%s: %s",
+            conv_id,
+            ws_exc,
+        )
+
+    return {
+        "activated": True,
+        "already_active": False,
+        "catalog_id": catalog_id,
+        "status": "active",
+        "display_name": assignment.get("display_name") or "Agente IA",
+    }
 
 
 def _update_dify_conversation_id(state_id: str, dify_conversation_id: str, tenant_id: str) -> bool:
