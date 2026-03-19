@@ -19,6 +19,8 @@ export interface ConversationSidebarConversation {
   /** Atendente atual (quando conversa está atribuída) */
   assignedToId?: number | null;
   assignedToName?: string | null;
+  /** Agente/assistente Dify em execução nesta conversa (prioridade sobre atendente humano) */
+  activeAgentName?: string | null;
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;

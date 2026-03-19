@@ -136,11 +136,17 @@ export function ConversationSidebar({
                       </span>
                     </div>
 
-                    {item.assignedToId && item.assignedToName && (
+                    {(item.activeAgentName || (item.assignedToId && item.assignedToName)) && (
                       <div className="mb-0.5">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
-                          👤 {item.assignedToName} está atendendo
-                        </span>
+                        {item.activeAgentName ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded text-[10px] font-medium">
+                            🤖 {item.activeAgentName} está atendendo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
+                            👤 {item.assignedToName} está atendendo
+                          </span>
+                        )}
                       </div>
                     )}
 

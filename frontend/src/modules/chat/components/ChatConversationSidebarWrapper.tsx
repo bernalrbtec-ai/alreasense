@@ -28,6 +28,7 @@ export function ChatConversationSidebarWrapper() {
     setWaitingForResponseMode,
     setOpenInSpyMode,
     openInSpyMode,
+    difyActiveConversations,
   } = useChatStore(
     (s) => ({
       conversations: s.conversations,
@@ -38,6 +39,7 @@ export function ChatConversationSidebarWrapper() {
       setWaitingForResponseMode: s.setWaitingForResponseMode,
       setOpenInSpyMode: s.setOpenInSpyMode,
       openInSpyMode: s.openInSpyMode,
+      difyActiveConversations: s.difyActiveConversations,
     }),
     shallow
   );
@@ -170,8 +172,12 @@ export function ChatConversationSidebarWrapper() {
   ]);
 
   const sidebarItems = useMemo(
-    () => filteredConversations.map(conversationToSidebarItem),
-    [filteredConversations]
+    () =>
+      filteredConversations.map((conv) => ({
+        ...conversationToSidebarItem(conv),
+        activeAgentName: difyActiveConversations[String(conv.id)] ?? null,
+      })),
+    [filteredConversations, difyActiveConversations]
   );
 
   const handleSelectConversation = (id: string) => {
