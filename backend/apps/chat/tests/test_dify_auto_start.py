@@ -19,13 +19,11 @@ class ResolveDifyAssignmentTests(TestCase):
         result = resolve_dify_assignment_for_conversation(tenant, conversation)
         self.assertIsNone(result)
 
-    @patch("apps.ai.models.DifySettings")
     @patch("apps.ai.models.DifyAssignment")
-    def test_department_assignment_selected_when_enabled(self, mock_assignment_cls, mock_settings_cls):
+    def test_department_assignment_selected_when_enabled(self, mock_assignment_cls):
         tenant = SimpleNamespace(id="t1")
         conversation = SimpleNamespace(id="c1", department_id="d1")
 
-        mock_settings_cls.objects.filter.return_value.only.return_value.first.return_value = SimpleNamespace(enabled=True)
         mock_assignment_cls.SCOPE_DEPARTMENT = "department"
         mock_assignment_cls.SCOPE_INBOX = "inbox"
 
@@ -44,13 +42,11 @@ class ResolveDifyAssignmentTests(TestCase):
         self.assertEqual(result["display_name"], "Comercial IA")
         self.assertEqual(result["scope_type"], "department")
 
-    @patch("apps.ai.models.DifySettings")
     @patch("apps.ai.models.DifyAssignment")
-    def test_inbox_assignment_used_when_conversation_has_no_department(self, mock_assignment_cls, mock_settings_cls):
+    def test_inbox_assignment_used_when_conversation_has_no_department(self, mock_assignment_cls):
         tenant = SimpleNamespace(id="t1")
         conversation = SimpleNamespace(id="c1", department_id=None)
 
-        mock_settings_cls.objects.filter.return_value.only.return_value.first.return_value = SimpleNamespace(enabled=True)
         mock_assignment_cls.SCOPE_DEPARTMENT = "department"
         mock_assignment_cls.SCOPE_INBOX = "inbox"
 
@@ -69,13 +65,13 @@ class ResolveDifyAssignmentTests(TestCase):
         self.assertEqual(result["display_name"], "agent-inbox")
         self.assertEqual(result["scope_type"], "inbox")
 
-    @patch("apps.ai.models.DifySettings")
-    def test_returns_none_when_dify_disabled(self, mock_settings_cls):
+    @patch("apps.ai.models.DifyAssignment")
+    def test_returns_none_when_no_assignment(self, mock_assignment_cls):
         tenant = SimpleNamespace(id="t1")
         conversation = SimpleNamespace(id="c1", department_id="d1")
-
-        mock_settings_cls.objects.filter.return_value.only.return_value.first.return_value = SimpleNamespace(enabled=False)
-
+        mock_assignment_cls.SCOPE_DEPARTMENT = "department"
+        mock_assignment_cls.SCOPE_INBOX = "inbox"
+        mock_assignment_cls.objects.select_related.return_value.filter.return_value.first.return_value = None
         result = resolve_dify_assignment_for_conversation(tenant, conversation)
         self.assertIsNone(result)
 

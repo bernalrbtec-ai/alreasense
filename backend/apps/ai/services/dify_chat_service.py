@@ -329,11 +329,10 @@ def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | Non
     2) scope=inbox quando conversation.department_id é nulo
 
     Também valida:
-    - Dify habilitado no tenant (DifySettings.enabled)
     - catálogo ativo
     """
     try:
-        from apps.ai.models import DifyAssignment, DifySettings
+        from apps.ai.models import DifyAssignment
     except Exception as exc:
         logger.warning("⚠️ [DIFY] resolve assignment: models indisponíveis: %s", exc)
         return None
@@ -351,19 +350,6 @@ def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | Non
             tenant_id,
             conv_id,
         )
-        return None
-
-    try:
-        settings_obj = DifySettings.objects.filter(tenant=tenant).only("enabled").first()
-        if not settings_obj or not bool(getattr(settings_obj, "enabled", False)):
-            logger.info(
-                "dify_auto_start_skipped reason=dify_disabled tenant=%s conversation=%s",
-                tenant_id,
-                conv_id,
-            )
-            return None
-    except Exception as exc:
-        logger.warning("⚠️ [DIFY] resolve assignment: erro lendo DifySettings: %s", exc)
         return None
 
     try:
