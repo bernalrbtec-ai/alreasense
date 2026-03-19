@@ -21,6 +21,9 @@ def media_proxy(request):
     
     IMPORTANTE: Este endpoint é PÚBLICO (não requer autenticação)!
     
+    Volume de requisições: listas (contatos, conversas) carregam uma imagem por item
+    via este proxy; dezenas de GET em sequência são esperados, não indicam ataque.
+    
     Query params:
         url: URL da mídia (WhatsApp, etc) - para URLs externas
         s3_path: Caminho no S3 (ex: chat/{tenant_id}/attachments/{uuid}.jpg) - para nosso S3
@@ -282,12 +285,24 @@ def media_proxy(request):
             logger.info(f'   ✅ [MEDIA PROXY] Status: 200 OK')
             
         except httpx.HTTPStatusError as e:
+            # 403/404 do upstream (ex.: WhatsApp bloqueia requests de servidor) = tratar como
+            # "mídia indisponível" e retornar 404 para o frontend exibir placeholder (não 502).
+            if e.response.status_code in (403, 404):
+                logger.warning(
+                    '⚠️ [MEDIA PROXY] Mídia indisponível (upstream %s): %s...',
+                    e.response.status_code,
+                    media_url[:80],
+                )
+                return JsonResponse(
+                    {'error': 'Imagem indisponível', 'code': 'upstream_forbidden'},
+                    status=404,
+                )
             logger.error(
                 f'❌ [MEDIA PROXY] Erro HTTP {e.response.status_code}: {media_url[:80]}...'
             )
             return JsonResponse(
                 {'error': f'Erro ao buscar mídia: {e.response.status_code}'},
-                status=502
+                status=502,
             )
         except httpx.TimeoutException:
             logger.error(f'⏱️ [MEDIA PROXY] Timeout ao baixar: {media_url[:80]}...')
