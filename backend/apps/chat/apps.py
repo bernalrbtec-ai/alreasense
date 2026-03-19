@@ -15,14 +15,16 @@ class ChatConfig(AppConfig):
         """Importa signals quando app estiver pronto."""
         import apps.chat.signals  # noqa
         # Registrar handler de graceful shutdown para aguardar threads Dify em andamento
-        from django.core.signals import request_finished
+        import os as _os
         import signal as _signal
-        import sys
 
         def _graceful_shutdown(signum, frame):
             from apps.chat.webhooks import wait_dify_threads
             wait_dify_threads(timeout=35.0)
-            sys.exit(0)
+            # os._exit(0) evita "Task exception was never retrieved" quando o processo
+            # é o start_chat_consumer (asyncio): sys.exit(0) levanta SystemExit no contexto
+            # da task bloqueada no Redis e o asyncio loga o erro ao encerrar.
+            _os._exit(0)
 
         # SIGTERM é o sinal enviado pelo gunicorn no graceful reload/shutdown
         try:
