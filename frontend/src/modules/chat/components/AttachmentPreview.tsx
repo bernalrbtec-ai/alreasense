@@ -561,7 +561,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
     return (
       <div className="attachment-preview audio w-full">
         {/* Player estilo WhatsApp - responsivo e com largura maior */}
-        <div className="flex items-center gap-3 sm:gap-4 bg-white rounded-lg p-3 sm:p-4 shadow-sm w-full">
+        <div className="flex items-center gap-3 sm:gap-4 bg-white dark:bg-slate-800/90 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 shadow-sm w-full">
           {/* Botão Play/Pause - levemente maior */}
           <button
             onClick={togglePlay}
@@ -590,7 +590,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
           <div className="flex-1 min-w-0">
             {/* Progress Bar - mais alta em mobile */}
             <div
-              className="h-1.5 sm:h-1.5 bg-gray-200 rounded-full cursor-pointer mb-1.5 sm:mb-1"
+              className="h-1.5 sm:h-1.5 bg-gray-200 dark:bg-slate-600 rounded-full cursor-pointer mb-1.5 sm:mb-1"
               onClick={isAudioReady ? handleSeek : undefined}
             >
               <div
@@ -647,18 +647,18 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         {(showTranscription || showAI) &&
           attachment.is_audio &&
           (attachment.transcription || attachment.ai_metadata?.transcription?.status) && (
-          <div className="mt-3 bg-white rounded border border-gray-200 overflow-hidden">
+          <div className="mt-3 bg-white dark:bg-slate-800/90 rounded border border-gray-200 dark:border-slate-700 overflow-hidden">
             {/* Header clicável para expandir/recolher */}
             <button
               type="button"
               onClick={() => setIsTranscriptionCollapsed((prev) => !prev)}
-              className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors text-left"
+              className="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-slate-700/60 transition-colors text-left"
               title={isTranscriptionCollapsed ? "Expandir transcrição" : "Recolher transcrição"}
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">📝 Transcrição</span>
                 {attachment.transcription_language && (
-                  <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                  <span className="text-xs text-gray-500 dark:text-gray-300 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 rounded">
                     {attachment.transcription_language.toUpperCase()}
                   </span>
                 )}
@@ -677,20 +677,20 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
             
             {/* Conteúdo da transcrição (expandido) */}
             {!isTranscriptionCollapsed && (
-              <div className="px-3 pb-3 border-t border-gray-100">
-                <div className="pt-3 text-sm text-gray-600 dark:text-gray-400">
+              <div className="px-3 pb-3 border-t border-gray-100 dark:border-slate-700">
+                <div className="pt-3 text-sm text-gray-600 dark:text-gray-300">
                   {attachment.transcription ? (
                     <>
                       <p className="mb-3 leading-relaxed">{attachment.transcription}</p>
                       {/* Feedback de qualidade */}
                       {transcriptionQuality ? (
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
                           <span className="text-xs text-gray-500 dark:text-gray-400">
                             Qualidade: {transcriptionQuality === 'correct' ? '✓ Correta' : '✗ Incorreta'}
                           </span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
                           <span className="text-xs text-gray-500 dark:text-gray-400">A transcrição está correta?</span>
                           <button
                             type="button"
@@ -710,7 +710,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                               }
                             }}
                             disabled={isSubmittingQuality}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:text-green-700 dark:text-green-400 dark:hover:text-green-300 hover:bg-green-50 dark:hover:bg-green-900/25 rounded transition-colors disabled:opacity-50"
                           >
                             <CheckCircle className="h-3 w-3" />
                             Correta
@@ -733,7 +733,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                               }
                             }}
                             disabled={isSubmittingQuality}
-                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/25 rounded transition-colors disabled:opacity-50"
                           >
                             <XCircle className="h-3 w-3" />
                             Incorreta
@@ -758,7 +758,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                             setIsRetryingTranscription(false);
                           }
                         }}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                       >
                         {isRetryingTranscription ? 'Transcrevendo...' : 'Transcrever'}
                       </button>
@@ -774,9 +774,9 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
 
         {/* ✨ RESUMO IA */}
         {showAI && attachment.ai_summary && (
-          <div className="mt-2 p-3 bg-indigo-50 rounded border border-indigo-200">
-            <p className="text-xs font-semibold text-indigo-700 mb-1">🧠 Resumo IA:</p>
-            <p className="text-sm text-indigo-900">{attachment.ai_summary}</p>
+          <div className="mt-2 p-3 bg-indigo-50 dark:bg-indigo-900/25 rounded border border-indigo-200 dark:border-indigo-800/60">
+            <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 mb-1">🧠 Resumo IA:</p>
+            <p className="text-sm text-indigo-900 dark:text-indigo-100">{attachment.ai_summary}</p>
           </div>
         )}
 
@@ -786,7 +786,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
             {attachment.ai_tags.map((tag, tagIndex) => (
               <span
                 key={tagIndex}
-                className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded"
+                className="px-2 py-1 bg-indigo-100 dark:bg-indigo-900/35 text-indigo-700 dark:text-indigo-300 text-xs rounded"
               >
                 {tag}
               </span>
