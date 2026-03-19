@@ -542,6 +542,7 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                             maybe_handle_dify_takeover,
                             DifyMessageStub,
                             _get_audio_transcription,
+                            ensure_active_dify_state_for_conversation,
                         )
                         from apps.chat.models import Conversation as _Conv
                         from apps.notifications.models import WhatsAppInstance as _WAI
@@ -559,19 +560,85 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                                     _conv_id, _message_id
                                 )
                                 return  # não enviar áudio sem texto ao Dify
+                        normalized_content = (effective_content or '').strip().lower()
+                        if normalized_content in {"[image]", "[video]", "[document]", "[audio]"}:
+                            logger.info(
+                                "dify_auto_start_skipped reason=non_text_placeholder tenant=%s conversation=%s content=%s",
+                                _tenant_id,
+                                _conv_id,
+                                normalized_content,
+                            )
+                            return
 
                         _conv = _Conv.objects.select_related('tenant').filter(id=_conv_id).first()
                         if _conv and _conv.tenant_id:
+                            if getattr(new_msg, "direction", "incoming") != "incoming":
+                                logger.info(
+                                    "dify_auto_start_skipped reason=non_incoming tenant=%s conversation=%s direction=%s",
+                                    _tenant_id,
+                                    _conv_id,
+                                    str(getattr(new_msg, "direction", "")),
+                                )
+                                return
+                            if getattr(new_msg, "is_internal", False):
+                                logger.info(
+                                    "dify_auto_start_skipped reason=internal_message tenant=%s conversation=%s",
+                                    _tenant_id,
+                                    _conv_id,
+                                )
+                                return
+                            if getattr(_conv, "assigned_to_id", None):
+                                logger.info(
+                                    "dify_auto_start_skipped reason=assigned_to_human tenant=%s conversation=%s assigned_to=%s",
+                                    _tenant_id,
+                                    _conv_id,
+                                    str(getattr(_conv, "assigned_to_id", "")),
+                                )
+                                return
+
+                            logger.info(
+                                "dify_auto_start_attempt tenant=%s conversation=%s department=%s",
+                                _tenant_id,
+                                _conv_id,
+                                str(getattr(_conv, "department_id", "") or ""),
+                            )
+                            ensure_result = ensure_active_dify_state_for_conversation(
+                                tenant=_conv.tenant,
+                                conversation=_conv,
+                            )
+                            if ensure_result:
+                                if ensure_result.get("activated"):
+                                    logger.info(
+                                        "dify_auto_start_success tenant=%s conversation=%s catalog_id=%s display_name=%s",
+                                        _tenant_id,
+                                        _conv_id,
+                                        ensure_result.get("catalog_id", ""),
+                                        ensure_result.get("display_name", ""),
+                                    )
+                                else:
+                                    logger.info(
+                                        "dify_auto_start_skipped reason=already_active tenant=%s conversation=%s catalog_id=%s",
+                                        _tenant_id,
+                                        _conv_id,
+                                        ensure_result.get("catalog_id", ""),
+                                    )
+
                             _wa_inst = _WAI.objects.filter(id=_wa_instance_id).first()
                             logger.info(
                                 "🤖 [DIFY-META] Thread iniciada → conv=%s tenant=%s wa=%s",
                                 _conv_id, _tenant_id, _wa_instance_id
                             )
-                            maybe_handle_dify_takeover(
+                            handled = maybe_handle_dify_takeover(
                                 tenant=_conv.tenant,
                                 conversation=_conv,
                                 message=DifyMessageStub(content=effective_content),
                                 wa_instance=_wa_inst,
+                            )
+                            logger.info(
+                                "dify_takeover_result tenant=%s conversation=%s handled=%s",
+                                _tenant_id,
+                                _conv_id,
+                                bool(handled),
                             )
                         else:
                             logger.warning(
