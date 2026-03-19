@@ -488,6 +488,9 @@ def maybe_handle_dify_takeover(
     resolved = _resolve_inputs(getattr(agent, 'default_inputs', None) or {}, conversation)
     if resolved:
         logger.info("🤖 [DIFY] Inputs resolvidos (%d campos) para conversa=%s", len(resolved), conv_id)
+        # Log dos valores enviados (truncados) para conferência
+        preview = {k: (s[:60] + "…" if len(s := str(v)) > 60 else str(v)) for k, v in resolved.items()}
+        logger.info("🤖 [DIFY] inputs enviados ao Dify: %s", preview)
 
     dify_user = _normalize_dify_user(tenant_id, (agent.dify_app_id or ''), contact_phone)
     effective_prev_conv_id = prev_dify_conv_id
