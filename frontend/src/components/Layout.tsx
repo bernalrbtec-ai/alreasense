@@ -34,7 +34,7 @@ import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
 import { ThemeToggle } from './ThemeToggle'
-import { NotificationToggle } from '../modules/chat/components/NotificationToggle'
+import { NotificationBell } from './NotificationBell'
 import { cn } from '../lib/utils'
 import { motionPresets } from '../lib/motionPresets'
 
@@ -313,7 +313,7 @@ export default function Layout() {
                 </div>
                 {showNotificationBell && (
                   <div className="shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
-                    <NotificationToggle />
+                    <NotificationBell placement="top" />
                   </div>
                 )}
                 <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
@@ -453,7 +453,7 @@ export default function Layout() {
                   size="md" 
                 />
                 {showNotificationBell && (
-                  <NotificationToggle />
+                  <NotificationBell placement="top" />
                 )}
                 <Button
                   variant="ghost"
@@ -481,7 +481,7 @@ export default function Layout() {
                   </div>
                   {showNotificationBell && (
                     <div className="shrink-0 mr-1" onClick={(e) => e.stopPropagation()}>
-                      <NotificationToggle />
+                      <NotificationBell placement="top" />
                     </div>
                   )}
                   <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
