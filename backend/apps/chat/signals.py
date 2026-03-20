@@ -2,6 +2,7 @@
 Signals para o módulo Flow Chat.
 """
 import logging
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from apps.chat.models import Message, Conversation
@@ -38,6 +39,17 @@ def on_conversation_closed_start_summary_pipeline(sender, instance, created, **k
         return
     if "g.us" in (instance.contact_phone or ""):
         return
-    # Pipeline de resumos descontinuado: não disparar mais resumos ao fechar conversa.
-    return
+    # Pipeline de resumos descontinuado.
+    # Novo fluxo: ingestão textual (sem anexos) para memória RAG do Dify.
+    try:
+        from apps.ai.services.dify_rag_memory_service import launch_ingest_closed_conversation
+
+        transaction.on_commit(lambda: launch_ingest_closed_conversation(str(instance.id)))
+    except Exception as exc:
+        logger.warning(
+            "RAG ingest trigger failed for conversation %s: %s",
+            str(instance.id),
+            exc,
+            exc_info=True,
+        )
 

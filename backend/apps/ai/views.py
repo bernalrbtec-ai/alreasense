@@ -3147,6 +3147,9 @@ def dify_catalog(request):
                         "metadata": it.metadata or {},
                         "input_schema": (it.metadata or {}).get('input_schema', []),
                         "default_inputs": it.default_inputs if hasattr(it, 'default_inputs') else {},
+                        "rag_enabled": bool((it.metadata or {}).get("rag_enabled", False)),
+                        "rag_scope": str((it.metadata or {}).get("rag_scope") or "tenant_contact"),
+                        "rag_dataset_id": str((it.metadata or {}).get("rag_dataset_id") or ""),
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
                     }
@@ -3187,6 +3190,9 @@ def dify_catalog(request):
         default_department_id = data.get("default_department_id")
         whatsapp_instance_id = data.get("whatsapp_instance_id")
         api_key = str(data.get("api_key") or "").strip()
+        rag_enabled = bool(_normalize_bool(data.get("rag_enabled")) is True)
+        rag_scope = str(data.get("rag_scope") or "tenant_contact").strip() or "tenant_contact"
+        rag_dataset_id = str(data.get("rag_dataset_id") or "").strip()
 
         if not public_url:
             return Response({"error": "public_url é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
@@ -3243,11 +3249,17 @@ def dify_catalog(request):
                 "whatsapp_instance_id": wa_uuid,
             },
         )
+        # Não sobrescrever metadata inteiro (ex.: input_schema). Faz merge dos campos RAG.
+        merged_meta = dict(item.metadata or {})
+        merged_meta["rag_enabled"] = rag_enabled
+        merged_meta["rag_scope"] = rag_scope
+        merged_meta["rag_dataset_id"] = rag_dataset_id
+        item.metadata = merged_meta
         # encrypt field cuida da criptografia em repouso
         item.api_key_encrypted = api_key
         item.signature_name = signature_name
         item.updated_at = timezone.now()
-        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "whatsapp_instance_id", "api_key_encrypted", "signature_name", "updated_at"])
+        item.save(update_fields=["display_name", "is_active", "public_url", "description", "default_department_id", "whatsapp_instance_id", "metadata", "api_key_encrypted", "signature_name", "updated_at"])
 
         # Auto-binding por departamento (opcional): se default_department_id foi definido,
         # faz upsert do vínculo do departamento para este catálogo.
@@ -3291,6 +3303,9 @@ def dify_catalog(request):
             "metadata": item.metadata or {},
             "input_schema": _post_input_schema if _post_input_schema is not None else [],
             "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
+            "rag_enabled": bool((item.metadata or {}).get("rag_enabled", False)),
+            "rag_scope": str((item.metadata or {}).get("rag_scope") or "tenant_contact"),
+            "rag_dataset_id": str((item.metadata or {}).get("rag_dataset_id") or ""),
         }
         if _binding_warning:
             resp_data["warning"] = _binding_warning
@@ -3351,7 +3366,18 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
+    if "rag_enabled" in data or "rag_scope" in data or "rag_dataset_id" in data:
+        md = item.metadata if isinstance(item.metadata, dict) else {}
+        if "rag_enabled" in data:
+            md["rag_enabled"] = bool(_normalize_bool(data.get("rag_enabled")) is True)
+        if "rag_scope" in data:
+            md["rag_scope"] = str(data.get("rag_scope") or "tenant_contact").strip() or "tenant_contact"
+        if "rag_dataset_id" in data:
+            md["rag_dataset_id"] = str(data.get("rag_dataset_id") or "").strip()
+        item.metadata = md
     patch_fields = ["display_name", "signature_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
+    if "rag_enabled" in data or "rag_scope" in data or "rag_dataset_id" in data:
+        patch_fields.append("metadata")
     # dify_app_id só entra em patch_fields se public_url foi enviada (e portanto o app_id foi reextrado)
     if "public_url" in data:
         patch_fields.append("dify_app_id")
@@ -3427,6 +3453,9 @@ def dify_catalog(request):
         "metadata": item.metadata or {},
         "input_schema": _patch_input_schema,
         "default_inputs": item.default_inputs if hasattr(item, 'default_inputs') else {},
+        "rag_enabled": bool((item.metadata or {}).get("rag_enabled", False)),
+        "rag_scope": str((item.metadata or {}).get("rag_scope") or "tenant_contact"),
+        "rag_dataset_id": str((item.metadata or {}).get("rag_dataset_id") or ""),
     }
     if _patch_binding_warning:
         patch_resp["warning"] = _patch_binding_warning

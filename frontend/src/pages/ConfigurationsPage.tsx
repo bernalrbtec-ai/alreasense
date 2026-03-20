@@ -247,6 +247,9 @@ interface DifyCatalogItem {
   whatsapp_instance_id?: string | null
   input_schema?: DifyInputField[]
   default_inputs?: Record<string, string>
+  rag_enabled?: boolean
+  rag_scope?: string
+  rag_dataset_id?: string
 }
 
 interface DifyWaInstance {
@@ -406,6 +409,9 @@ export default function ConfigurationsPage() {
   const [editDifyWaInstanceId, setEditDifyWaInstanceId] = useState<string>('')
   const [editDifyInputSchema, setEditDifyInputSchema] = useState<DifyInputField[]>([])
   const [editDifyDefaultInputs, setEditDifyDefaultInputs] = useState<Record<string, string>>({})
+  const [editDifyRagEnabled, setEditDifyRagEnabled] = useState(false)
+  const [editDifyRagScope, setEditDifyRagScope] = useState('tenant_contact')
+  const [editDifyRagDatasetId, setEditDifyRagDatasetId] = useState('')
   const [editDifySyncingSchema, setEditDifySyncingSchema] = useState(false)
   // Rastreia se uma sincronização de schema ocorreu nessa sessão de edição.
   // Necessário para saber se devemos enviar default_inputs={} mesmo quando schema veio [].
@@ -1756,6 +1762,9 @@ export default function ConfigurationsPage() {
     setEditingDifyItemId(null)
     setEditDifyInputSchema([])
     setEditDifyDefaultInputs({})
+    setEditDifyRagEnabled(false)
+    setEditDifyRagScope('tenant_contact')
+    setEditDifyRagDatasetId('')
     setEditDifySyncingSchema(false)
     setEditDifySchemaSynced(false)
   }
@@ -1772,6 +1781,9 @@ export default function ConfigurationsPage() {
     setEditDifyWaInstanceId(item.whatsapp_instance_id || '')
     setEditDifyInputSchema(item.input_schema || [])
     setEditDifyDefaultInputs(item.default_inputs || {})
+    setEditDifyRagEnabled(Boolean(item.rag_enabled))
+    setEditDifyRagScope(item.rag_scope || 'tenant_contact')
+    setEditDifyRagDatasetId(item.rag_dataset_id || '')
     setEditDifyOpen(true)
   }
 
@@ -1786,6 +1798,9 @@ export default function ConfigurationsPage() {
         public_url: editDifyPublicUrl,
         default_department_id: editDifyDefaultDepartmentId || null,
         whatsapp_instance_id: editDifyWaInstanceId || null,
+        rag_enabled: editDifyRagEnabled,
+        rag_scope: editDifyRagScope || 'tenant_contact',
+        rag_dataset_id: editDifyRagDatasetId.trim(),
       }
       if (!payload.public_url?.trim()) {
         showErrorToast('URL pública é obrigatória')
@@ -3259,6 +3274,44 @@ export default function ConfigurationsPage() {
                                 <option key={i.id} value={i.id}>{i.friendly_name}</option>
                               ))}
                             </select>
+                          </div>
+                          <div className="md:col-span-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <Label>Memória (RAG) neste agente</Label>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Quando ativo, este agente usa contexto RAG por tenant+contato.</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditDifyRagEnabled((v) => !v)}
+                                className={`inline-flex h-7 w-12 items-center rounded-full transition-colors ${editDifyRagEnabled ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                aria-pressed={editDifyRagEnabled}
+                                aria-label="Ativar memória RAG"
+                              >
+                                <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${editDifyRagEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                              </button>
+                            </div>
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                              <div>
+                                <Label>Escopo RAG</Label>
+                                <select
+                                  value={editDifyRagScope}
+                                  onChange={(e) => setEditDifyRagScope(e.target.value)}
+                                  className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-gray-900 dark:text-gray-100"
+                                >
+                                  <option value="tenant_contact">tenant+contato</option>
+                                </select>
+                              </div>
+                              <div>
+                                <Label>ID Dataset RAG (opcional)</Label>
+                                <Input
+                                  value={editDifyRagDatasetId}
+                                  onChange={(e) => setEditDifyRagDatasetId(e.target.value)}
+                                  placeholder="dataset-id"
+                                  className="mt-1"
+                                />
+                              </div>
+                            </div>
                           </div>
                         </div></div>
 
