@@ -47,6 +47,7 @@ import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { Skeleton } from '../components/ui/Skeleton'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { ApiErrorHandler } from '../lib/apiErrorHandler'
@@ -3127,7 +3128,11 @@ export default function ConfigurationsPage() {
                   </Button>
                 </div>
                 {difyCatalogLoading && difyCatalog.length === 0 ? (
-                  <div className="flex items-center justify-center h-24"><LoadingSpinner /></div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-14 w-full rounded-lg" />
+                    <Skeleton className="h-14 w-full rounded-lg" />
+                    <Skeleton className="h-14 w-full rounded-lg" />
+                  </div>
                 ) : difyCatalog.length === 0 ? (
                   <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum agente Dify cadastrado.</p>
                 ) : (
@@ -3184,11 +3189,11 @@ export default function ConfigurationsPage() {
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.98 }}
                       transition={{ duration: 0.2 }}
-                      className="w-full max-w-3xl"
+                      className="w-full max-w-5xl"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <Card className="p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-                        <div className="flex items-center justify-between mb-4">
+                      <Card className="border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden max-h-[92vh] flex flex-col">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/60">
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar agente Dify</h3>
                           <button
                             type="button"
@@ -3200,6 +3205,8 @@ export default function ConfigurationsPage() {
                           </button>
                         </div>
 
+                        <div className="overflow-y-auto px-6 py-6 space-y-6">
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 md:p-5 bg-gray-50/40 dark:bg-gray-800/30">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="md:col-span-2">
                             <Label>ID Dify</Label>
@@ -3240,9 +3247,100 @@ export default function ConfigurationsPage() {
                               ))}
                             </select>
                           </div>
+                          <div>
+                            <Label>Instância WhatsApp (entrada/saída)</Label>
+                            <select
+                              value={editDifyWaInstanceId}
+                              onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
+                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                            >
+                              <option value="">Usar instância da conversa</option>
+                              {difyWaInstances.map((i) => (
+                                <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div></div>
+
+                        <details className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 md:p-5 bg-gray-50/40 dark:bg-gray-800/30" open>
+                          <summary className="cursor-pointer list-none text-sm font-semibold text-gray-800 dark:text-gray-200">Parâmetros de entrada</summary>
+                          <div className="mt-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-xs text-gray-600 dark:text-gray-300">
+                              Campos do modelo Dify e mapeamento com variáveis do Sense:
+                              <code className="mx-1">{'{{tenant_name}}'}</code>
+                              <code className="mx-1">{'{{is_open}}'}</code>
+                              <code className="mx-1">{'{{data_hora_atual}}'}</code>
+                              <code className="mx-1">{'{{next_open_time}}'}</code>
+                              <code className="mx-1">{'{{contact_name}}'}</code>
+                              <code className="mx-1">{'{{contact_phone}}'}</code>
+                              <code className="mx-1">{'{{conversation_id}}'}</code>
+                              <code className="mx-1">{'{{department_name}}'}</code>
+                            </p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
+                              disabled={editDifySyncingSchema || !!difySavingKey}
+                            >
+                              {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
+                            </Button>
+                          </div>
+                          {editDifyInputSchema.length === 0 ? (
+                            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 italic">
+                              Nenhum campo detectado. Clique em "Sincronizar campos" para carregar os inputs do modelo.
+                            </p>
+                          ) : (
+                            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                              {editDifyInputSchema.map((field) => {
+                                const fieldLabel = (typeof field.label === 'object' && field.label !== null)
+                                  ? ((field.label as any)['en-US'] || (field.label as any)['pt-BR'] || Object.values(field.label as any)[0] || field.variable)
+                                  : (field.label || field.variable)
+                                const fullWidth = field.type === 'paragraph'
+                                return (
+                                  <div key={field.variable} className={fullWidth ? 'md:col-span-2' : ''}>
+                                    <Label>
+                                      {fieldLabel}
+                                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                                      <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({field.variable})</span>
+                                    </Label>
+                                    {field.type === 'select' && field.options ? (
+                                      <select
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                                      >
+                                        <option value="">-- selecione --</option>
+                                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                      </select>
+                                    ) : field.type === 'paragraph' ? (
+                                      <textarea
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        rows={3}
+                                        maxLength={field.max_length}
+                                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                                      />
+                                    ) : (
+                                      <Input
+                                        type={field.type === 'number' ? 'number' : 'text'}
+                                        value={editDifyDefaultInputs[field.variable] ?? ''}
+                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                        maxLength={field.max_length}
+                                        className="mt-1"
+                                      />
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )}
+                          </div>
+                        </details>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 mt-6">
+                        <div className="sticky bottom-0 flex items-center justify-between gap-2 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm">
                           <Button
                             type="button"
                             variant="outline"
