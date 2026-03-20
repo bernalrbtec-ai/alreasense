@@ -55,7 +55,9 @@ export function FileUploader({
     'text/xml',
     'application/json',
     'application/zip',
+    'application/x-zip-compressed',
     'application/vnd.rar',
+    'application/x-rar',
     'application/x-rar-compressed',
     'application/x-7z-compressed',
   ];

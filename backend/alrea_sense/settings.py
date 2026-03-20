@@ -656,7 +656,9 @@ ATTACHMENTS_ALLOWED_MIME = config(
         'application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'
         'application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,'
         'application/xml,text/xml,application/json,'
-        'application/zip,application/vnd.rar,application/x-rar-compressed,application/x-7z-compressed'
+        'application/zip,application/x-zip-compressed,'
+        'application/vnd.rar,application/x-rar,application/x-rar-compressed,'
+        'application/x-7z-compressed'
     ),
 )
 S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)

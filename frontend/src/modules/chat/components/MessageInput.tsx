@@ -14,7 +14,7 @@ import { MentionInput } from './MentionInput';
 import { QuickRepliesButton } from './QuickRepliesButton';
 import { TemplatePickerModal } from './TemplatePickerModal';
 import { api } from '@/lib/api';
-import { getMessagePreviewText } from '../utils/messageUtils';
+import { getMessagePreviewText, resolveFileMimeType } from '../utils/messageUtils';
 
 export interface InteractiveButton {
   id: string;
@@ -575,10 +575,11 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       console.log('📤 [FILE] Iniciando upload...', file.name, file.size, 'bytes');
 
       // 1️⃣ Obter presigned URL
+      const contentType = resolveFileMimeType(file);
       const { data: presignedData } = await api.post('/chat/upload-presigned-url/', {
         conversation_id: activeConversation.id,
         filename: file.name,
-        content_type: file.type,
+        content_type: contentType,
         file_size: file.size,
       });
 
@@ -608,7 +609,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         });
 
         xhr.open('PUT', presignedData.upload_url);
-        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.setRequestHeader('Content-Type', contentType);
         xhr.send(file);
       });
 
@@ -620,7 +621,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         attachment_id: presignedData.attachment_id,
         s3_key: presignedData.s3_key,
         filename: file.name,
-        content_type: file.type,
+        content_type: contentType,
         file_size: file.size,
         content: captionText || '',
       });
@@ -649,33 +650,36 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     try {
       const presignedResponses = await Promise.all(
         files.map(f =>
-          api.post('/chat/upload-presigned-url/', {
-            conversation_id: activeConversation.id,
-            filename: f.name,
-            content_type: f.type,
-            file_size: f.size,
-          }).then(r => ({ file: f, data: r.data }))
+          {
+            const contentType = resolveFileMimeType(f);
+            return api.post('/chat/upload-presigned-url/', {
+              conversation_id: activeConversation.id,
+              filename: f.name,
+              content_type: contentType,
+              file_size: f.size,
+            }).then(r => ({ file: f, contentType, data: r.data }));
+          }
         )
       );
 
       await Promise.all(
-        presignedResponses.map(({ file, data }) =>
+        presignedResponses.map(({ file, contentType, data }) =>
           new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.addEventListener('load', () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload ${xhr.status}`))));
             xhr.addEventListener('error', () => reject(new Error('Erro de rede')));
             xhr.open('PUT', data.upload_url);
-            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.setRequestHeader('Content-Type', contentType);
             xhr.send(file);
           })
         )
       );
 
-      const items = presignedResponses.map(({ file, data }) => ({
+      const items = presignedResponses.map(({ file, contentType, data }) => ({
         attachment_id: data.attachment_id,
         s3_key: data.s3_key,
         filename: file.name,
-        content_type: file.type,
+        content_type: contentType,
         file_size: file.size,
       }));
 

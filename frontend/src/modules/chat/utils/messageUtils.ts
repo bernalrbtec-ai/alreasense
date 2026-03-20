@@ -5,6 +5,32 @@
 
 import type { Message, MessageAttachment } from '../types';
 
+const EXTENSION_MIME_MAP: Record<string, string> = {
+  txt: 'text/plain',
+  pdf: 'application/pdf',
+  doc: 'application/msword',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt: 'application/vnd.ms-powerpoint',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  aac: 'audio/aac',
+  amr: 'audio/amr',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  ogg: 'audio/ogg',
+  '3gp': 'video/3gpp',
+  mp4: 'video/mp4',
+  xml: 'application/xml',
+  json: 'application/json',
+  zip: 'application/zip',
+  rar: 'application/vnd.rar',
+  '7z': 'application/x-7z-compressed',
+};
+
 /**
  * Ordena mensagens por timestamp (mais antiga primeiro - estilo WhatsApp)
  */
@@ -135,13 +161,14 @@ export function validateFileSize(file: File, maxSizeMB: number = 50): { valid: b
  * Valida tipo de arquivo
  */
 export function validateFileType(file: File, allowedTypes: string[]): { valid: boolean; error?: string } {
+  const resolvedMime = resolveFileMimeType(file);
   const isAllowed = allowedTypes.some(type => {
     if (type.endsWith('/*')) {
       const baseType = type.slice(0, -2);
-      return file.type.startsWith(baseType);
+      return resolvedMime.startsWith(baseType);
     }
     // Aceita tipo exato ou com parâmetros (ex: "text/xml; charset=utf-8")
-    return file.type === type || file.type.startsWith(type + ';');
+    return resolvedMime === type || resolvedMime.startsWith(type + ';');
   });
   
   if (!isAllowed) {
@@ -152,6 +179,17 @@ export function validateFileType(file: File, allowedTypes: string[]): { valid: b
   }
   
   return { valid: true };
+}
+
+/**
+ * Resolve MIME type com fallback por extensão quando file.type vem vazio.
+ */
+export function resolveFileMimeType(file: File): string {
+  const raw = (file.type || '').trim().toLowerCase();
+  if (raw) return raw;
+  const filename = (file.name || '').toLowerCase();
+  const ext = filename.includes('.') ? filename.split('.').pop() || '' : '';
+  return EXTENSION_MIME_MAP[ext] || 'application/octet-stream';
 }
 
 /** Metadata shape for placeholder detection */
