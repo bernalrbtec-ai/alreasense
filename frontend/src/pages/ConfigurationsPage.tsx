@@ -3139,8 +3139,26 @@ export default function ConfigurationsPage() {
                           <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{it.public_url || it.dify_app_id}</p>
                         </div>
                         <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openEditDifyItem(it)}
+                          >
+                            Editar
+                          </Button>
                           <Button type="button" size="sm" variant="outline" onClick={() => void setDifyCatalogItemActive(it.id, !it.is_active)} disabled={difySavingKey === `catalog_${it.id}`}>
                             {it.is_active ? 'Desativar' : 'Ativar'}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="border-red-700 text-red-500 hover:bg-red-900/30"
+                            onClick={() => requestDeleteDifyCatalogItem(it)}
+                            disabled={difySavingKey === `catalog_delete_${it.id}`}
+                          >
+                            Excluir
                           </Button>
                         </div>
                       </li>
@@ -3148,6 +3166,114 @@ export default function ConfigurationsPage() {
                   </ul>
                 )}
               </Card>
+
+              <AnimatePresence>
+                {editDifyOpen && editingDifyItemId && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+                    onClick={() => closeEditDifyModal()}
+                    role="dialog"
+                    aria-modal="true"
+                  >
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full max-w-3xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Card className="p-6 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Editar agente Dify</h3>
+                          <button
+                            type="button"
+                            onClick={() => closeEditDifyModal()}
+                            className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                            aria-label="Fechar"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="md:col-span-2">
+                            <Label>ID Dify</Label>
+                            <Input value={editDifyAppId} disabled className="mt-1" />
+                          </div>
+                          <div>
+                            <Label>Nome</Label>
+                            <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} className="mt-1" />
+                          </div>
+                          <div>
+                            <Label>Descrição</Label>
+                            <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} className="mt-1" />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label>URL pública</Label>
+                            <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} className="mt-1" />
+                          </div>
+                          <div>
+                            <Label>API key (opcional)</Label>
+                            <Input
+                              type="password"
+                              value={editDifyApiKey}
+                              onChange={(e) => setEditDifyApiKey(e.target.value)}
+                              placeholder={editDifyHasApiKey ? '•••••••• (manter em branco para não alterar)' : 'Cole a API key'}
+                              className="mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label>Departamento padrão</Label>
+                            <select
+                              value={editDifyDefaultDepartmentId}
+                              onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
+                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                            >
+                              <option value="">Nenhum</option>
+                              {departments.map((d) => (
+                                <option key={d.id} value={d.id}>{d.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 mt-6">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => editingDifyItemId && void testDifyConnection(editingDifyItemId)}
+                            disabled={difySavingKey === 'dify_test_connection'}
+                          >
+                            <TestTube className="h-4 w-4 mr-1" />
+                            {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
+                          </Button>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => closeEditDifyModal()}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => void saveEditDifyItem()}
+                              disabled={difySavingKey === `catalog_edit_${editingDifyItemId}`}
+                            >
+                              {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando...' : 'Salvar'}
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>
