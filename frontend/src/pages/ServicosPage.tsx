@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database, MessageCircle, Server } from 'lucide-react'
+import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database, MessageCircle, Server, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -20,6 +20,7 @@ import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { toast } from 'sonner'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 interface ProxyOverview {
   config_ok: boolean
@@ -67,6 +68,19 @@ interface ProxyStats {
   last_7_days: { total: number; success: number; success_rate: number }
   last_30_days: { total: number; success: number; success_rate: number }
   avg_updated_per_run: number
+}
+
+interface ProxyRotationSchedule {
+  id: number
+  name: string
+  is_active: boolean
+  interval_minutes: number
+  strategy: 'rotate' | 'prioritize' | 'random'
+  last_run_at: string | null
+  next_run_at: string | null
+  created_by_email: string | null
+  created_at: string
+  updated_at: string
 }
 
 interface RedisOverview {
@@ -185,6 +199,20 @@ export default function ServicosPage() {
   const [historyPage, setHistoryPage] = useState(1)
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null)
 
+  const [schedules, setSchedules] = useState<ProxyRotationSchedule[]>([])
+  const [isLoadingSchedules, setIsLoadingSchedules] = useState(false)
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
+  const [scheduleEditingId, setScheduleEditingId] = useState<number | null>(null)
+  const [scheduleForm, setScheduleForm] = useState({
+    name: '',
+    is_active: true,
+    interval_minutes: 1440,
+    strategy: 'rotate' as ProxyRotationSchedule['strategy'],
+  })
+  const [savingSchedule, setSavingSchedule] = useState(false)
+  const [deleteScheduleId, setDeleteScheduleId] = useState<number | null>(null)
+  const [deletingSchedule, setDeletingSchedule] = useState(false)
+
   const [redisOverview, setRedisOverview] = useState<RedisOverview | null>(null)
   const [redisStats, setRedisStats] = useState<RedisStats | null>(null)
   const [redisHistory, setRedisHistory] = useState<{ results: RedisCleanupLogEntry[]; count: number } | null>(null)
@@ -243,6 +271,20 @@ export default function ServicosPage() {
     }
   }
 
+  const fetchSchedules = async () => {
+    try {
+      setIsLoadingSchedules(true)
+      const res = await api.get<ProxyRotationSchedule[]>('/proxy/rotation-schedules/')
+      setSchedules(Array.isArray(res.data) ? res.data : [])
+    } catch (err: any) {
+      console.error('Erro ao carregar agendamentos:', err)
+      toast.error(err.response?.data?.error || 'Erro ao carregar agendamentos')
+      setSchedules([])
+    } finally {
+      setIsLoadingSchedules(false)
+    }
+  }
+
   useEffect(() => {
     fetchOverview()
   }, [])
@@ -251,6 +293,7 @@ export default function ServicosPage() {
     if (activeTab === 'proxy') {
       fetchHistory()
       fetchStats()
+      fetchSchedules()
     }
   }, [activeTab, historyPage])
 
@@ -411,6 +454,81 @@ export default function ServicosPage() {
       setIsRotating(false)
     }
   }
+
+  const openNewScheduleModal = () => {
+    setScheduleEditingId(null)
+    setScheduleForm({
+      name: '',
+      is_active: true,
+      interval_minutes: 1440,
+      strategy: 'rotate',
+    })
+    setScheduleModalOpen(true)
+  }
+
+  const openEditScheduleModal = (s: ProxyRotationSchedule) => {
+    setScheduleEditingId(s.id)
+    setScheduleForm({
+      name: s.name || '',
+      is_active: s.is_active,
+      interval_minutes: s.interval_minutes,
+      strategy: s.strategy,
+    })
+    setScheduleModalOpen(true)
+  }
+
+  const handleSaveSchedule = async () => {
+    const mins = Number(scheduleForm.interval_minutes)
+    if (!Number.isFinite(mins) || mins < 1 || mins > 10080) {
+      toast.error('Intervalo deve ser entre 1 e 10080 minutos (7 dias).')
+      return
+    }
+    try {
+      setSavingSchedule(true)
+      const body = {
+        name: scheduleForm.name.trim(),
+        is_active: scheduleForm.is_active,
+        interval_minutes: mins,
+        strategy: scheduleForm.strategy,
+      }
+      if (scheduleEditingId == null) {
+        await api.post('/proxy/rotation-schedules/', body)
+        toast.success('Agendamento criado')
+      } else {
+        await api.patch(`/proxy/rotation-schedules/${scheduleEditingId}/`, body)
+        toast.success('Agendamento atualizado')
+      }
+      setScheduleModalOpen(false)
+      await fetchSchedules()
+    } catch (err: any) {
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Erro ao salvar agendamento'
+      if (typeof msg === 'object') {
+        toast.error(JSON.stringify(msg))
+      } else {
+        toast.error(String(msg))
+      }
+    } finally {
+      setSavingSchedule(false)
+    }
+  }
+
+  const handleConfirmDeleteSchedule = async () => {
+    if (deleteScheduleId == null) return
+    try {
+      setDeletingSchedule(true)
+      await api.delete(`/proxy/rotation-schedules/${deleteScheduleId}/`)
+      toast.success('Agendamento removido')
+      setDeleteScheduleId(null)
+      await fetchSchedules()
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Erro ao excluir')
+    } finally {
+      setDeletingSchedule(false)
+    }
+  }
+
+  const strategyLabel = (s: string) =>
+    ({ rotate: 'Rotacionar', prioritize: 'Priorizar', random: 'Aleatório' } as Record<string, string>)[s] || s
 
   const formatDate = (s: string | null) =>
     s ? new Date(s).toLocaleString('pt-BR') : '—'
@@ -601,6 +719,232 @@ export default function ServicosPage() {
               </div>
             ) : null}
           </Card>
+
+          {/* Agendamentos de rotação */}
+          <Card className="p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-brand-500" />
+                  Agendamentos automáticos
+                </h2>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+                  Cadastre intervalos para rotação com a estratégia desejada. No servidor, rode periodicamente:{' '}
+                  <code className="text-xs bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded">
+                    python manage.py process_proxy_rotation_schedules
+                  </code>{' '}
+                  (ex.: cron a cada minuto).
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={fetchSchedules}
+                  disabled={isLoadingSchedules}
+                  className="border-gray-300 dark:border-gray-500"
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingSchedules ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+                <Button type="button" size="sm" onClick={openNewScheduleModal}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Novo agendamento
+                </Button>
+              </div>
+            </div>
+
+            {isLoadingSchedules ? (
+              <div className="flex justify-center py-8">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : schedules.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-2">
+                Nenhum agendamento cadastrado. Clique em &quot;Novo agendamento&quot; para criar.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <thead>
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Nome
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Ativo
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Intervalo (min)
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Estratégia
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Próxima execução
+                      </th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Última execução
+                      </th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {schedules.map((s) => (
+                      <tr
+                        key={s.id}
+                        className="border-t border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                      >
+                        <td className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">
+                          {s.name?.trim() ? s.name : <span className="text-gray-400">—</span>}
+                        </td>
+                        <td className="px-4 py-2 text-sm">
+                          {s.is_active ? (
+                            <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                              Sim
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                              Não
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm">{s.interval_minutes}</td>
+                        <td className="px-4 py-2 text-sm">{strategyLabel(s.strategy)}</td>
+                        <td className="px-4 py-2 text-sm">{formatDate(s.next_run_at)}</td>
+                        <td className="px-4 py-2 text-sm">{formatDate(s.last_run_at)}</td>
+                        <td className="px-4 py-2 text-sm text-right">
+                          <button
+                            type="button"
+                            onClick={() => openEditScheduleModal(s)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20 mr-1"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteScheduleId(s.id)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            Excluir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          {scheduleModalOpen && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 dark:bg-black/60"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="schedule-modal-title"
+              onClick={() => !savingSchedule && setScheduleModalOpen(false)}
+            >
+              <div
+                className="bg-white dark:bg-gray-900 rounded-xl shadow-xl max-w-md w-full border border-gray-200 dark:border-gray-700 p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="schedule-modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                  {scheduleEditingId == null ? 'Novo agendamento' : 'Editar agendamento'}
+                </h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nome (opcional)</label>
+                    <input
+                      type="text"
+                      value={scheduleForm.name}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, name: e.target.value }))}
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                      placeholder="Ex.: Rotação diária"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={scheduleForm.is_active}
+                      onChange={(e) => setScheduleForm((f) => ({ ...f, is_active: e.target.checked }))}
+                      className="rounded border-gray-300 dark:border-gray-600"
+                    />
+                    <span className="text-sm text-gray-700 dark:text-gray-300">Agendamento ativo</span>
+                  </label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Intervalo entre execuções (minutos)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10080}
+                      value={scheduleForm.interval_minutes}
+                      onChange={(e) =>
+                        setScheduleForm((f) => ({ ...f, interval_minutes: Number(e.target.value) || 0 }))
+                      }
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">1440 = aprox. uma vez por dia.</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Estratégia</label>
+                    <select
+                      value={scheduleForm.strategy}
+                      onChange={(e) =>
+                        setScheduleForm((f) => ({
+                          ...f,
+                          strategy: e.target.value as ProxyRotationSchedule['strategy'],
+                        }))
+                      }
+                      className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                    >
+                      <option value="rotate">Rotacionar</option>
+                      <option value="prioritize">Priorizar</option>
+                      <option value="random">Aleatório</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setScheduleModalOpen(false)}
+                    disabled={savingSchedule}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="button" onClick={handleSaveSchedule} disabled={savingSchedule}>
+                    {savingSchedule ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      'Salvar'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <ConfirmDialog
+            show={deleteScheduleId !== null}
+            title="Excluir agendamento?"
+            message="Esta ação não pode ser desfeita."
+            confirmText="Excluir"
+            variant="danger"
+            confirmLoading={deletingSchedule}
+            confirmLoadingText="Excluindo..."
+            onConfirm={handleConfirmDeleteSchedule}
+            onCancel={() => !deletingSchedule && setDeleteScheduleId(null)}
+          />
 
           {/* Statistics */}
           {stats && (

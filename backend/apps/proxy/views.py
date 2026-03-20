@@ -3,17 +3,23 @@ Views para a API de rotação de proxies.
 Acesso restrito a superadmin (exceto rotação via API key).
 """
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.db.models import Avg, Count
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import ProxyRotationInstanceLog, ProxyRotationLog
-from .serializers import ProxyRotationInstanceLogSerializer, ProxyRotationLogSerializer
+from .models import ProxyRotationInstanceLog, ProxyRotationLog, ProxyRotationSchedule
+from .serializers import (
+    ProxyRotationInstanceLogSerializer,
+    ProxyRotationLogSerializer,
+    ProxyRotationScheduleSerializer,
+)
 from .services import _validate_proxy_api_key, run_proxy_rotation
 
 logger = logging.getLogger(__name__)
@@ -203,3 +209,57 @@ def proxy_statistics(request):
         },
         "avg_updated_per_run": round(avg_updated, 1),
     })
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def proxy_rotation_schedule_list_create(request):
+    """Lista ou cria agendamentos de rotação (superadmin)."""
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    if request.method == "GET":
+        qs = ProxyRotationSchedule.objects.all().order_by("-created_at")
+        return Response(ProxyRotationScheduleSerializer(qs, many=True).data)
+
+    serializer = ProxyRotationScheduleSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    schedule = serializer.save(created_by=request.user)
+    if schedule.next_run_at is None:
+        schedule.next_run_at = timezone.now() + timedelta(minutes=schedule.interval_minutes)
+        schedule.save(update_fields=["next_run_at", "updated_at"])
+    return Response(
+        ProxyRotationScheduleSerializer(schedule).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def proxy_rotation_schedule_detail(request, pk):
+    """Detalhe, atualização ou exclusão de um agendamento."""
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    schedule = get_object_or_404(ProxyRotationSchedule, pk=pk)
+
+    if request.method == "GET":
+        return Response(ProxyRotationScheduleSerializer(schedule).data)
+
+    if request.method == "DELETE":
+        schedule.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    serializer = ProxyRotationScheduleSerializer(
+        schedule, data=request.data, partial=True
+    )
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    schedule.refresh_from_db()
+    return Response(ProxyRotationScheduleSerializer(schedule).data)

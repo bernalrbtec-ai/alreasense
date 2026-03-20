@@ -3,7 +3,7 @@ Django admin para proxy (opcional).
 """
 from django.contrib import admin
 
-from .models import ProxyRotationInstanceLog, ProxyRotationLog
+from .models import ProxyRotationInstanceLog, ProxyRotationLog, ProxyRotationSchedule
 
 
 class ProxyRotationInstanceLogInline(admin.TabularInline):
@@ -23,6 +23,23 @@ class ProxyRotationLogAdmin(admin.ModelAdmin):
         "created_at",
     )
     inlines = [ProxyRotationInstanceLogInline]
+
+
+@admin.register(ProxyRotationSchedule)
+class ProxyRotationScheduleAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "is_active",
+        "interval_minutes",
+        "strategy",
+        "next_run_at",
+        "last_run_at",
+        "created_at",
+    )
+    list_filter = ("is_active", "strategy")
+    search_fields = ("name",)
+    readonly_fields = ("created_at", "updated_at", "last_run_at")
 
 
 @admin.register(ProxyRotationInstanceLog)

@@ -212,7 +212,9 @@ def _format_notification_message(
 
 
 def run_proxy_rotation(
-    triggered_by: str = "manual", user=None
+    triggered_by: str = "manual",
+    user=None,
+    strategy_override: Optional[str] = None,
 ) -> Tuple[Optional[ProxyRotationLog], Optional[str]]:
     """
     Executa a rotação de proxies.
@@ -230,7 +232,9 @@ def run_proxy_rotation(
     )
     webshare_key = getattr(settings, "WEBSHARE_API_KEY", "")
     proxy_limit = getattr(settings, "WEBSHARE_PROXY_LIMIT", 100)
-    strategy = getattr(settings, "PROXY_ROTATION_STRATEGY", "rotate")
+    strategy = strategy_override or getattr(settings, "PROXY_ROTATION_STRATEGY", "rotate")
+    if strategy not in ("rotate", "prioritize", "random"):
+        strategy = getattr(settings, "PROXY_ROTATION_STRATEGY", "rotate")
     restart_instances = getattr(settings, "PROXY_ROTATION_RESTART_INSTANCES", True)
     wait_after_update = getattr(
         settings, "PROXY_ROTATION_WAIT_AFTER_UPDATE_SECONDS", 2

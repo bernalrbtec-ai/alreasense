@@ -72,3 +72,45 @@ class ProxyRotationInstanceLog(models.Model):
 
     def __str__(self):
         return f"{self.instance_name} - {'OK' if self.success else 'FAIL'}"
+
+
+class ProxyRotationSchedule(models.Model):
+    """
+    Agendamento de rotação automática (ex.: cron chama o comando que processa fila).
+    """
+
+    STRATEGY_CHOICES = ProxyRotationLog.STRATEGY_CHOICES
+
+    name = models.CharField(max_length=120, blank=True, default="")
+    is_active = models.BooleanField(default=True, db_index=True)
+    interval_minutes = models.PositiveIntegerField(
+        default=1440,
+        help_text="Intervalo entre execuções (minutos). Ex.: 1440 = uma vez por dia.",
+    )
+    strategy = models.CharField(
+        max_length=20,
+        choices=STRATEGY_CHOICES,
+        default="rotate",
+    )
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    next_run_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proxy_rotation_schedules",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "proxy_proxyrotationschedule"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["is_active", "next_run_at"]),
+        ]
+
+    def __str__(self):
+        label = self.name.strip() or f"Agendamento #{self.pk}"
+        return f"{label} ({self.interval_minutes} min)"
