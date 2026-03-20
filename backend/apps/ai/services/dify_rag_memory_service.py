@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 import threading
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,13 +24,6 @@ SOURCE_CHAT_TEXT_TRANSCRIPT = "chat_text_transcript"
 RAG_SCOPE_TENANT_CONTACT = "tenant_contact"
 DEFAULT_RETENTION_DAYS = 365
 DEFAULT_MAX_CHARS = 32000
-_SECRET_PATTERNS = [
-    re.compile(r"(?i)(bearer\s+[a-z0-9\-\._~\+\/]+=*)"),
-    re.compile(r"(?i)(api[_\- ]?key\s*[:=]\s*[a-z0-9\-\._~\+\/=]{8,})"),
-    re.compile(r"(?i)(x-amz-signature=[a-z0-9]+)"),
-    re.compile(r"(?i)(x-amz-credential=[^&\s]+)"),
-]
-_MEDIA_PLACEHOLDERS = {"[image]", "[video]", "[document]", "[audio]", "🎨 figurinha", "📍 localização"}
 
 
 @dataclass
@@ -41,78 +33,40 @@ class TranscriptBuildResult:
     first_message_at: str | None
     last_message_at: str | None
     skipped_reason: str | None = None
-
-
-def _sanitize_text(value: str) -> str:
-    out = value or ""
-    for pattern in _SECRET_PATTERNS:
-        out = pattern.sub("[redacted]", out)
-    return out
-
-
-def _message_sort_key(msg: Message):
-    created = getattr(msg, "created_at", None) or timezone.make_aware(datetime.min)
-    return created, str(getattr(msg, "id", ""))
+    timeline_event_lines: int = 0
 
 
 def _build_text_transcript(conversation: Conversation, *, max_chars: int) -> TranscriptBuildResult:
-    messages = list(
-        conversation.messages.all().only(
-            "id",
-            "message_id",
-            "direction",
-            "is_internal",
-            "content",
-            "created_at",
-            "sender_name",
-        )
+    """
+    Transcript unificado: eventos operacionais (timeline) + mensagens, ordem cronológica.
+    """
+    from apps.chat.services.conversation_timeline import (
+        message_time_bounds_utc_iso,
+        render_timeline_plaintext,
     )
-    if not messages:
-        return TranscriptBuildResult(content="", message_count=0, first_message_at=None, last_message_at=None, skipped_reason="no_messages")
 
-    messages.sort(key=_message_sort_key)
-    seen_keys: set[str] = set()
-    lines: list[str] = []
-    first_ts = None
-    last_ts = None
+    content, _total_lines, msg_line_count, event_line_count = render_timeline_plaintext(
+        conversation, max_chars=max_chars
+    )
+    first_ts, last_ts = message_time_bounds_utc_iso(conversation)
 
-    for msg in messages:
-        if getattr(msg, "is_internal", False):
-            continue
-        raw = (getattr(msg, "content", "") or "").strip()
-        if not raw:
-            continue
-        if raw.lower() in _MEDIA_PLACEHOLDERS:
-            continue
-        uniq_base = (getattr(msg, "message_id", "") or "").strip() or str(getattr(msg, "id", ""))
-        uniq_hash = hashlib.sha256((uniq_base + "|" + raw).encode("utf-8", errors="ignore")).hexdigest()
-        if uniq_hash in seen_keys:
-            continue
-        seen_keys.add(uniq_hash)
+    if not (content or "").strip():
+        return TranscriptBuildResult(
+            content="",
+            message_count=0,
+            first_message_at=first_ts,
+            last_message_at=last_ts,
+            skipped_reason="no_messages",
+            timeline_event_lines=event_line_count,
+        )
 
-        created_at = getattr(msg, "created_at", None)
-        ts = created_at.astimezone(timezone.utc).isoformat() if created_at else ""
-        if first_ts is None:
-            first_ts = ts or None
-        last_ts = ts or last_ts
-
-        sender = "Cliente" if getattr(msg, "direction", "incoming") == "incoming" else "Atendimento"
-        sender_name = (getattr(msg, "sender_name", "") or "").strip()
-        speaker = f"{sender} ({sender_name})" if sender_name else sender
-        line = f"[{ts}] {speaker}: {_sanitize_text(raw)}"
-        lines.append(line)
-
-    if not lines:
-        return TranscriptBuildResult(content="", message_count=0, first_message_at=None, last_message_at=None, skipped_reason="empty_text_transcript")
-
-    text = "\n".join(lines)
-    if len(text) > max_chars:
-        text = text[-max_chars:]
     return TranscriptBuildResult(
-        content=text,
-        message_count=len(lines),
+        content=content,
+        message_count=msg_line_count,
         first_message_at=first_ts,
         last_message_at=last_ts,
+        skipped_reason=None if (msg_line_count or event_line_count) else "empty_text_transcript",
+        timeline_event_lines=event_line_count,
     )
 
 
@@ -150,7 +104,9 @@ def _should_ingest_rag_for_closed_conversation(tenant, conversation) -> bool:
         from apps.ai.services.dify_chat_service import resolve_dify_assignment_for_conversation
         from apps.ai.models import DifyAppCatalogItem
 
-        assignment = resolve_dify_assignment_for_conversation(tenant, conversation)
+        assignment = resolve_dify_assignment_for_conversation(
+            tenant, conversation, ignore_auto_start_flag=True
+        )
         if not assignment:
             return False
         catalog_id = str(assignment.get("catalog_id") or "").strip()
@@ -247,6 +203,8 @@ def _finalize_ingest_under_lock(
         closed_at = (conversation.updated_at or now).astimezone(timezone.utc).isoformat()
         title = f"Conversa {conversation.contact_name or contact_phone_norm or conversation.contact_phone}"
 
+        from apps.chat.services.conversation_timeline import TIMELINE_SCHEMA_VERSION
+
         doc_metadata = {
             "schema_version": 1,
             "tenant_id": str(conversation.tenant_id),
@@ -256,6 +214,8 @@ def _finalize_ingest_under_lock(
             "channel": "whatsapp",
             "closed_at": closed_at,
             "message_count": built.message_count,
+            "timeline_event_lines": built.timeline_event_lines,
+            "timeline_schema_version": TIMELINE_SCHEMA_VERSION,
             "first_message_at": built.first_message_at,
             "last_message_at": built.last_message_at,
             "scope": RAG_SCOPE_TENANT_CONTACT,
@@ -340,7 +300,12 @@ def ingest_closed_conversation_transcript(conversation_id: str) -> None:
             pre_embedding=pre_embedding,
         )
     except Exception as exc:
-        logger.error("rag_transcript_ingest_failed conversation=%s error=%s", conversation_id, exc, exc_info=True)
+        logger.error(
+            "[rag_transcript] ingest_failed conversation=%s error=%s",
+            conversation_id,
+            exc,
+            exc_info=True,
+        )
 
 
 def launch_ingest_closed_conversation(conversation_id: str) -> None:

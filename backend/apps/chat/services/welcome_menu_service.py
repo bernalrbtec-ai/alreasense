@@ -446,13 +446,40 @@ class WelcomeMenuService:
                 logger.debug(f"✅ {unread_count} mensagens marcadas como lidas")
             
             # Fechar conversa e remover departamento/atendente (Inbox) para a Secretária poder responder quando reabrir
-            conversation.status = 'closed'
-            conversation.department = None
-            conversation.assigned_to = None
-            conversation.save(update_fields=['status', 'department', 'assigned_to'])
-            # Parar fluxo e descartar estado ao encerrar
             from apps.chat.models_flow import ConversationFlowState
-            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+            from apps.chat.services.conversation_timeline import (
+                merge_conversation_closed_on_instance,
+                should_skip_timeline_for_conversation,
+            )
+
+            with transaction.atomic():
+                locked = (
+                    Conversation.objects.select_for_update()
+                    .select_related("department", "assigned_to")
+                    .get(pk=conversation.id)
+                )
+                if locked.status == "closed":
+                    logger.info(f"✅ Conversa {conversation.id} já estava fechada")
+                    return True
+                if not should_skip_timeline_for_conversation(locked):
+                    merge_conversation_closed_on_instance(
+                        locked,
+                        close_source="welcome_menu",
+                        closed_by_user=None,
+                    )
+                locked.status = "closed"
+                locked.department = None
+                locked.assigned_to = None
+                locked.save(
+                    update_fields=[
+                        "status",
+                        "department",
+                        "assigned_to",
+                        "metadata",
+                        "updated_at",
+                    ]
+                )
+                ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
             logger.info(f"✅ Conversa {conversation.id} fechada pelo cliente")
             return True
             

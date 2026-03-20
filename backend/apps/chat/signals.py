@@ -24,11 +24,11 @@ def log_message_created(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Conversation)
 def on_conversation_closed_start_summary_pipeline(sender, instance, created, **kwargs):
     """
-    Ao fechar conversa (status=closed), dispara pipeline de resumo em background (summarize → rag-upsert).
-    BIA: resumos são gravados no pgvector para a BIA usar quando o contato voltar.
-    Idempotência: se metadata.conversation_summary_at já existir, não dispara.
-    Grupos (g.us) são ignorados. Só dispara se o tenant tiver TenantSecretaryProfile com use_memory=True.
-    Se N8N_SUMMARIZE_WEBHOOK_URL estiver vazio, o pipeline sai sem exceção. Rag-upsert é feito só ao aprovar na gestão RAG.
+    Ao fechar conversa (status=closed), dispara ingestão de transcript textual (sem anexos) para RAG
+    quando o agente Dify do escopo (assignment) tiver rag_enabled no catálogo.
+
+    Grupos WhatsApp (g.us) são ignorados.
+    Se metadata.conversation_summary_at estiver definido, não dispara (legado / compatibilidade).
     """
     if created:
         return

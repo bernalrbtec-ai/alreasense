@@ -492,6 +492,14 @@ AI_RESPONSE_CACHE_ENABLED = config('AI_RESPONSE_CACHE_ENABLED', default=True, ca
 AI_RESPONSE_CACHE_TTL = config('AI_RESPONSE_CACHE_TTL', default=3600, cast=int)  # 1 hora
 AI_RAG_CACHE_ENABLED = config('AI_RAG_CACHE_ENABLED', default=True, cast=bool)
 AI_RAG_CACHE_TTL = config('AI_RAG_CACHE_TTL', default=3600, cast=int)  # 1 hora
+
+# Timeline operacional (metadata + texto RAG). Desliga escrita ou só o merge na ingest sem reverter deploy.
+CHAT_CONVERSATION_TIMELINE_ENABLED = config(
+    'CHAT_CONVERSATION_TIMELINE_ENABLED', default=True, cast=bool
+)
+CHAT_TIMELINE_RAG_RENDER_ENABLED = config(
+    'CHAT_TIMELINE_RAG_RENDER_ENABLED', default=True, cast=bool
+)
 AI_INTERACTION_LOGGING_ENABLED = config('AI_INTERACTION_LOGGING_ENABLED', default=True, cast=bool)
 
 # Evolution API (Consolidated)

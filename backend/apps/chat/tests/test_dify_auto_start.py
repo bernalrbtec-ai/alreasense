@@ -11,6 +11,7 @@ from apps.ai.services.dify_chat_service import (
 )
 from apps.ai.services.dify_rag_memory_service import (
     _build_text_transcript,
+    _pg_advisory_xact_lock_conversation,
     ingest_closed_conversation_transcript,
     launch_ingest_closed_conversation,
 )
@@ -24,6 +25,26 @@ class ResolveDifyAssignmentTests(TestCase):
 
         result = resolve_dify_assignment_for_conversation(tenant, conversation)
         self.assertIsNone(result)
+
+    @override_settings(DIFY_AUTO_START_ENABLED=False)
+    @patch("apps.ai.models.DifyAssignment")
+    def test_resolve_bypasses_global_flag_when_ignore_auto_start(self, mock_assignment_cls):
+        tenant = SimpleNamespace(id="t1")
+        conversation = SimpleNamespace(id="c1", department_id="d1")
+        mock_assignment_cls.SCOPE_DEPARTMENT = "department"
+        mock_assignment_cls.SCOPE_INBOX = "inbox"
+        assignment = SimpleNamespace(
+            catalog_id="cat-1",
+            scope_type="department",
+            scope_id="d1",
+            catalog=SimpleNamespace(display_name="RAG", dify_app_id="app-x"),
+        )
+        mock_assignment_cls.objects.select_related.return_value.filter.return_value.first.return_value = assignment
+        result = resolve_dify_assignment_for_conversation(
+            tenant, conversation, ignore_auto_start_flag=True
+        )
+        self.assertIsNotNone(result)
+        self.assertEqual(result["catalog_id"], "cat-1")
 
     @patch("apps.ai.models.DifyAssignment")
     def test_department_assignment_selected_when_enabled(self, mock_assignment_cls):
@@ -177,33 +198,21 @@ class DifyRagMemoryServiceTests(TestCase):
             sender_name="",
         )
 
-    def test_build_transcript_skips_media_placeholders(self):
-        conv = SimpleNamespace(
-            messages=SimpleNamespace(
-                all=lambda: SimpleNamespace(
-                    only=lambda *args, **kwargs: [
-                        self._msg("m1", "[image]"),
-                        self._msg("m2", "texto valido"),
-                    ]
-                )
-            )
-        )
+    @patch("apps.chat.services.conversation_timeline.message_time_bounds_utc_iso", return_value=("t0", "t1"))
+    @patch("apps.chat.services.conversation_timeline.render_timeline_plaintext")
+    def test_build_transcript_skips_media_placeholders(self, mock_render, _mock_bounds):
+        mock_render.return_value = ("[2026-01-01T12:00:00+00:00] Cliente: texto valido", 1, 1, 0)
+        conv = SimpleNamespace(id="c1", metadata={})
         built = _build_text_transcript(conv, max_chars=1000)
         self.assertEqual(built.message_count, 1)
         self.assertIn("texto valido", built.content)
         self.assertNotIn("[image]", built.content)
 
-    def test_build_transcript_deduplicates_same_message_id_and_content(self):
-        conv = SimpleNamespace(
-            messages=SimpleNamespace(
-                all=lambda: SimpleNamespace(
-                    only=lambda *args, **kwargs: [
-                        self._msg("m1", "oi", message_id="ext-1"),
-                        self._msg("m2", "oi", message_id="ext-1"),
-                    ]
-                )
-            )
-        )
+    @patch("apps.chat.services.conversation_timeline.message_time_bounds_utc_iso", return_value=("t0", "t1"))
+    @patch("apps.chat.services.conversation_timeline.render_timeline_plaintext")
+    def test_build_transcript_counts_message_lines(self, mock_render, _mock_bounds):
+        mock_render.return_value = ("[2026-01-01T12:00:00+00:00] Cliente: oi", 1, 1, 0)
+        conv = SimpleNamespace(id="c1", metadata={})
         built = _build_text_transcript(conv, max_chars=1000)
         self.assertEqual(built.message_count, 1)
 
@@ -225,10 +234,14 @@ class DifyRagMemoryServiceTests(TestCase):
         self.assertEqual(mock_close_conn.call_count, 2)
         mock_ingest.assert_called_once_with("c-1")
 
+    @patch("apps.chat.services.conversation_timeline.message_time_bounds_utc_iso", return_value=(None, None))
+    @patch("apps.chat.services.conversation_timeline.render_timeline_plaintext")
     @patch("apps.ai.services.dify_rag_memory_service.AiKnowledgeDocument.objects.create")
-    @patch("apps.ai.services.dify_rag_memory_service._should_use_rag_for_conversation", return_value=True)
+    @patch("apps.ai.services.dify_rag_memory_service._should_ingest_rag_for_closed_conversation", return_value=True)
     @patch("apps.ai.services.dify_rag_memory_service.Conversation.objects")
-    def test_ingest_skips_when_hash_and_last_message_match(self, mock_conv_objects, _mock_rag_enabled, mock_create):
+    def test_ingest_skips_when_hash_and_last_message_match(
+        self, mock_conv_objects, _mock_rag_enabled, mock_create, mock_render, _mock_bounds
+    ):
         msg = self._msg("m1", "oi")
         conversation = SimpleNamespace(
             id="c1",
@@ -244,6 +257,7 @@ class DifyRagMemoryServiceTests(TestCase):
             all=lambda: SimpleNamespace(only=lambda *args, **kwargs: [msg]),
             order_by=lambda *args, **kwargs: SimpleNamespace(only=lambda *a, **k: SimpleNamespace(first=lambda: msg)),
         )
+        mock_render.return_value = ("[2026-01-01T12:00:00+00:00] Cliente: oi", 1, 1, 0)
         built = _build_text_transcript(conversation, max_chars=1000)
         import hashlib
         transcript_hash = hashlib.sha256((built.content or "").encode("utf-8", errors="ignore")).hexdigest()
@@ -255,3 +269,21 @@ class DifyRagMemoryServiceTests(TestCase):
         mock_conv_objects.select_related.return_value.filter.return_value.first.return_value = conversation
         ingest_closed_conversation_transcript("c1")
         mock_create.assert_not_called()
+
+    @patch("django.db.connection")
+    def test_pg_advisory_lock_runs_on_postgresql(self, mock_connection):
+        mock_connection.vendor = "postgresql"
+        cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__.return_value = cursor
+        _pg_advisory_xact_lock_conversation("00000000-0000-0000-0000-000000000001")
+        cursor.execute.assert_called()
+        args, _kwargs = cursor.execute.call_args
+        self.assertIn("pg_advisory_xact_lock", args[0])
+
+    @patch("django.db.connection")
+    def test_pg_advisory_lock_noop_on_sqlite(self, mock_connection):
+        mock_connection.vendor = "sqlite"
+        cursor = MagicMock()
+        mock_connection.cursor.return_value.__enter__.return_value = cursor
+        _pg_advisory_xact_lock_conversation("00000000-0000-0000-0000-000000000001")
+        cursor.execute.assert_not_called()

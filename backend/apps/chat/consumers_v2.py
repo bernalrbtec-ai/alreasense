@@ -1354,6 +1354,21 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                         f"✅ [CHAT WS V2] Conversa {conversation.id} atribuída automaticamente a {self.user.email}"
                     )
                     conversation.refresh_from_db()
+                    try:
+                        from apps.chat.services.conversation_timeline import record_assignment_changed_event
+
+                        record_assignment_changed_event(
+                            str(conversation.id),
+                            assigned_to_user=self.user,
+                            previous_user_id=None,
+                            source="websocket_auto",
+                        )
+                    except Exception as _tl_exc:
+                        logger.warning(
+                            "⚠️ [CHAT WS V2] timeline assignment event conv=%s: %s",
+                            conversation.id,
+                            _tl_exc,
+                        )
                     # Humano assumiu: interromper fluxo Typebot/Flowise
                     from apps.chat.models_flow import ConversationFlowState
                     ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()

@@ -14,6 +14,7 @@ import logging
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -97,10 +98,39 @@ class Command(BaseCommand):
                     from apps.chat.tasks import send_message_to_evolution
 
                     send_message_to_evolution.delay(str(msg.id))
-                    conv.status = "closed"
-                    conv.save(update_fields=["status"])
                     from apps.chat.models_flow import ConversationFlowState
-                    ConversationFlowState.objects.filter(conversation_id=conv.id).delete()
+                    from apps.chat.services.conversation_timeline import (
+                        merge_conversation_closed_on_instance,
+                        should_skip_timeline_for_conversation,
+                    )
+
+                    with transaction.atomic():
+                        locked = (
+                            Conversation.objects.select_for_update()
+                            .select_related("department", "assigned_to")
+                            .get(pk=conv.id)
+                        )
+                        if locked.status == "closed":
+                            continue
+                        if not should_skip_timeline_for_conversation(locked):
+                            merge_conversation_closed_on_instance(
+                                locked,
+                                close_source="inbox_idle",
+                                closed_by_user=None,
+                            )
+                        locked.status = "closed"
+                        locked.department = None
+                        locked.assigned_to = None
+                        locked.save(
+                            update_fields=[
+                                "status",
+                                "department",
+                                "assigned_to",
+                                "metadata",
+                                "updated_at",
+                            ]
+                        )
+                        ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
                     closed_count += 1
                     self.stdout.write(
                         self.style.SUCCESS(

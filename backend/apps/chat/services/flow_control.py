@@ -82,6 +82,7 @@ def close_conversation_from_bot(conversation: Conversation, source: str = "bot")
     """
     Fecha a conversa:
     - marca mensagens incoming como seen
+    - timeline: conversation_closed (snapshot) antes de limpar dept/atendente
     - status=closed, department/assigned_to=None
     - limpa ConversationFlowState (se existir)
     """
@@ -89,18 +90,36 @@ def close_conversation_from_bot(conversation: Conversation, source: str = "bot")
         return True
     try:
         from apps.chat.models_flow import ConversationFlowState
+        from apps.chat.services.conversation_timeline import (
+            merge_conversation_closed_on_instance,
+            should_skip_timeline_for_conversation,
+        )
 
         with transaction.atomic():
+            locked = (
+                Conversation.objects.select_for_update()
+                .select_related("department", "assigned_to")
+                .filter(pk=conversation.id)
+                .first()
+            )
+            if not locked or locked.status == "closed":
+                return True
             Message.objects.filter(
-                conversation=conversation,
+                conversation_id=locked.id,
                 direction="incoming",
                 status__in=["sent", "delivered"],
             ).update(status="seen")
-            conversation.status = "closed"
-            conversation.department = None
-            conversation.assigned_to = None
-            conversation.save(update_fields=["status", "department", "assigned_to"])
-            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+            if not should_skip_timeline_for_conversation(locked):
+                merge_conversation_closed_on_instance(
+                    locked, close_source=source or "bot", closed_by_user=None
+                )
+            locked.status = "closed"
+            locked.department = None
+            locked.assigned_to = None
+            locked.save(
+                update_fields=["status", "department", "assigned_to", "metadata", "updated_at"]
+            )
+            ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
         conversation.refresh_from_db()
         logger.info("[%s] Conversa %s fechada por instrução", (source or "bot").upper(), conversation.id)
         return True
@@ -159,15 +178,49 @@ def transfer_conversation_to_department(
             )
             return False
 
-        old_department = conversation.department
-        with transaction.atomic():
-            conversation.department = dept
-            conversation.assigned_to = None
-            conversation.status = "open"
-            conversation.save(update_fields=["department", "assigned_to", "status"])
-            ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        from apps.chat.services.conversation_timeline import (
+            merge_timeline_event,
+            should_skip_timeline_for_conversation,
+            EV_DEPARTMENT_TRANSFER,
+        )
 
-        old_name = old_department.name if old_department else "Inbox"
+        with transaction.atomic():
+            locked = (
+                Conversation.objects.select_for_update()
+                .select_related("department")
+                .filter(pk=conversation.id)
+                .first()
+            )
+            if not locked:
+                return False
+            old_department = locked.department
+            old_name = old_department.name if old_department else "Inbox"
+            locked.department = dept
+            locked.assigned_to = None
+            locked.status = "open"
+            if not should_skip_timeline_for_conversation(locked):
+                merge_timeline_event(
+                    locked,
+                    EV_DEPARTMENT_TRANSFER,
+                    {
+                        "from_dept": old_name,
+                        "to_dept": dept.name,
+                        "source": source or "bot",
+                        "actor_label": f"bot:{source}" if source else "bot",
+                    },
+                )
+            locked.save(
+                update_fields=[
+                    "department",
+                    "assigned_to",
+                    "status",
+                    "metadata",
+                    "updated_at",
+                ]
+            )
+            ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
+
+        conversation.refresh_from_db()
         transfer_msg = (
             f"Conversa transferida:\n"
             f"De: {old_name} (Não atribuído)\n"

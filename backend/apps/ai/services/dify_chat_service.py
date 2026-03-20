@@ -328,7 +328,12 @@ def _is_dify_auto_start_globally_enabled() -> bool:
     return bool(getattr(settings, "DIFY_AUTO_START_ENABLED", True))
 
 
-def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | None:
+def resolve_dify_assignment_for_conversation(
+    tenant,
+    conversation,
+    *,
+    ignore_auto_start_flag: bool = False,
+) -> dict | None:
     """
     Resolve o agent Dify aplicável para uma conversa com base em DifyAssignment.
 
@@ -338,6 +343,8 @@ def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | Non
 
     Também valida:
     - catálogo ativo
+
+    ignore_auto_start_flag: quando True, ignora DIFY_AUTO_START_ENABLED (ex.: ingestão RAG ao fechar).
     """
     try:
         from apps.ai.models import DifyAssignment
@@ -352,7 +359,7 @@ def resolve_dify_assignment_for_conversation(tenant, conversation) -> dict | Non
     if not tenant_id or not conv_id:
         return None
 
-    if not _is_dify_auto_start_globally_enabled():
+    if not ignore_auto_start_flag and not _is_dify_auto_start_globally_enabled():
         logger.info(
             "dify_auto_start_skipped reason=global_flag_disabled tenant=%s conversation=%s",
             tenant_id,

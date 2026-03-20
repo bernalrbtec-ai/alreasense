@@ -2502,6 +2502,27 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 WelcomeMenuService.send_welcome_menu(conversation)
                     except Exception as e:
                         logger.error("❌ [FLOW/WELCOME MENU] Erro ao enviar para nova conversa: %s", e, exc_info=True)
+
+                if created:
+                    try:
+                        from apps.chat.services.conversation_timeline import (
+                            is_timeline_writes_enabled,
+                            record_conversation_opened_event,
+                        )
+
+                        if is_timeline_writes_enabled():
+                            record_conversation_opened_event(
+                                str(conversation.id),
+                                channel="whatsapp",
+                                instance_name=(getattr(conversation, "instance_name", None) or "")[:200],
+                            )
+                    except Exception as tl_exc:
+                        logger.warning(
+                            "⚠️ [WEBHOOK] timeline conversation_opened conv=%s: %s",
+                            conversation.id,
+                            tl_exc,
+                            exc_info=True,
+                        )
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {normalized_phone} (original: {phone}) | Tipo: {conversation_type}")
         logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
@@ -2942,6 +2963,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     # Reaberta vai para a fila: sem agente atribuído
                     conversation.assigned_to = None
                     conversation.save(update_fields=['status', 'department', 'assigned_to'])
+
+                    try:
+                        from apps.chat.services.conversation_timeline import (
+                            is_timeline_writes_enabled,
+                            record_conversation_reopened_event,
+                        )
+
+                        if is_timeline_writes_enabled():
+                            record_conversation_reopened_event(
+                                str(conversation.id), source="webhook"
+                            )
+                    except Exception as tl_exc:
+                        logger.warning(
+                            "⚠️ [WEBHOOK] timeline conversation_reopened conv=%s: %s",
+                            conversation.id,
+                            tl_exc,
+                            exc_info=True,
+                        )
                     
                     status_str = conversation.department.name if conversation.department else "Inbox"
                     status_changed = True

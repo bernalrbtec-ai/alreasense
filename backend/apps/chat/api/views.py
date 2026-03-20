@@ -662,7 +662,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         {'error': 'Usuário não encontrado'},
                         status=status.HTTP_404_NOT_FOUND
                     )
-            
+
+            prev_assign = str(conversation.assigned_to_id) if conversation.assigned_to_id else ""
             # Atribuir apenas ao usuário (remover do departamento)
             conversation.assigned_to = assigned_to
             conversation.department = None  # ✅ NOVO: Remover department
@@ -670,7 +671,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             conversation.save(update_fields=['assigned_to', 'department', 'status'])
             # Humano assumiu: interromper fluxo Typebot/Flowise para que próximas mensagens não vão para o bot
             from apps.chat.models_flow import ConversationFlowState
+            from apps.chat.services.conversation_timeline import record_assignment_changed_event
+
             ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+            record_assignment_changed_event(
+                str(conversation.id),
+                assigned_to_user=assigned_to,
+                previous_user_id=prev_assign or None,
+                source="claim",
+            )
             serializer = self.get_serializer(conversation)
             return Response(serializer.data)
         
@@ -702,13 +711,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 )
         
         # Atualizar conversa
+        prev_assign = str(conversation.assigned_to_id) if conversation.assigned_to_id else ""
         conversation.department = department
         conversation.assigned_to = assigned_to
         conversation.status = 'open'
         conversation.save(update_fields=['department', 'assigned_to', 'status'])
         # Humano assumiu: interromper fluxo Typebot/Flowise
         from apps.chat.models_flow import ConversationFlowState
+        from apps.chat.services.conversation_timeline import record_assignment_changed_event
+
         ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
+        record_assignment_changed_event(
+            str(conversation.id),
+            assigned_to_user=assigned_to,
+            previous_user_id=prev_assign or None,
+            source="claim",
+        )
         serializer = self.get_serializer(conversation)
         return Response(serializer.data)
     
@@ -740,12 +758,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Salvar valores anteriores para logs
         old_department = conversation.department
         old_status = conversation.status
-        
+        prev_assign = str(conversation.assigned_to_id) if conversation.assigned_to_id else ""
+
         # Atribuir ao usuário atual; manter departamento para conversa ficar nos dois lugares (departamento + Minhas conversas)
         conversation.assigned_to = user
         # department não é alterado: conversa continua no departamento com "X está atendendo"
         conversation.status = 'open'
         conversation.save(update_fields=['assigned_to', 'status'])
+        from apps.chat.services.conversation_timeline import record_assignment_changed_event
+
+        record_assignment_changed_event(
+            str(conversation.id),
+            assigned_to_user=user,
+            previous_user_id=prev_assign or None,
+            source="start_attendance",
+        )
         # Humano assumiu: interromper fluxo Typebot/Flowise
         from apps.chat.models_flow import ConversationFlowState
         ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
@@ -1922,7 +1949,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if existing:
             needs_update = False
             update_fields_list = []
-            
+            reopened_from_closed = False
+
             # ✅ CORREÇÃO CRÍTICA: Garantir tipo e telefone normalizados (grupo/individual)
             if existing.conversation_type != conversation_type:
                 old_type = existing.conversation_type
@@ -1947,6 +1975,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # Isso garante que conversas fechadas sejam reabertas quando usuário inicia nova conversa
             
             if existing.status == 'closed':
+                reopened_from_closed = True
                 old_status = existing.status
                 old_department = existing.department.name if existing.department else 'Nenhum'
                 
@@ -1991,6 +2020,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             if needs_update:
                 existing.save(update_fields=update_fields_list)
                 logger.info(f"✅ [CONVERSATION START] Conversa existente atualizada: {existing.id}")
+
+            if reopened_from_closed and existing.status != 'closed':
+                from apps.chat.services.conversation_timeline import record_conversation_reopened_event
+
+                record_conversation_reopened_event(str(existing.id), source="conversation_start")
             
             # ✅ CORREÇÃO CRÍTICA: Atualizar last_message_at para conversa aparecer no topo da lista
             # Isso garante que conversas reabertas apareçam no topo, igual ao comportamento do webhook
@@ -2088,6 +2122,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if create_instance_friendly:
             create_kwargs['instance_friendly_name'] = create_instance_friendly
         conversation = Conversation.objects.create(**create_kwargs)
+
+        from apps.chat.services.conversation_timeline import record_conversation_opened_event
+
+        record_conversation_opened_event(
+            str(conversation.id),
+            channel="whatsapp",
+            instance_name=create_instance_name or "",
+        )
         
         logger.info(f"✅ [CONVERSATION START] Conversa criada: ID={conversation.id}, Status={initial_status}, Department={department.name if department else 'Inbox'}")
         
@@ -3152,44 +3194,80 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Isso evita que conversas fechadas apareçam no contador de "conversas novas".
         """
         from django.db import transaction
-        
+        from apps.chat.services.conversation_timeline import (
+            merge_conversation_closed_on_instance,
+            should_skip_timeline_for_conversation,
+        )
+
         conversation = self.get_object()
-        
+
         # ✅ NOVO: Marcar todas as mensagens não lidas como lidas antes de fechar
         unread_messages = Message.objects.filter(
             conversation=conversation,
             direction='incoming',
             status__in=['sent', 'delivered']  # Mensagens não lidas
         )
-        
+
         marked_count = unread_messages.count()
         if marked_count > 0:
             with transaction.atomic():
                 unread_messages.update(status='seen')
             logger.info(f"✅ [CONVERSA] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
-        
-        conversation.status = 'closed'
-        conversation.department = None  # Voltar ao Inbox quando reabrir
-        conversation.assigned_to = None  # Limpar atendente ao fechar
-        conversation.save(update_fields=['status', 'department', 'assigned_to'])
-        # Encerrar conversa: parar fluxo e descartar estado (Typebot/Sense)
+
         from apps.chat.models_flow import ConversationFlowState
-        ConversationFlowState.objects.filter(conversation_id=conversation.id).delete()
-        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada (departamento, atendente e fluxo removidos)")
+
+        with transaction.atomic():
+            locked = (
+                Conversation.objects.select_for_update()
+                .select_related("department", "assigned_to")
+                .get(pk=conversation.id)
+            )
+            if locked.status == "closed":
+                return Response(
+                    ConversationSerializer(locked).data,
+                    status=status.HTTP_200_OK,
+                )
+            Message.objects.filter(
+                conversation_id=locked.id,
+                direction="incoming",
+                status__in=["sent", "delivered"],
+            ).update(status="seen")
+            if not should_skip_timeline_for_conversation(locked):
+                merge_conversation_closed_on_instance(
+                    locked,
+                    close_source="api",
+                    closed_by_user=request.user,
+                )
+            locked.status = "closed"
+            locked.department = None
+            locked.assigned_to = None
+            locked.save(
+                update_fields=[
+                    "status",
+                    "department",
+                    "assigned_to",
+                    "metadata",
+                    "updated_at",
+                ]
+            )
+            ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
+
+        locked.refresh_from_db()
+        logger.info(f"🔒 [CONVERSA] Conversa {locked.id} fechada (departamento, atendente e fluxo removidos)")
 
         # Se havia takeover Dify ativo, parar e remover badge.
         try:
             from apps.ai.services.dify_chat_service import _stop_active_dify_for_conversation
-            _stop_active_dify_for_conversation(str(conversation.id), str(conversation.tenant_id))
+            _stop_active_dify_for_conversation(str(locked.id), str(locked.tenant_id))
         except Exception as _dify_stop_exc:
             logger.warning(
                 "⚠️ [CONVERSA] Falha ao parar takeover Dify (não crítico) conv=%s: %s",
-                str(conversation.id),
+                str(locked.id),
                 _dify_stop_exc,
             )
-        
+
         return Response(
-            ConversationSerializer(conversation).data,
+            ConversationSerializer(locked).data,
             status=status.HTTP_200_OK
         )
 
@@ -3592,9 +3670,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     def reopen(self, request, pk=None):
         """Reabre uma conversa."""
         conversation = self.get_object()
+        prev_status = conversation.status
         conversation.status = 'open'
         conversation.save(update_fields=['status'])
-        
+        if prev_status == 'closed':
+            from apps.chat.services.conversation_timeline import record_conversation_reopened_event
+
+            record_conversation_reopened_event(str(conversation.id), source='api')
+
         return Response(
             ConversationSerializer(conversation).data,
             status=status.HTTP_200_OK
