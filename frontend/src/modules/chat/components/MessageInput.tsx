@@ -826,7 +826,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       )}
 
       {/* Input area */}
-      <div className="flex items-end gap-2 px-4 py-3 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700 relative shadow-sm">
+      <div className="flex items-end gap-1.5 px-3 py-2 bg-chat-sidebar border-t border-gray-300 dark:border-slate-700/80 relative">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => {
@@ -836,10 +836,10 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         }}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
-          shadow-sm hover:shadow-md active:scale-95
+          active:scale-95
           ${includeSignature 
-            ? 'text-green-600 hover:bg-green-100 bg-green-50' 
-            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+            ? 'text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 bg-green-50 dark:bg-green-900/20' 
+            : 'text-gray-500 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
           }
         `}
         title={includeSignature ? 'Assinatura ativada - clique para desativar' : 'Assinatura desativada - clique para ativar'}
@@ -859,7 +859,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         <button
           type="button"
           onClick={() => setShowTemplateModal(true)}
-          className="p-2 rounded-full flex-shrink-0 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:text-indigo-400"
+          className="p-2 rounded-full flex-shrink-0 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:text-indigo-300"
           title={activeConversation?.requires_template_to_message ? 'Enviar por template (fora da janela 24h)' : 'Enviar por template (ex.: mensagem com botões)'}
         >
           <FileText className="w-5 h-5" />
@@ -871,7 +871,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         <button
           type="button"
           onClick={() => setShowButtonsModal(true)}
-          className="p-2 rounded-full flex-shrink-0 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 dark:text-emerald-400"
+          className="p-2 rounded-full flex-shrink-0 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 dark:text-emerald-300"
           title="Adicionar botões (até 3, dentro da janela 24h)"
         >
           <LayoutList className="w-5 h-5" />
@@ -882,7 +882,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         <button
           type="button"
           onClick={() => setShowListModal(true)}
-          className="p-2 rounded-full flex-shrink-0 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30 dark:text-violet-400"
+          className="p-2 rounded-full flex-shrink-0 text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-900/30 dark:text-violet-300"
           title="Enviar lista (até 10 opções, dentro da janela 24h)"
         >
           <ListOrdered className="w-5 h-5" />
@@ -901,7 +901,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
             setContactManualPhone('');
             setContactAgendaSearch('');
           }}
-          className="p-2 rounded-full flex-shrink-0 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 dark:text-amber-400"
+          className="p-2 rounded-full flex-shrink-0 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/30 dark:text-amber-300"
           title="Compartilhar contato"
           disabled={sending || !isConnected || isGroupInputBlocked}
         >
@@ -931,8 +931,8 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
             }
           }}
           className={`
-            p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md
-            ${showEmojiPicker ? 'bg-gray-200 shadow-md' : ''}
+            p-2 hover:bg-gray-200 dark:hover:bg-slate-700 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0
+            ${showEmojiPicker ? 'bg-gray-200 dark:bg-slate-700' : ''}
           `}
           title="Emoji"
           disabled={isGroupInputBlocked}
@@ -952,7 +952,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       </div>
 
       {/* Input */}
-      <div className="flex-1 bg-white dark:bg-gray-700 rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
+      <div className="flex-1 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-2xl transition-all duration-200 focus-within:ring-2 focus-within:ring-[#22c55e]/25">
         {conversationType === 'group' ? (
           <MentionInput
             value={message}
@@ -961,7 +961,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
             conversationId={conversationId}
             conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
             placeholder={isGroupInputBlocked ? 'Instância removida do grupo' : 'Digite uma mensagem (use @ para mencionar)'}
-            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
+            className="w-full px-4 py-2.5 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-slate-100 placeholder-gray-500 dark:placeholder-slate-400 transition-all duration-200"
             disabled={sending || isGroupInputBlocked}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
@@ -974,10 +974,10 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
             onPaste={handlePaste}
             placeholder={isGroupInputBlocked ? 'Instância removida do grupo' : 'Digite uma mensagem (Enter para enviar, Shift+Enter para nova linha)'}
             rows={1}
-            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
+            className="w-full px-4 py-2.5 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-slate-100 placeholder-gray-500 dark:placeholder-slate-400 transition-all duration-200"
             style={{
               maxHeight: '120px',
-              minHeight: '44px',
+              minHeight: '40px',
               transition: 'height 0.2s ease-out'
             }}
             disabled={sending || isGroupInputBlocked}
@@ -1001,10 +1001,10 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         disabled={isGroupInputBlocked || (!message.trim() && selectedFiles.length === 0) || sending || !isConnected || uploadingFile}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
-          shadow-md hover:shadow-lg active:scale-95
+          active:scale-95
           ${(message.trim() || selectedFiles.length > 0) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked
-            ? 'bg-chat-ring hover:bg-[#008f6f]'
-            : 'bg-gray-300 cursor-not-allowed opacity-50'
+            ? 'bg-chat-ring hover:bg-green-600'
+            : 'bg-gray-300 dark:bg-slate-700 cursor-not-allowed opacity-50'
           }
         `}
         title={
