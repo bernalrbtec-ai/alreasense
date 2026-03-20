@@ -998,7 +998,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   const isDark = theme === 'dark';
   return (
     <div 
-      className={`h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2 ${isDark ? 'bg-gray-900' : ''}`}
+      className={"h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2 bg-chat-bg"}
       style={isDark ? undefined : {
         backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0h100v100H0z\' fill=\'%23e5ddd5\'/%3E%3Cpath d=\'M20 10h60v2H20zm0 15h60v2H20zm0 15h40v2H20z\' fill=\'%23ffffff\' opacity=\'0.1\'/%3E%3C/svg%3E")',
       }}
@@ -1170,8 +1170,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   ${isSystemNotification
                     ? 'bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600'
                     : messageItem.direction === 'outgoing'
-                    ? 'bg-[#d9fdd3] dark:bg-green-800/80 text-gray-900 dark:text-white'
-                    : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+                    ? 'bg-[#d9fdd3] dark:bg-green-900/70 text-gray-900 dark:text-green-50 border border-transparent dark:border-green-700/60'
+                    : 'bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 border border-transparent dark:border-slate-700/70'
                   }
                 `}
                 onClick={(e) => {

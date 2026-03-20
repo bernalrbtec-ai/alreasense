@@ -894,13 +894,13 @@ export function ChatWindow() {
   }
 
   return (
-    <div ref={chatPanelRef} className="flex h-full w-full bg-chat-panel dark:bg-gray-900 animate-fade-in overflow-hidden">
+    <div ref={chatPanelRef} className="flex h-full w-full bg-chat-panel animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
       <div className="flex flex-col flex-1 min-w-0 transition-all duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-chat-sidebar dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 bg-chat-sidebar border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
           <Button

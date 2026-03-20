@@ -141,13 +141,13 @@ button, a, input, textarea, select {
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 94.1%;
-    --chat-bg: #111827;
-    --chat-sidebar: #1f2937;
-    --chat-panel: #111827;
-    --chat-bubble-in: #27272a;
-    --chat-bubble-out: #2563eb;
-    --chat-border: #374151;
-    --chat-ring: #00a884;
+    --chat-bg: #0b1220;
+    --chat-sidebar: #111a2e;
+    --chat-panel: #0f172a;
+    --chat-bubble-in: #1e293b;
+    --chat-bubble-out: #14532d;
+    --chat-border: #334155;
+    --chat-ring: #22c55e;
   }
 }
 

@@ -773,7 +773,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     <div className="relative">
       {/* ✅ NOVO: Preview de mensagem respondida */}
       {replyToMessage && (
-        <div className="px-4 pt-2 pb-1 bg-chat-sidebar dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700">
+        <div className="px-4 pt-2 pb-1 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700">
           <div className="bg-white dark:bg-gray-700 rounded-lg border-l-4 border-l-blue-500 shadow-sm p-2.5 flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
@@ -812,7 +812,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
 
       {/* Thumbnail preview acima do input */}
       {selectedFiles.length > 0 && (
-        <div className="px-4 pt-2 pb-1 bg-chat-sidebar dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 flex flex-wrap gap-2">
+        <div className="px-4 pt-2 pb-1 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700 flex flex-wrap gap-2">
           {selectedFiles.map((file, i) => (
             <AttachmentThumbnail
               key={`${file.name}-${file.size}-${i}`}
@@ -826,7 +826,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       )}
 
       {/* Input area */}
-      <div className="flex items-end gap-2 px-4 py-3 bg-chat-sidebar dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 relative shadow-sm">
+      <div className="flex items-end gap-2 px-4 py-3 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700 relative shadow-sm">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => {
