@@ -7,7 +7,7 @@ import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, List,
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { format, isToday, isYesterday } from 'date-fns';
 import type { MessageAttachment, MessageReaction } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
 import { useUserAccess } from '@/hooks/useUserAccess';
@@ -78,6 +78,11 @@ function parseTransferLines(content: string): { de: string; para: string; resumo
 }
 
 /** Agrupa mensagens consecutivas "Conversa transferida" em um único item para exibição */
+type DisplayItem =
+  | { type: 'message'; message: Message }
+  | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }
+  | { type: 'date_separator'; dayKey: string; label: string };
+
 function buildDisplayItems(messages: Message[]): Array<{ type: 'message'; message: Message } | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }> {
   if (!Array.isArray(messages) || messages.length === 0) return [];
   const items: Array<{ type: 'message'; message: Message } | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }> = [];
@@ -113,6 +118,36 @@ function buildDisplayItems(messages: Message[]): Array<{ type: 'message'; messag
     i++;
   }
   return items;
+}
+
+function getDayKey(date: Date): string {
+  return format(date, 'yyyy-MM-dd');
+}
+
+function getDateLabel(date: Date): string {
+  if (isToday(date)) return 'Hoje';
+  if (isYesterday(date)) return 'Ontem';
+  return format(date, 'dd/MM/yyyy');
+}
+
+function withDateSeparators(
+  items: Array<{ type: 'message'; message: Message } | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }>
+): DisplayItem[] {
+  const result: DisplayItem[] = [];
+  let lastDayKey = '';
+  for (const item of items) {
+    const createdAt = item.type === 'message'
+      ? item.message.created_at
+      : item.messages[0]?.created_at;
+    const date = new Date(createdAt);
+    const dayKey = getDayKey(date);
+    if (dayKey !== lastDayKey) {
+      result.push({ type: 'date_separator', dayKey, label: getDateLabel(date) });
+      lastDayKey = dayKey;
+    }
+    result.push(item);
+  }
+  return result;
 }
 
 /**
@@ -958,7 +993,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
     safeMessagesIsArray: Array.isArray(safeMessages)
   });
 
-  const displayItems = useMemo(() => buildDisplayItems(safeMessages), [safeMessages]);
+  const displayItems = useMemo(() => withDateSeparators(buildDisplayItems(safeMessages)), [safeMessages]);
 
   const isDark = theme === 'dark';
   return (
@@ -1066,6 +1101,15 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
           <div ref={messagesStartRef} /> {/* ✅ NOVO: Ref para topo */}
           
           {displayItems.map((item) => {
+            if (item.type === 'date_separator') {
+              return (
+                <div key={`date-${item.dayKey}`} className="flex justify-center my-3">
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-200/80 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                    {item.label}
+                  </span>
+                </div>
+              );
+            }
             if (item.type === 'transfer_merged') {
               if (!item.messages.length) return null;
               const firstMsg = item.messages[0];

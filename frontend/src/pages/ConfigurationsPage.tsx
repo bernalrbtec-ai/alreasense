@@ -370,6 +370,7 @@ export default function ConfigurationsPage() {
   // Rastreia se uma sincronização de schema ocorreu nessa sessão de edição.
   // Necessário para saber se devemos enviar default_inputs={} mesmo quando schema veio [].
   const [editDifySchemaSynced, setEditDifySchemaSynced] = useState(false)
+  const [difyItemToDelete, setDifyItemToDelete] = useState<DifyCatalogItem | null>(null)
   const [librechatHealthOk, setLibrechatHealthOk] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   
@@ -1661,7 +1662,8 @@ export default function ConfigurationsPage() {
     setDifySavingKey('catalog_create')
     try {
       // C15: usar resposta do POST diretamente — atualização otimista sem refetch
-      const { data: created } = await api.post('/ai/dify/catalog/', { display_name, signature_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      const response = await api.post('/ai/dify/catalog/', { display_name, signature_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      const created = response.data as DifyCatalogItem
       setDifyCatalog(prev => [created, ...prev])
       setNewDifyDisplayName('')
       setNewDifySignatureName('')
@@ -1671,7 +1673,14 @@ export default function ConfigurationsPage() {
       setNewDifyDefaultDepartmentId('')
       setNewDifyWaInstanceId('')
       setDifyCreateOpen(false)
-      showSuccessToast(created.warning ? `Agente cadastrado (⚠️ ${created.warning})` : 'Agente cadastrado')
+      const wasUpdate = response.status === 200
+      if (created.warning) {
+        showSuccessToast(`${wasUpdate ? 'Agente atualizado' : 'Agente cadastrado'} (⚠️ ${created.warning})`)
+      } else if (wasUpdate) {
+        showSuccessToast('Agente existente atualizado (mesmo app_id da URL)')
+      } else {
+        showSuccessToast('Agente cadastrado')
+      }
     } catch (e: any) {
       showErrorToast(e.response?.data?.error || 'Erro ao adicionar item')
     } finally {
@@ -1784,6 +1793,26 @@ export default function ConfigurationsPage() {
       showErrorToast(e.response?.data?.error || 'Erro ao sincronizar schema')
     } finally {
       setEditDifySyncingSchema(false)
+    }
+  }
+
+  const requestDeleteDifyCatalogItem = (item: DifyCatalogItem) => {
+    setDifyItemToDelete(item)
+  }
+
+  const deleteDifyCatalogItem = async () => {
+    if (!difyItemToDelete?.id) return
+    setDifySavingKey(`catalog_delete_${difyItemToDelete.id}`)
+    try {
+      await api.delete('/ai/dify/catalog/', { data: { id: difyItemToDelete.id } })
+      setDifyCatalog(prev => prev.filter((x) => x.id !== difyItemToDelete.id))
+      if (editingDifyItemId === difyItemToDelete.id) closeEditDifyModal()
+      showSuccessToast('Agente excluído')
+      setDifyItemToDelete(null)
+    } catch (e: any) {
+      showErrorToast(e.response?.data?.error || 'Erro ao excluir agente')
+    } finally {
+      setDifySavingKey(null)
     }
   }
 
@@ -3327,7 +3356,10 @@ export default function ConfigurationsPage() {
                           <TestTube className="h-4 w-4 mr-1" />
                           {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="ml-auto text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
+                        <Button type="button" variant="outline" onClick={() => { const current = difyCatalog.find(x => x.id === editingDifyItemId); if (current) requestDeleteDifyCatalogItem(current) }} disabled={difySavingKey === `catalog_delete_${editingDifyItemId}`} className="ml-auto text-red-700 dark:text-red-400 border-red-300 dark:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
+                          {difySavingKey === `catalog_delete_${editingDifyItemId}` ? 'Excluindo...' : 'Excluir'}
+                        </Button>
+                        <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
                           {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
                         </Button>
                         <Button type="button" variant="outline" onClick={() => closeEditDifyModal()}>Cancelar</Button>
@@ -5345,6 +5377,17 @@ export default function ConfigurationsPage() {
         variant="danger"
         onConfirm={deleteMetaTemplate}
         onCancel={() => setMetaTemplateToDelete(null)}
+      />
+      <ConfirmDialog
+        show={!!difyItemToDelete}
+        title="Excluir agente Dify"
+        message={difyItemToDelete ? `Excluir o agente "${difyItemToDelete.display_name || difyItemToDelete.dify_app_id}"? Esta ação remove também os vínculos de departamento.` : ''}
+        confirmText="Excluir"
+        confirmLoadingText="Excluindo..."
+        variant="danger"
+        confirmLoading={!!difyItemToDelete && difySavingKey === `catalog_delete_${difyItemToDelete.id}`}
+        onConfirm={deleteDifyCatalogItem}
+        onCancel={() => setDifyItemToDelete(null)}
       />
 
       {/* Modal Secretária IA - Wizard removido (Fase 0 - dados da empresa em Planos > Dados da Empresa) */}

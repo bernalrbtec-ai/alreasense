@@ -3114,10 +3114,10 @@ def dify_settings(request):
     )
 
 
-@api_view(["GET", "POST", "PATCH"])
+@api_view(["GET", "POST", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def dify_catalog(request):
-    """GET: lista catálogo; POST: cria item; PATCH: atualizar/ativar/desativar (soft-delete)."""
+    """GET: lista catálogo; POST: cria item; PATCH: atualiza item; DELETE: exclui item."""
     from django.db.utils import ProgrammingError, OperationalError
 
     def _table_missing_response():
@@ -3161,6 +3161,24 @@ def dify_catalog(request):
         DifyAppCatalogItem.objects.filter(tenant=tenant).exists()
     except (ProgrammingError, OperationalError):
         return _table_missing_response()
+    if request.method == "DELETE":
+        item_id = _parse_uuid(data.get("id") or request.query_params.get("id"))
+        if not item_id:
+            return Response({"error": "id (UUID) é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+        item = DifyAppCatalogItem.objects.filter(id=item_id, tenant=tenant).first()
+        if not item:
+            return Response({"error": "Item não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        deleted_id = str(item.id)
+        item.delete()
+        _dify_audit(
+            tenant,
+            request.user,
+            "catalog_delete",
+            catalog_id=deleted_id,
+            payload={"display_name": item.display_name, "dify_app_id": item.dify_app_id},
+        )
+        return Response({"ok": True, "id": deleted_id})
+
     if request.method == "POST":
         display_name = str(data.get("display_name") or "").strip()
         signature_name = str(data.get("signature_name") or "").strip()
