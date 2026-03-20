@@ -1252,7 +1252,7 @@ export function ChatWindow() {
           onClick={closeStartFlowModal}
         >
           <div
-            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col"
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -1297,7 +1297,7 @@ export function ChatWindow() {
             {/* Tab: Fluxos */}
             {startFlowModalTab === 'flows' && (
               <>
-                <div className="p-5 overflow-y-auto flex-1">
+                <div className="p-6 overflow-y-auto flex-1">
                   {loadingFlows ? (
                     <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400">
                       <div className="w-5 h-5 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" aria-hidden />
@@ -1318,7 +1318,7 @@ export function ChatWindow() {
                       </p>
                     </div>
                   ) : (
-                    <ul className="space-y-3">
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {flowsForStart.map((f) => (
                         <li key={f.id}>
                           <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1342,7 +1342,7 @@ export function ChatWindow() {
                     </ul>
                   )}
                 </div>
-                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+                <div className="sticky bottom-0 px-5 py-4 border-t border-gray-200 dark:border-gray-600 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={closeStartFlowModal}
@@ -1390,7 +1390,7 @@ export function ChatWindow() {
             {/* Tab: Agentes */}
             {startFlowModalTab === 'dify' && (
               <>
-                <div className="p-5 overflow-y-auto flex-1">
+                <div className="p-6 overflow-y-auto flex-1">
                   {/* Banner: agente ativo */}
                   {difyActiveState?.status === 'active' && (
                     <div className="mb-4 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 flex items-center justify-between gap-3">
@@ -1442,7 +1442,7 @@ export function ChatWindow() {
                       <p className="text-xs">Em <strong>Configurações &gt; Integrações &gt; Dify</strong>, cadastre um agente para usar aqui.</p>
                     </div>
                   ) : (
-                    <ul className="space-y-3">
+                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {difyAgents.map((a) => (
                         <li key={a.id}>
                           <label className="flex gap-3 cursor-pointer p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -1467,7 +1467,7 @@ export function ChatWindow() {
                     </ul>
                   )}
                 </div>
-                <div className="px-5 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+                <div className="sticky bottom-0 px-5 py-4 border-t border-gray-200 dark:border-gray-600 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={closeStartFlowModal}

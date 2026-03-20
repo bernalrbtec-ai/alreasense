@@ -437,9 +437,9 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
 
   return (
     <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] flex flex-col animate-scale-in">
+      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] flex flex-col animate-scale-in">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-600">
+        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Nova Conversa</h2>
           <button
             onClick={onClose}
@@ -484,7 +484,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         )}
 
         {/* Search Input */}
-        <div className="p-4 border-b border-gray-200 dark:border-gray-600 space-y-2">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-600 space-y-2">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 dark:text-gray-400" />
@@ -549,7 +549,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         </div>
 
         {/* Results */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-6">
           {searchQuery.length < 2 && selectedTagIds.length === 0 ? (
             <div className="text-center py-8">
               <Search className="h-12 w-12 mx-auto mb-4 text-gray-300 dark:text-gray-500" />

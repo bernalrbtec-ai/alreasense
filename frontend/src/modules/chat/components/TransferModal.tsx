@@ -164,7 +164,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="transfer-modal-title">
-      <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800 animate-scale-in">
+      <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] border border-gray-800 animate-scale-in flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
           <h2 id="transfer-modal-title" className="text-lg font-semibold text-white">Transferir Conversa</h2>
@@ -174,7 +174,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-5 overflow-y-auto">
           {/* Info atual */}
           <div className="p-3 bg-[#2b2f36] rounded-lg border border-gray-700">
             <p className="text-xs text-gray-400 mb-1">Contato:</p>
@@ -190,6 +190,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
           </div>
 
           {/* Selecionar departamento */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Novo Departamento
@@ -236,6 +237,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
               ))}
             </select>
           </div>
+          </div>
 
           {/* Motivo */}
           <div>
@@ -253,7 +255,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-800">
+        <div className="sticky bottom-0 flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-800 bg-[#1f262e]/95 backdrop-blur-sm">
           <button
             onClick={onClose}
             disabled={loading}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { useAuthStore } from '../stores/authStore'
 import { useChatStore } from '../modules/chat/store/chatStore'
 import PendingTasksList from '../components/tasks/PendingTasksList'
@@ -6,8 +7,10 @@ import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { Card } from '../components/ui/Card'
+import { Skeleton } from '../components/ui/Skeleton'
 import { Clock, AlertCircle, MessageSquare } from 'lucide-react'
 import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
+import { motionPresets } from '../lib/motionPresets'
 
 interface Task {
   id: string
@@ -54,6 +57,8 @@ export default function DashboardPage() {
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [unreadMessages, setUnreadMessages] = useState(0) // ✅ Novas mensagens não lidas
   const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null)
+  const [loadingTasks, setLoadingTasks] = useState(true)
+  const [loadingStats, setLoadingStats] = useState(true)
 
   // WebSocket para atualização em tempo real
   useTenantSocket()
@@ -122,6 +127,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
+        setLoadingTasks(true)
         // Buscar todas as tarefas (sem filtro de status para pegar todas)
         // O backend já filtra por tenant e departamentos do usuário
         const response = await api.get('/contacts/tasks/')
@@ -131,6 +137,8 @@ export default function DashboardPage() {
         console.error('Erro ao carregar tarefas:', error)
         // Se houver erro, definir array vazio para não quebrar a interface
         setTasks([])
+      } finally {
+        setLoadingTasks(false)
       }
     }
     fetchTasks()
@@ -152,6 +160,7 @@ export default function DashboardPage() {
       // ✅ CORREÇÃO: Atualizar estatísticas de mensagens não lidas
       const unreadCount = stats.total_unread_messages || 0
       setUnreadMessages(unreadCount)
+      setLoadingStats(false)
       
       console.log('📊 [DASHBOARD] Mensagens não lidas atualizadas:', {
         unreadMessages: unreadCount
@@ -174,6 +183,8 @@ export default function DashboardPage() {
       } catch (fallbackError) {
         console.error('Erro no fallback de estatísticas:', fallbackError)
       }
+    } finally {
+      setLoadingStats(false)
     }
   }
 
@@ -243,7 +254,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div className="space-y-6" {...motionPresets.page}>
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
@@ -253,55 +264,66 @@ export default function DashboardPage() {
       </div>
 
       {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* 1. Pendentes (tarefas/agenda) */}
-        <Card className="p-4">
+        <motion.div {...motionPresets.card}>
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Pendentes</p>
-              <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>
+              {loadingTasks ? <Skeleton className="h-8 w-14" /> : <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>}
             </div>
             <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
               <Clock className="h-6 w-6 text-orange-600 dark:text-orange-400" />
             </div>
           </div>
         </Card>
+        </motion.div>
 
         {/* 2. Atrasadas (tarefas/agenda) */}
-        <Card className="p-4">
+        <motion.div {...motionPresets.card}>
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Atrasadas</p>
-              <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+              {loadingTasks ? <Skeleton className="h-8 w-14" /> : <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>}
             </div>
             <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
               <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
           </div>
         </Card>
+        </motion.div>
 
         {/* 3. Pendências em Andamento (tarefas/agenda) */}
-        <Card className="p-4">
+        <motion.div {...motionPresets.card}>
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Pendências em Andamento</p>
-              <p className="text-2xl font-bold text-purple-600">{stats.inProgress}</p>
+              {loadingTasks ? <Skeleton className="h-8 w-14" /> : <p className="text-2xl font-bold text-purple-600">{stats.inProgress}</p>}
             </div>
             <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
               <Clock className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
           </div>
         </Card>
+        </motion.div>
 
         {/* 4. Novas Mensagens */}
-        <Card className="p-4">
+        <motion.div {...motionPresets.card}>
+        <Card className="p-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Novas Mensagens</p>
-              <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
-                {unreadMessages > 0 ? unreadMessages : '0'}
-              </p>
-              {unreadMessages === 0 && (
+              {loadingStats ? (
+                <Skeleton className="h-8 w-14" />
+              ) : (
+                <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                  {unreadMessages > 0 ? unreadMessages : '0'}
+                </p>
+              )}
+              {!loadingStats && unreadMessages === 0 && (
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Nenhuma mensagem nova</p>
               )}
             </div>
@@ -310,6 +332,7 @@ export default function DashboardPage() {
             </div>
           </div>
         </Card>
+        </motion.div>
       </div>
 
       {/* Layout: Compromissos da Semana + Pendências lado a lado */}
@@ -349,6 +372,6 @@ export default function DashboardPage() {
           users={users}
         />
       )}
-    </div>
+    </motion.div>
   )
 }

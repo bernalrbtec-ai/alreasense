@@ -231,7 +231,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="forward-message-modal-title">
       <div
-        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-5xl mx-4 max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -282,7 +282,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
               <p>{searchQuery.trim() ? 'Nenhuma conversa ou contato encontrado' : 'Nenhuma conversa disponível'}</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {filteredItems.map((item) => {
                 const isConv = isConversation(item);
                 const isSelected = selectedItem && (
@@ -351,7 +351,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-600 flex justify-end gap-2">
+        <div className="sticky bottom-0 px-6 py-4 border-t border-gray-200 dark:border-gray-600 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm flex justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"

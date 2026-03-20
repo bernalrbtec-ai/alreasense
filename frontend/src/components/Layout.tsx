@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { 
   LayoutDashboard, 
   MessageSquare, 
@@ -35,6 +36,7 @@ import ChangePasswordModal from './modals/ChangePasswordModal'
 import { ThemeToggle } from './ThemeToggle'
 import { NotificationToggle } from '../modules/chat/components/NotificationToggle'
 import { cn } from '../lib/utils'
+import { motionPresets } from '../lib/motionPresets'
 
 // Mapeamento de produtos para itens do menu
 const productMenuItems = {
@@ -102,6 +104,7 @@ export default function Layout() {
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   const { isAdmin, isGerente, isAgente } = usePermissions()
   const showNotificationBell = Boolean(canAccessChat()?.canAccess || canAccessAgenda()?.canAccess)
+  const isRouteActive = (href: string) => location.pathname === href || location.pathname.startsWith(`${href}/`)
   
   // Fechar dropdown quando clicar fora
   useEffect(() => {
@@ -363,7 +366,10 @@ export default function Layout() {
       </div>
 
       {/* Desktop sidebar */}
-      <div className={cn(
+      <motion.aside
+        layout
+        transition={motionPresets.sidebar.transition}
+        className={cn(
         "hidden md:fixed md:inset-y-0 md:flex md:flex-col transition-all duration-300 z-sidebar",
         sidebarCollapsed ? "md:w-16" : "md:w-64"
       )}>
@@ -388,7 +394,7 @@ export default function Layout() {
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4 overflow-y-auto">
             {navigation.map((item) => {
-              const isActive = location.pathname === item.href
+              const isActive = isRouteActive(item.href)
               return (
                 <Link
                   key={item.name}
@@ -416,7 +422,7 @@ export default function Layout() {
                   </div>
                 </div>
                 {adminNavigation.map((item) => {
-                  const isActive = location.pathname === item.href
+                  const isActive = isRouteActive(item.href)
                   
                   return (
                     <Link
@@ -522,10 +528,13 @@ export default function Layout() {
             )}
           </div>
         </div>
-      </div>
+      </motion.aside>
 
       {/* Main content - flex-1 min-w-0 garante que o conteúdo use todo o espaço e não seja espremido */}
-      <div className={cn(
+      <motion.div
+        layout
+        transition={motionPresets.sidebar.transition}
+        className={cn(
         "flex-1 min-w-0 w-full transition-all duration-300 overflow-x-auto",
         sidebarCollapsed ? "md:pl-16" : "md:pl-64"
       )}>
@@ -552,7 +561,7 @@ export default function Layout() {
             </div>
           </main>
         )}
-      </div>
+      </motion.div>
       
       {/* Change Password Modal */}
       <ChangePasswordModal

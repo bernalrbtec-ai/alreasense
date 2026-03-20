@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { Eye, EyeOff, Lock, X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -109,11 +110,24 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
     onClose()
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg shadow-xl w-full max-w-md border border-border">
+    <AnimatePresence>
+      {isOpen && (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black/50 dark:bg-black/60 flex items-center justify-center z-50 p-4"
+        onClick={handleClose}
+      >
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.98 }}
+        transition={{ duration: 0.2 }}
+        className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-xl shadow-xl w-full max-w-xl max-h-[90vh] border border-border overflow-hidden flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <div className="flex items-center gap-3">
@@ -134,7 +148,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-6 space-y-6 overflow-y-auto">
           {/* Senha Atual */}
           <div>
             <Label htmlFor="current_password">Senha Atual</Label>
@@ -223,7 +237,7 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
           </div>
 
           {/* Botões */}
-          <div className="flex gap-3 pt-4">
+          <div className="sticky bottom-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm flex gap-3 pt-4 pb-1">
             <Button
               type="button"
               variant="outline"
@@ -249,7 +263,9 @@ export default function ChangePasswordModal({ isOpen, onClose }: ChangePasswordM
           type={toast.type}
           onClose={hideToast}
         />
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
