@@ -3239,7 +3239,7 @@ export default function ConfigurationsPage() {
                             <select
                               value={editDifyDefaultDepartmentId}
                               onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
-                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-gray-900 dark:text-gray-100"
                             >
                               <option value="">Nenhum</option>
                               {departments.map((d) => (
@@ -3252,7 +3252,7 @@ export default function ConfigurationsPage() {
                             <select
                               value={editDifyWaInstanceId}
                               onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
-                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                              className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-gray-900 dark:text-gray-100"
                             >
                               <option value="">Usar instância da conversa</option>
                               {difyWaInstances.map((i) => (
@@ -3263,10 +3263,10 @@ export default function ConfigurationsPage() {
                         </div></div>
 
                         <details className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 md:p-5 bg-gray-50/40 dark:bg-gray-800/30" open>
-                          <summary className="cursor-pointer list-none text-sm font-semibold text-gray-800 dark:text-gray-200">Parâmetros de entrada</summary>
+                          <summary className="cursor-pointer list-none text-sm font-semibold text-gray-800 dark:text-gray-100">Parâmetros de entrada</summary>
                           <div className="mt-4">
                           <div className="flex items-start justify-between gap-3">
-                            <p className="text-xs text-gray-600 dark:text-gray-300">
+                            <p className="text-xs text-gray-600 dark:text-gray-200">
                               Campos do modelo Dify e mapeamento com variáveis do Sense:
                               <code className="mx-1">{'{{tenant_name}}'}</code>
                               <code className="mx-1">{'{{is_open}}'}</code>
@@ -3309,7 +3309,7 @@ export default function ConfigurationsPage() {
                                       <select
                                         value={editDifyDefaultInputs[field.variable] ?? ''}
                                         onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm"
+                                        className="mt-1 h-10 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 text-sm text-gray-900 dark:text-gray-100"
                                       >
                                         <option value="">-- selecione --</option>
                                         {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -3320,7 +3320,7 @@ export default function ConfigurationsPage() {
                                         onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
                                         rows={3}
                                         maxLength={field.max_length}
-                                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+                                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
                                       />
                                     ) : (
                                       <Input
