@@ -46,6 +46,43 @@ REFRESH_INFO_CACHE_SECONDS = 300  # 5 minutos no cache curto
 
 logger = logging.getLogger(__name__)
 
+ARCHIVE_EXTENSION_MIME_FALLBACK = {
+    'zip': 'application/zip',
+    'rar': 'application/vnd.rar',
+    '7z': 'application/x-7z-compressed',
+    '7zip': 'application/x-7z-compressed',
+}
+
+
+def _mime_allowed(mime_value: str, allowed_list: list[str]) -> bool:
+    """Valida MIME com suporte a wildcard e parâmetros."""
+    if not allowed_list:
+        return True
+    if not mime_value:
+        return False
+    return any(
+        (a.endswith('/*') and mime_value.startswith(a[:-1])) or
+        (a == mime_value) or
+        mime_value.startswith(a + ';')
+        for a in allowed_list
+    )
+
+
+def _resolve_mime_with_extension_fallback(content_type: str, filename: str, allowed_list: list[str]) -> str | None:
+    """
+    Retorna MIME válido para o upload.
+    Se content_type não for aceito, tenta inferir por extensão (zip/rar/7z).
+    """
+    ct = (content_type or '').strip().lower()
+    if _mime_allowed(ct, allowed_list):
+        return ct
+
+    ext = (os.path.splitext(filename or '')[1] or '').lower().lstrip('.')
+    inferred = ARCHIVE_EXTENSION_MIME_FALLBACK.get(ext)
+    if inferred and _mime_allowed(inferred, allowed_list):
+        return inferred
+    return None
+
 # Função auxiliar para detectar se um número é LID (não é telefone válido)
 def is_lid_number(phone: str) -> bool:
     """
@@ -5941,16 +5978,13 @@ class UploadPresignedUrlView(APIView):
         allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
         if allowed_mime:
             allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
-            def mime_ok(m):
-                return any(
-                    (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
-                    for a in allowed
-                )
-            if not mime_ok(content_type):
+            resolved_ct = _resolve_mime_with_extension_fallback(content_type, filename, allowed)
+            if not resolved_ct:
                 return Response(
                     {'error': 'Tipo de arquivo não permitido'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            content_type = resolved_ct
         
         # Buscar conversa
         try:
@@ -6204,16 +6238,13 @@ def chat_ping_evolution(request):
         allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
         if allowed_mime:
             allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
-            def mime_ok(m):
-                return any(
-                    (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
-                    for a in allowed
-                )
-            if not mime_ok(content_type):
+            resolved_ct = _resolve_mime_with_extension_fallback(content_type, filename, allowed)
+            if not resolved_ct:
                 return Response(
                     {'error': 'Tipo de arquivo não permitido'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            content_type = resolved_ct
         
         # Buscar conversa
         try:
@@ -6583,14 +6614,6 @@ class ConfirmUploadBatchView(APIView):
         allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
         allowed_list = [m.strip() for m in allowed_mime.split(',') if m.strip()] if allowed_mime else []
 
-        def mime_ok(m):
-            if not allowed_list:
-                return True
-            return any(
-                (a.endswith('/*') and m.startswith(a[:-1])) or (a == m) or (m.startswith(a + ';'))
-                for a in allowed_list
-            )
-
         try:
             conversation = Conversation.objects.get(
                 id=conversation_id,
@@ -6633,11 +6656,14 @@ class ConfirmUploadBatchView(APIView):
                     {'error': f'item[{idx}] {filename}: arquivo muito grande. Máximo: {max_size // (1024*1024)}MB'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            if allowed_list and not mime_ok(content_type):
+            resolved_ct = _resolve_mime_with_extension_fallback(content_type, filename, allowed_list)
+            if allowed_list and not resolved_ct:
                 return Response(
                     {'error': f'item[{idx}] tipo de arquivo não permitido'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+            if resolved_ct:
+                content_type = resolved_ct
 
             if should_convert_audio(content_type, filename):
                 try:
