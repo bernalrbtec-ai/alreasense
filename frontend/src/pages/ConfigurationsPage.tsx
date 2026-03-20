@@ -3220,7 +3220,7 @@ export default function ConfigurationsPage() {
                             <Label>Descrição</Label>
                             <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} className="mt-1" />
                           </div>
-                          <div className="md:col-span-2">
+                          <div>
                             <Label>URL pública</Label>
                             <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} className="mt-1" />
                           </div>
@@ -3230,7 +3230,7 @@ export default function ConfigurationsPage() {
                               type="password"
                               value={editDifyApiKey}
                               onChange={(e) => setEditDifyApiKey(e.target.value)}
-                              placeholder={editDifyHasApiKey ? '•••••••• (manter em branco para não alterar)' : 'Cole a API key'}
+                              placeholder={editDifyHasApiKey ? '•••••••• (deixe em branco para manter)' : 'Cole a API key'}
                               className="mt-1"
                             />
                           </div>
