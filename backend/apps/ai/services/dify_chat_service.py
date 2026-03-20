@@ -936,7 +936,7 @@ def _save_and_send_reply(
             if inst_name:
                 meta['flow_prefer_instance_name'] = inst_name
 
-        # Nome para assinatura: preferir o configurado no agente; fallback para app_id.
+        # Nome para assinatura: usar nome do agente e fallback "Agente".
         signature_name = ''
         try:
             from apps.ai.models import DifyAppCatalogItem
@@ -945,7 +945,7 @@ def _save_and_send_reply(
                 dify_app_id=agent_app_id,
             ).only('signature_name', 'display_name').first()
             if item:
-                signature_name = (getattr(item, 'signature_name', '') or '').strip() or (getattr(item, 'display_name', '') or '').strip()
+                signature_name = (getattr(item, 'display_name', '') or '').strip() or (getattr(item, 'signature_name', '') or '').strip()
         except Exception:
             signature_name = ''
 
@@ -953,7 +953,7 @@ def _save_and_send_reply(
             msg = Message.objects.create(
                 conversation=conversation,
                 sender=None,  # bot — sem usuário humano
-                sender_name=(signature_name or agent_app_id)[:255],
+                sender_name=(signature_name or 'Agente')[:255],
                 content=message,
                 direction='outgoing',
                 status='pending',
