@@ -13,6 +13,7 @@ import httpx
 
 from django.conf import settings
 from django.db import connection as _conn
+from django.utils import timezone as django_timezone
 
 from apps.chat.services.business_hours_service import BusinessHoursService
 
@@ -49,6 +50,13 @@ _DIFY_VAR_RESOLVERS: dict = {
             )
         )
     ),
+    '{{data_hora_atual}}': lambda conv: django_timezone.localtime().strftime('%Y-%m-%d %H:%M:%S'),
+    '{{next_open_time}}': lambda conv: (
+        BusinessHoursService.is_business_hours(
+            getattr(conv, 'tenant', None),
+            getattr(conv, 'department', None),
+        )[1] or ''
+    ) if getattr(conv, 'tenant', None) is not None else '',
 }
 
 

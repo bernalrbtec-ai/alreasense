@@ -151,6 +151,16 @@ export default function IntegracaoInstrucoesPage() {
                 <td className="px-4 py-2 text-gray-600 dark:text-gray-400">Dentro do horário de funcionamento (string)</td>
                 <td className="px-4 py-2 text-gray-500 dark:text-gray-500">true ou false</td>
               </tr>
+              <tr>
+                <td className="px-4 py-2 font-mono text-blue-600 dark:text-blue-400">{'{{data_hora_atual}}'}</td>
+                <td className="px-4 py-2 text-gray-600 dark:text-gray-400">Data e hora atual no servidor</td>
+                <td className="px-4 py-2 text-gray-500 dark:text-gray-500">2026-03-19 09:30:00</td>
+              </tr>
+              <tr>
+                <td className="px-4 py-2 font-mono text-blue-600 dark:text-blue-400">{'{{next_open_time}}'}</td>
+                <td className="px-4 py-2 text-gray-600 dark:text-gray-400">Próxima abertura quando fora do horário (vazio se aberto)</td>
+                <td className="px-4 py-2 text-gray-500 dark:text-gray-500">Amanhã às 08:00</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -159,9 +169,12 @@ export default function IntegracaoInstrucoesPage() {
         <p className="text-gray-600 dark:text-gray-400 mb-2">
           No Dify, em um campo de texto de contexto, você pode preencher:
         </p>
-        <CodeBlock>{'Atendendo {{contact_name}} ({{contact_phone}}) no departamento {{department_name}}. Horário de funcionamento: {{is_open}}.'}</CodeBlock>
+        <CodeBlock>{'Atendendo {{contact_name}} ({{contact_phone}}) no departamento {{department_name}}. Horário de funcionamento: {{is_open}}. Agora: {{data_hora_atual}}. Próxima abertura: {{next_open_time}}.'}</CodeBlock>
         <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
           Na chamada, o Sense substitui cada variável pelo valor da conversa (ex.: &quot;Atendendo João Silva (+5511999999999) no departamento Comercial. Horário de funcionamento: true.&quot;).
+        </p>
+        <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">
+          No Typebot, essas mesmas informações também são enviadas como variáveis prefilled: <InlineCode>data_hora_atual</InlineCode> e <InlineCode>next_open_time</InlineCode> (sem chaves).
         </p>
       </Card>
     </div>

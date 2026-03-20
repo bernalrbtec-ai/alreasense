@@ -14,10 +14,12 @@ import requests
 from django.conf import settings
 from django.db import IntegrityError
 from django.db import transaction
+from django.utils import timezone as django_timezone
 
 from apps.chat.models import Conversation, Message
 from apps.chat.models_flow import Flow, ConversationFlowState, FlowTypebotMap
 from apps.chat.redis_streams import enqueue_send_message_batch, enqueue_send_message
+from apps.chat.services.business_hours_service import BusinessHoursService
 from apps.tenancy.services import get_or_create_typebot_workspace
 
 logger = logging.getLogger(__name__)
@@ -545,7 +547,19 @@ def start_typebot_flow(conversation: Conversation, flow: Flow) -> Tuple[bool, in
         "contact_phone": (conversation.contact_phone or "").strip(),
         "contact_name": (conversation.contact_name or "").strip() or "Contato",
         "tenant_id": str(conversation.tenant_id),
+        "data_hora_atual": django_timezone.localtime().strftime('%Y-%m-%d %H:%M:%S'),
     }
+    try:
+        is_open, next_open_time = BusinessHoursService.is_business_hours(
+            conversation.tenant,
+            conversation.department,
+        )
+        prefilled["is_open"] = "true" if is_open else "false"
+        prefilled["next_open_time"] = (next_open_time or "").strip()
+    except Exception as e:
+        logger.debug("[TYPEBOT] Falha ao resolver horário de atendimento para prefilled vars: %s", e)
+        prefilled["is_open"] = "true"
+        prefilled["next_open_time"] = ""
     if conversation.department_id:
         prefilled["department_id"] = str(conversation.department_id)
     # Alinhar com cadastro de contato: enviar NomeContato, NumeroFone, email se o contato estiver cadastrado
