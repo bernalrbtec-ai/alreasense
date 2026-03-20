@@ -6,6 +6,7 @@ import logging
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import DatabaseError
 from django.db.models import Avg, Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -30,6 +31,20 @@ def _is_superadmin(request) -> bool:
     if not request.user or not request.user.is_authenticated:
         return False
     return bool(request.user.is_superuser or request.user.is_staff)
+
+
+def _schedule_db_unavailable_response():
+    """Resposta quando a tabela de agendamentos ainda não existe (migrate não aplicado)."""
+    return Response(
+        {
+            "error": (
+                "A tabela de agendamentos ainda não existe no banco. "
+                "No servidor de deploy, execute: python manage.py migrate"
+            ),
+            "code": "MIGRATION_REQUIRED",
+        },
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+    )
 
 
 @api_view(["GET"])
@@ -222,19 +237,29 @@ def proxy_rotation_schedule_list_create(request):
         )
 
     if request.method == "GET":
-        qs = ProxyRotationSchedule.objects.all().order_by("-created_at")
-        return Response(ProxyRotationScheduleSerializer(qs, many=True).data)
+        try:
+            qs = ProxyRotationSchedule.objects.all().order_by("-created_at")
+            return Response(ProxyRotationScheduleSerializer(qs, many=True).data)
+        except DatabaseError:
+            logger.exception("proxy rotation-schedules GET: falha no banco (migrate aplicado?)")
+            return _schedule_db_unavailable_response()
 
     serializer = ProxyRotationScheduleSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    schedule = serializer.save(created_by=request.user)
-    if schedule.next_run_at is None:
-        schedule.next_run_at = timezone.now() + timedelta(minutes=schedule.interval_minutes)
-        schedule.save(update_fields=["next_run_at", "updated_at"])
-    return Response(
-        ProxyRotationScheduleSerializer(schedule).data,
-        status=status.HTTP_201_CREATED,
-    )
+    try:
+        schedule = serializer.save(created_by=request.user)
+        if schedule.next_run_at is None:
+            schedule.next_run_at = timezone.now() + timedelta(
+                minutes=schedule.interval_minutes
+            )
+            schedule.save(update_fields=["next_run_at", "updated_at"])
+        return Response(
+            ProxyRotationScheduleSerializer(schedule).data,
+            status=status.HTTP_201_CREATED,
+        )
+    except DatabaseError:
+        logger.exception("proxy rotation-schedules POST: falha no banco (migrate aplicado?)")
+        return _schedule_db_unavailable_response()
 
 
 @api_view(["GET", "PATCH", "DELETE"])
@@ -247,19 +272,31 @@ def proxy_rotation_schedule_detail(request, pk):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    schedule = get_object_or_404(ProxyRotationSchedule, pk=pk)
+    try:
+        schedule = get_object_or_404(ProxyRotationSchedule, pk=pk)
+    except DatabaseError:
+        logger.exception("proxy rotation-schedules detail: falha no banco (migrate aplicado?)")
+        return _schedule_db_unavailable_response()
 
     if request.method == "GET":
         return Response(ProxyRotationScheduleSerializer(schedule).data)
 
     if request.method == "DELETE":
-        schedule.delete()
+        try:
+            schedule.delete()
+        except DatabaseError:
+            logger.exception("proxy rotation-schedules DELETE: falha no banco")
+            return _schedule_db_unavailable_response()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     serializer = ProxyRotationScheduleSerializer(
         schedule, data=request.data, partial=True
     )
     serializer.is_valid(raise_exception=True)
-    serializer.save()
-    schedule.refresh_from_db()
-    return Response(ProxyRotationScheduleSerializer(schedule).data)
+    try:
+        serializer.save()
+        schedule.refresh_from_db()
+        return Response(ProxyRotationScheduleSerializer(schedule).data)
+    except DatabaseError:
+        logger.exception("proxy rotation-schedules PATCH: falha no banco")
+        return _schedule_db_unavailable_response()
