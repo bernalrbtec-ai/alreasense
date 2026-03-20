@@ -58,6 +58,7 @@ import { NotificationSettings } from '../modules/notifications/components/Notifi
 import { RagMemoriesManager } from '../modules/ai/components/RagMemoriesManager'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { InstanceHealthModal } from '../components/instances/InstanceHealthModal'
+import FlowPage from './FlowPage'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -357,8 +358,9 @@ export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const isTenantAdmin = Boolean(user?.is_admin || user?.role === 'admin' || user?.is_superuser)
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'flow' | 'ai'>('instances')
-  const [aiSubTab, setAiSubTab] = useState<'config' | 'agentes' | 'dify' | 'rag-memories' | 'auditoria-ia'>('config')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai' | 'integrations'>('instances')
+  const [aiSubTab, setAiSubTab] = useState<'config' | 'rag-memories' | 'auditoria-ia'>('config')
+  const [integrationsSubTab, setIntegrationsSubTab] = useState<'typebot' | 'dify' | 'agentes'>('typebot')
   // Estados para sub-tab Agentes (LibreChat)
   const [librechatAgents, setLibrechatAgents] = useState<Array<{ id: string; name: string }>>([])
   const [librechatAvailable, setLibrechatAvailable] = useState(false)
@@ -763,11 +765,11 @@ export default function ConfigurationsPage() {
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
     }
-    if (activeTab === 'ai' && aiSubTab === 'agentes' && isTenantAdmin) {
+    if (activeTab === 'integrations' && integrationsSubTab === 'agentes' && isTenantAdmin) {
       loadLibrechatAgents()
       loadAgentAssignments()
     }
-    if (activeTab === 'ai' && aiSubTab === 'dify' && isTenantAdmin) {
+    if (activeTab === 'integrations' && integrationsSubTab === 'dify' && isTenantAdmin) {
       fetchDifyCatalog()
       fetchDifyWaInstances()
     }
@@ -778,15 +780,25 @@ export default function ConfigurationsPage() {
     if (activeTab === 'smtp') {
       fetchSmtpConfigs()
     }
-  }, [activeTab, aiSubTab, selectedBusinessHoursDept, isTenantAdmin])
+  }, [activeTab, aiSubTab, integrationsSubTab, selectedBusinessHoursDept, isTenantAdmin])
 
   // Edge case: normalizar aiSubTab se for valor inválido (ex.: 'ia-assistente' de sessão antiga)
-  const validAiSubTabs = ['config', 'agentes', 'dify', 'rag-memories', 'auditoria-ia'] as const
+  const validAiSubTabs = ['config', 'rag-memories', 'auditoria-ia'] as const
   useEffect(() => {
     if (activeTab === 'ai' && !validAiSubTabs.includes(aiSubTab as typeof validAiSubTabs[number])) {
       setAiSubTab('config')
     }
   }, [activeTab, aiSubTab])
+
+  const validIntegrationsSubTabs = ['typebot', 'dify', 'agentes'] as const
+  useEffect(() => {
+    if (
+      activeTab === 'integrations' &&
+      !validIntegrationsSubTabs.includes(integrationsSubTab as typeof validIntegrationsSubTabs[number])
+    ) {
+      setIntegrationsSubTab('typebot')
+    }
+  }, [activeTab, integrationsSubTab])
 
   // Ao abrir o modal de templates WhatsApp (Meta), sincronizar status com a Meta e atualizar lista
   useEffect(() => {
@@ -2267,6 +2279,19 @@ export default function ConfigurationsPage() {
           </button>
           {isTenantAdmin && (
             <button
+              onClick={() => setActiveTab('integrations')}
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'integrations'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400 dark:border-blue-400'
+                  : 'border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500'
+              }`}
+            >
+              <Bot className="h-4 w-4 inline mr-2" />
+              Integrações
+            </button>
+          )}
+          {isTenantAdmin && (
+            <button
               onClick={() => setActiveTab('ai')}
             className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
               activeTab === 'ai'
@@ -2275,7 +2300,7 @@ export default function ConfigurationsPage() {
               }`}
             >
               <Activity className="h-4 w-4 inline mr-2" />
-              IA / Assistentes
+              IA
             </button>
           )}
           {isTenantAdmin && (
@@ -2289,15 +2314,6 @@ export default function ConfigurationsPage() {
             >
               <MessageSquare className="h-4 w-4 inline mr-2" />
               Menu de Boas-Vindas
-            </button>
-          )}
-          {isTenantAdmin && (
-            <button
-              onClick={() => navigate('/configurations/flows')}
-              className="py-3 px-1 border-b-2 font-medium text-sm border-transparent text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-300 dark:hover:border-gray-500 transition-colors"
-            >
-              <List className="h-4 w-4 inline mr-2" />
-              Fluxos
             </button>
           )}
         </nav>
@@ -2880,59 +2896,45 @@ export default function ConfigurationsPage() {
         <NotificationSettings />
       )}
 
-      {activeTab === 'ai' && isTenantAdmin && (
-        <div className="space-y-6">
-          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
+      {activeTab === 'integrations' && isTenantAdmin && (
+        <div className="space-y-6 rounded-xl border border-gray-200/80 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 p-4 sm:p-5">
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
             <button
               type="button"
-              onClick={() => setAiSubTab('config')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'config' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+              onClick={() => setIntegrationsSubTab('typebot')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 transition-colors ${integrationsSubTab === 'typebot' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100/70 dark:hover:bg-gray-800/40'}`}
             >
-              Configurações
+              <List className="h-4 w-4" />
+              TypeBot
             </button>
             <button
               type="button"
-              onClick={() => {
-                setAiSubTab('agentes')
-                setAgentsLoading(true)
-                setAssignmentsLoading(true)
-              }}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'agentes' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
-            >
-              <Sparkles className="h-4 w-4" />
-              Agentes
-            </button>
-            <button
-              type="button"
-              onClick={() => setAiSubTab('dify')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'dify' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+              onClick={() => setIntegrationsSubTab('dify')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 transition-colors ${integrationsSubTab === 'dify' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100/70 dark:hover:bg-gray-800/40'}`}
             >
               <Sparkles className="h-4 w-4" />
               Dify
             </button>
             <button
               type="button"
-              onClick={() => setAiSubTab('rag-memories')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+              onClick={() => {
+                setIntegrationsSubTab('agentes')
+                setAgentsLoading(true)
+                setAssignmentsLoading(true)
+              }}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 transition-colors ${integrationsSubTab === 'agentes' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100 shadow-sm' : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100/70 dark:hover:bg-gray-800/40'}`}
             >
-              <FileText className="h-4 w-4" />
-              Contexto
-            </button>
-            <button
-              type="button"
-              onClick={() => setAiSubTab('auditoria-ia')}
-              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'auditoria-ia' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
-            >
-              Auditoria IA
+              <Sparkles className="h-4 w-4" />
+              Agentes
             </button>
           </div>
 
-          {aiSubTab === 'rag-memories' ? (
-            <RagMemoriesManager />
-          ) : aiSubTab === 'agentes' ? (
+          {integrationsSubTab === 'typebot' ? (
+            <FlowPage />
+          ) : integrationsSubTab === 'agentes' ? (
             <div className="space-y-6">
               {(agentsLoading || assignmentsLoading) && agentAssignments.length === 0 && librechatAgents.length === 0 ? (
-                <Card className="p-6">
+                <Card className="p-6 dark:border-gray-700 dark:bg-gray-800/70">
                   <div className="flex items-center justify-center h-48">
                     <LoadingSpinner />
                   </div>
@@ -2960,7 +2962,7 @@ export default function ConfigurationsPage() {
                       </p>
                     </div>
                   )}
-                  <Card className="p-6">
+                  <Card className="p-6 dark:border-gray-700 dark:bg-gray-800/70">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Agentes disponíveis no LibreChat</h3>
                       <Button type="button" variant="outline" size="sm" onClick={() => loadLibrechatAgents()} disabled={agentsLoading}>
@@ -2981,10 +2983,10 @@ export default function ConfigurationsPage() {
                       </ul>
                     )}
                   </Card>
-                  <Card className="p-6">
+                  <Card className="p-6 dark:border-gray-700 dark:bg-gray-800/70">
                     <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Associação por escopo</h3>
                     <div className="space-y-6">
-                      <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div className="flex flex-wrap items-end gap-3 p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30">
                         <div className="flex-1 min-w-[200px]">
                           <Label className="text-gray-700 dark:text-gray-300">Inbox</Label>
                           <select
@@ -3023,7 +3025,7 @@ export default function ConfigurationsPage() {
                             {departments.map((dept) => {
                               const assignment = agentAssignments.find((a) => a.scope_type === 'department' && a.scope_id === dept.id)
                               return (
-                                <li key={dept.id} className="flex flex-wrap items-end gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <li key={dept.id} className="flex flex-wrap items-end gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/40 dark:bg-gray-900/20">
                                   <span className="w-32 font-medium text-gray-700 dark:text-gray-300 truncate">{dept.name}</span>
                                   <select
                                     value={assignment?.librechat_agent_id ?? ''}
@@ -3070,9 +3072,8 @@ export default function ConfigurationsPage() {
                 </>
               )}
             </div>
-          ) : aiSubTab === 'dify' ? (
+          ) : (
             <div className="space-y-6 animate-fade-in">
-              {/* Header + botão Novo agente */}
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 tracking-tight">Agentes Dify</h2>
                 <Button type="button" onClick={() => setDifyCreateOpen(true)} className="transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
@@ -3081,350 +3082,106 @@ export default function ConfigurationsPage() {
                 </Button>
               </div>
 
-              {/* Form criar – inline animado (padrão FlowPage) */}
               <AnimatePresence>
-              {difyCreateOpen && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                <Card className="p-6 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm">
-                  <h3 className="text-lg font-medium mb-4 text-gray-900 dark:text-gray-100">Cadastrar agente</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Nome (opcional)</Label>
-                      <Input value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                      O nome acima também é usado como assinatura no envio ao WhatsApp. Se ficar vazio, usamos "Agente".
-                    </p>
-                    <div>
-                      <Label>URL pública do app <span className="text-red-500">*</span></Label>
-                      <Input value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">O app_id é extraído automaticamente da URL.</p>
-                    </div>
-                    <div>
-                      <Label>API key <span className="text-red-500">*</span></Label>
-                      <Input type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
-                    </div>
-                    <div>
-                      <Label>Descrição (opcional)</Label>
-                      <Input value={newDifyDescription} onChange={(e) => setNewDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
-                    </div>
-                    <div>
-                      <Label>Departamento padrão (opcional)</Label>
-                      <select
-                        value={newDifyDefaultDepartmentId}
-                        onChange={(e) => setNewDifyDefaultDepartmentId(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                      >
-                        <option value="">Nenhum</option>
-                        {departments.map((d) => (
-                          <option key={d.id} value={d.id}>{d.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Instância WhatsApp (opcional)</Label>
-                      <select
-                        value={newDifyWaInstanceId}
-                        onChange={(e) => setNewDifyWaInstanceId(e.target.value)}
-                        className="mt-1 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                      >
-                        <option value="">Usar instância da conversa</option>
-                        {difyWaInstances.map((i) => (
-                          <option key={i.id} value={i.id}>{i.friendly_name}</option>
-                        ))}
-                      </select>
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o agente envia.</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
-                        {difySavingKey === 'catalog_create' ? <LoadingSpinner size="sm" className="mr-1" /> : null}
-                        {difySavingKey === 'catalog_create' ? 'Salvando…' : 'Cadastrar'}
-                      </Button>
-                      <Button type="button" variant="outline" onClick={() => setDifyCreateOpen(false)} disabled={difySavingKey === 'catalog_create'}>Cancelar</Button>
-                    </div>
-                  </div>
-                </Card>
-                </motion.div>
-              )}
-              </AnimatePresence>
-
-              {/* Lista de agentes */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700/80 shadow-sm max-h-[calc(100vh-280px)] overflow-y-auto">
-                  <h3 className="font-medium mb-3 text-gray-900 dark:text-gray-100">Agentes</h3>
-                  {difyCatalogLoading && difyCatalog.length === 0 ? (
-                    <div className="flex items-center justify-center h-24">
-                      <LoadingSpinner />
-                    </div>
-                  ) : difyCatalog.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 mb-3">
-                        <Bot className="h-6 w-6 text-gray-400 dark:text-gray-500" />
-                      </div>
-                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Nenhum agente ainda</p>
-                      <p className="text-xs mb-4">Crie o primeiro para vincular um agente Dify ao Inbox ou a um departamento.</p>
-                      <Button size="sm" variant="outline" onClick={() => setDifyCreateOpen(true)} className="rounded-lg">
-                        <Plus className="h-4 w-4 mr-1" /> Criar primeiro agente
-                      </Button>
-                    </div>
-                  ) : (
-                    <ul className="space-y-1">
-                      {difyCatalog.map((it) => {
-                        const dept = it.default_department_id ? departments.find(d => d.id === it.default_department_id) : null
-                        const waInst = it.whatsapp_instance_id ? difyWaInstances.find(i => i.id === it.whatsapp_instance_id) : null
-                        return (
-                        <li key={it.id}>
-                          <button
-                            type="button"
-                            onClick={() => openEditDifyItem(it)}
-                            className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 hover:bg-gray-100 dark:hover:bg-gray-800/80 ${it.is_active ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 opacity-60'}`}
-                          >
-                            <span className="block truncate font-medium">{it.display_name || it.dify_app_id}</span>
-                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                              {!it.is_active && <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">● inativo — não aparece no chat</span>}
-                              {dept && (
-                                <span className="text-xs text-violet-600 dark:text-violet-400 truncate max-w-[120px]">
-                                  🏢 {dept.name}
-                                </span>
-                              )}
-                              {waInst && (
-                                <span className="text-xs text-blue-600 dark:text-blue-400 truncate max-w-[100px]">
-                                  📱 {waInst.friendly_name || waInst.instance_name}
-                                </span>
-                              )}
-                            </div>
-                          </button>
-                        </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-                </Card>
-
-                <div className="md:col-span-2 flex items-center justify-center">
-                  <Card className="p-12 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/30 text-center w-full">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gray-100 dark:bg-gray-800 mb-4">
-                      <Bot className="h-7 w-7 text-gray-400 dark:text-gray-500" />
-                    </div>
-                    <p className="text-gray-600 dark:text-gray-400 font-medium mb-1">Selecione um agente</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-500 max-w-sm mx-auto">
-                      Escolha um agente na lista ao lado para editar as configurações, ou crie um novo.
-                    </p>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Modal: Editar agente */}
-              <AnimatePresence>
-              {editDifyOpen && editingDifyItemId && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.15 }}
-                  className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
-                  onClick={() => closeEditDifyModal()}
-                  role="dialog"
-                  aria-modal="true"
-                >
+                {difyCreateOpen && (
                   <motion.div
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
                     transition={{ duration: 0.2 }}
-                    className="w-full max-w-4xl"
-                    onClick={(e) => e.stopPropagation()}
+                    className="overflow-hidden"
                   >
-                    <Card className="flex flex-col rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden max-h-[92vh]">
-                      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800/90 shrink-0">
-                        <h2 className="text-xl font-semibold text-gray-100">Editar agente</h2>
-                        <button type="button" onClick={() => closeEditDifyModal()} className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
-                      </div>
-
-                      <div className="overflow-y-auto overscroll-contain px-6 py-6 space-y-6">
-                        <div className="space-y-5 rounded-xl border border-gray-700 bg-gray-800/50 p-5">
-                          <h3 className="text-sm font-semibold tracking-wide text-gray-200">Informações básicas</h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-                            <div className="md:col-span-2">
-                              <Label className="text-sm font-medium text-gray-200">ID Dify</Label>
-                              <Input value={editDifyAppId} disabled className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-400" />
-                              <p className="text-xs text-gray-400 mt-1">O ID é extraído da URL e não pode ser alterado diretamente.</p>
-                            </div>
-                            <div className="md:col-span-2">
-                              <Label className="text-sm font-medium text-gray-200">Nome (opcional)</Label>
-                              <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
-                              <p className="text-xs text-gray-400 mt-1">Este nome também é usado como assinatura no WhatsApp. Se ficar vazio, usamos "Agente".</p>
-                            </div>
-                            <div className="md:col-span-2">
-                              <Label className="text-sm font-medium text-gray-200">URL pública do app <span className="text-red-500">*</span></Label>
-                              <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
-                            </div>
-                            <div className="md:col-span-2">
-                              <Label className="text-sm font-medium text-gray-200">API key</Label>
-                              <Input
-                                type="password"
-                                value={editDifyApiKey}
-                                onChange={(e) => setEditDifyApiKey(e.target.value)}
-                                placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
-                                className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
-                              />
-                            </div>
-                            <div className="md:col-span-2">
-                              <Label className="text-sm font-medium text-gray-200">Descrição (opcional)</Label>
-                              <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
-                            </div>
-                          </div>
+                    <Card className="p-6 rounded-xl border-gray-200/80 dark:border-gray-700 dark:bg-gray-800/70 shadow-sm">
+                      <h3 className="text-lg font-medium mb-4 text-gray-900 dark:text-gray-100">Cadastrar agente</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>Nome (opcional)</Label>
+                          <Input value={newDifyDisplayName} onChange={(e) => setNewDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
                         </div>
-
-                        <details className="rounded-xl border border-gray-700 bg-gray-800/50 p-5" open>
-                          <summary className="cursor-pointer list-none text-sm font-semibold tracking-wide text-gray-200">
-                            Configurações do WhatsApp e roteamento
-                          </summary>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 mt-4">
-                            <div>
-                              <Label className="text-sm font-medium text-gray-200">Departamento padrão (opcional)</Label>
-                              <select
-                                value={editDifyDefaultDepartmentId}
-                                onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
-                                className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
-                              >
-                                <option value="">Nenhum</option>
-                                {departments.map((d) => (
-                                  <option key={d.id} value={d.id}>{d.name}</option>
-                                ))}
-                              </select>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-gray-200">Instância WhatsApp (opcional)</Label>
-                              <select
-                                value={editDifyWaInstanceId}
-                                onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
-                                className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
-                              >
-                                <option value="">Usar instância da conversa</option>
-                                {difyWaInstances.map((i) => (
-                                  <option key={i.id} value={i.id}>{i.friendly_name}</option>
-                                ))}
-                              </select>
-                              <p className="mt-1 text-xs text-gray-400">Opcional. Define por qual instância o agente envia.</p>
-                            </div>
-                          </div>
-                        </details>
-
-                        <details className="rounded-xl border border-gray-700 bg-gray-800/50 p-5" open>
-                          <summary className="cursor-pointer list-none text-sm font-semibold tracking-wide text-gray-200">
-                            Parâmetros de entrada
-                          </summary>
-                          <div className="space-y-4 mt-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <p className="text-xs text-gray-400">
-                                Campos do agente Dify. Use variáveis: <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{tenant_name}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{is_open}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{data_hora_atual}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{next_open_time}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{contact_name}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{contact_phone}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{conversation_id}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{department_name}}'}</code>
-                              </p>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
-                                disabled={editDifySyncingSchema || !!difySavingKey}
-                                className="shrink-0 text-xs border-gray-600 hover:bg-gray-700"
-                              >
-                                {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
-                              </Button>
-                            </div>
-                            {editDifyInputSchema.length === 0 ? (
-                              <p className="text-xs text-gray-500 italic">
-                                Nenhum campo detectado. Clique em "Sincronizar campos" para buscar os inputs do agente Dify.
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-                                {editDifyInputSchema.map((field) => {
-                                  const fieldLabel = (typeof field.label === 'object' && field.label !== null)
-                                    ? ((field.label as any)['en-US'] || (field.label as any)['pt-BR'] || Object.values(field.label as any)[0] || field.variable)
-                                    : (field.label || field.variable)
-                                  const fullWidth = field.type === 'paragraph'
-                                  return (
-                                    <div key={field.variable} className={fullWidth ? 'md:col-span-2' : ''}>
-                                      <Label className="text-sm font-medium text-gray-200">
-                                        {fieldLabel}
-                                        {field.required && <span className="text-red-500 ml-1">*</span>}
-                                        <span className="ml-1 text-gray-500 font-normal text-xs">({field.variable})</span>
-                                      </Label>
-                                      {field.type === 'select' && field.options ? (
-                                        <select
-                                          value={editDifyDefaultInputs[field.variable] ?? ''}
-                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                          className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
-                                        >
-                                          <option value="">-- selecione --</option>
-                                          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                        </select>
-                                      ) : field.type === 'paragraph' ? (
-                                        <textarea
-                                          value={editDifyDefaultInputs[field.variable] ?? ''}
-                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                          placeholder="Ex: {{contact_name}}"
-                                          rows={3}
-                                          maxLength={field.max_length}
-                                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/70"
-                                        />
-                                      ) : field.type === 'number' ? (
-                                        <Input
-                                          type="number"
-                                          value={editDifyDefaultInputs[field.variable] ?? ''}
-                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                          placeholder="Ex: 30"
-                                          className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
-                                        />
-                                      ) : (
-                                        <Input
-                                          type="text"
-                                          value={editDifyDefaultInputs[field.variable] ?? ''}
-                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                          placeholder="Ex: {{contact_name}}"
-                                          maxLength={field.max_length}
-                                          className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
-                                        />
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </details>
-                      </div>
-
-                      <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 px-6 py-4 border-t border-gray-700 bg-gray-800/95 backdrop-blur shadow-[0_-6px_14px_rgba(0,0,0,0.25)] shrink-0">
-                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}` || editDifySyncingSchema} className="min-w-[110px]">
-                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? <LoadingSpinner size="sm" className="mr-1" /> : null}
-                          {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando…' : 'Salvar'}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => void testDifyConnection(editingDifyItemId || undefined)} disabled={difySavingKey === 'dify_test_connection'} className="border-gray-600 hover:bg-gray-700">
-                          <TestTube className="h-4 w-4 mr-1" />
-                          {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
-                        </Button>
-                        <div className="ml-auto flex flex-wrap gap-3">
-                          <Button type="button" variant="outline" onClick={() => { const current = difyCatalog.find(x => x.id === editingDifyItemId); if (current) requestDeleteDifyCatalogItem(current) }} disabled={difySavingKey === `catalog_delete_${editingDifyItemId}`} className="text-red-500 border-red-700 hover:bg-red-900/30">
-                            {difySavingKey === `catalog_delete_${editingDifyItemId}` ? 'Excluindo...' : 'Excluir'}
+                        <div>
+                          <Label>URL pública do app <span className="text-red-500">*</span></Label>
+                          <Input value={newDifyPublicUrl} onChange={(e) => setNewDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
+                        </div>
+                        <div>
+                          <Label>API key <span className="text-red-500">*</span></Label>
+                          <Input type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
+                        </div>
+                        <div className="flex gap-2">
+                          <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
+                            {difySavingKey === 'catalog_create' ? 'Salvando…' : 'Cadastrar'}
                           </Button>
-                          <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="text-amber-400 border-amber-700 hover:bg-amber-900/30">
-                            {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
-                          </Button>
-                          <Button type="button" variant="outline" onClick={() => closeEditDifyModal()} className="border-gray-600 hover:bg-gray-700">Cancelar</Button>
+                          <Button type="button" variant="outline" onClick={() => setDifyCreateOpen(false)} disabled={difySavingKey === 'catalog_create'}>Cancelar</Button>
                         </div>
                       </div>
                     </Card>
                   </motion.div>
-                </motion.div>
-              )}
+                )}
               </AnimatePresence>
+
+              <Card className="p-4 rounded-xl border-gray-200/80 dark:border-gray-700 dark:bg-gray-800/70 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100">Agentes</h3>
+                  <Button type="button" variant="outline" size="sm" onClick={() => { fetchDifyCatalog(); fetchDifyWaInstances() }} disabled={difyCatalogLoading}>
+                    <RefreshCw className={`h-4 w-4 mr-1 ${difyCatalogLoading ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
+                </div>
+                {difyCatalogLoading && difyCatalog.length === 0 ? (
+                  <div className="flex items-center justify-center h-24"><LoadingSpinner /></div>
+                ) : difyCatalog.length === 0 ? (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Nenhum agente Dify cadastrado.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {difyCatalog.map((it) => (
+                      <li key={it.id} className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm text-gray-900 dark:text-gray-100 truncate">{it.display_name || it.dify_app_id}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{it.public_url || it.dify_app_id}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => void setDifyCatalogItemActive(it.id, !it.is_active)} disabled={difySavingKey === `catalog_${it.id}`}>
+                            {it.is_active ? 'Desativar' : 'Ativar'}
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
             </div>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'ai' && isTenantAdmin && (
+        <div className="space-y-6">
+          <div className="flex gap-2 border-b border-gray-200 dark:border-gray-600 pb-2">
+            <button
+              type="button"
+              onClick={() => setAiSubTab('config')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'config' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+            >
+              Configurações
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiSubTab('rag-memories')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium flex items-center gap-1 ${aiSubTab === 'rag-memories' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+            >
+              <FileText className="h-4 w-4" />
+              Contexto
+            </button>
+            <button
+              type="button"
+              onClick={() => setAiSubTab('auditoria-ia')}
+              className={`px-4 py-2 rounded-t-lg text-sm font-medium ${aiSubTab === 'auditoria-ia' ? 'bg-white dark:bg-gray-800 border border-b-0 border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'}`}
+            >
+              Auditoria IA
+            </button>
+          </div>
+
+          {aiSubTab === 'rag-memories' ? (
+            <RagMemoriesManager />
           ) : aiSubTab === 'auditoria-ia' ? (
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">

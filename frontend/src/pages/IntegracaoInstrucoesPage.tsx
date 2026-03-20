@@ -107,7 +107,7 @@ export default function IntegracaoInstrucoesPage() {
           2. Variáveis para parâmetros de entrada (agentes Dify)
         </h2>
         <p className="text-gray-600 dark:text-gray-400 mb-4">
-          Nos campos de entrada dos agentes Dify (Configurações &gt; IA &gt; Dify &gt; Parâmetros de entrada), você pode usar
+          Nos campos de entrada dos agentes Dify (Configurações &gt; Integrações &gt; Dify &gt; Parâmetros de entrada), você pode usar
           as variáveis abaixo. Elas são substituídas no momento da chamada pelo valor da conversa atual.
         </p>
 

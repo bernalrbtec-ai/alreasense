@@ -1314,7 +1314,7 @@ export function ChatWindow() {
                         })()} desta conversa.
                       </p>
                       <p className="text-xs">
-                        Em <strong>Configurações &gt; Fluxos</strong>, crie ou edite um fluxo e vincule ao mesmo escopo (Inbox ou ao departamento desta conversa).
+                        Em <strong>Configurações &gt; Integrações &gt; TypeBot</strong>, crie ou edite um fluxo e vincule ao mesmo escopo (Inbox ou ao departamento desta conversa).
                       </p>
                     </div>
                   ) : (
@@ -1439,7 +1439,7 @@ export function ChatWindow() {
                   ) : difyAgents.length === 0 ? (
                     <div className="text-sm text-gray-500 dark:text-gray-400 space-y-2">
                       <p>Nenhum agente cadastrado.</p>
-                      <p className="text-xs">Em <strong>Configurações &gt; IA &gt; Dify</strong>, cadastre um agente para usar aqui.</p>
+                      <p className="text-xs">Em <strong>Configurações &gt; Integrações &gt; Dify</strong>, cadastre um agente para usar aqui.</p>
                     </div>
                   ) : (
                     <ul className="space-y-3">
