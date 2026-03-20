@@ -3238,166 +3238,186 @@ export default function ConfigurationsPage() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
                     transition={{ duration: 0.2 }}
-                    className="w-full max-w-3xl max-h-[90vh] overflow-y-auto"
+                    className="w-full max-w-4xl"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Card className="flex flex-col rounded-2xl border border-gray-200 dark:border-gray-700 shadow-2xl overflow-hidden">
-                      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 shrink-0">
-                        <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Editar agente</h2>
-                        <button type="button" onClick={() => closeEditDifyModal()} className="p-2 rounded-xl text-gray-500 hover:text-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
+                    <Card className="flex flex-col rounded-2xl border border-gray-700 bg-gray-900 shadow-2xl overflow-hidden max-h-[92vh]">
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700 bg-gray-800/90 shrink-0">
+                        <h2 className="text-xl font-semibold text-gray-100">Editar agente</h2>
+                        <button type="button" onClick={() => closeEditDifyModal()} className="p-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-700 transition-colors" aria-label="Fechar"><X className="h-5 w-5" /></button>
                       </div>
-                      <div className="overflow-y-auto overscroll-contain px-6 py-5 space-y-4">
-                        <div>
-                          <Label>ID Dify</Label>
-                          <Input value={editDifyAppId} disabled />
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">O ID é extraído da URL e não pode ser alterado diretamente.</p>
-                        </div>
-                        <div>
-                          <Label>Nome (opcional)</Label>
-                          <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" />
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-                          O nome acima também é usado como assinatura no envio ao WhatsApp. Se ficar vazio, usamos "Agente".
-                        </p>
-                        <div>
-                          <Label>URL pública do app <span className="text-red-500">*</span></Label>
-                          <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" />
-                        </div>
-                        <div>
-                          <Label>API key</Label>
-                          <Input
-                            type="password"
-                            value={editDifyApiKey}
-                            onChange={(e) => setEditDifyApiKey(e.target.value)}
-                            placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
-                          />
-                        </div>
-                        <div>
-                          <Label>Descrição (opcional)</Label>
-                          <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" />
-                        </div>
-                        <div>
-                          <Label>Departamento padrão (opcional)</Label>
-                          <select
-                            value={editDifyDefaultDepartmentId}
-                            onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                          >
-                            <option value="">Nenhum</option>
-                            {departments.map((d) => (
-                              <option key={d.id} value={d.id}>{d.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <Label>Instância WhatsApp (opcional)</Label>
-                          <select
-                            value={editDifyWaInstanceId}
-                            onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
-                            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                          >
-                            <option value="">Usar instância da conversa</option>
-                            {difyWaInstances.map((i) => (
-                              <option key={i.id} value={i.id}>{i.friendly_name}</option>
-                            ))}
-                          </select>
-                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Opcional. Define por qual instância o agente envia.</p>
+
+                      <div className="overflow-y-auto overscroll-contain px-6 py-6 space-y-6">
+                        <div className="space-y-5 rounded-xl border border-gray-700 bg-gray-800/50 p-5">
+                          <h3 className="text-sm font-semibold tracking-wide text-gray-200">Informações básicas</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-200">ID Dify</Label>
+                              <Input value={editDifyAppId} disabled className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-400" />
+                              <p className="text-xs text-gray-400 mt-1">O ID é extraído da URL e não pode ser alterado diretamente.</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-200">Nome (opcional)</Label>
+                              <Input value={editDifyDisplayName} onChange={(e) => setEditDifyDisplayName(e.target.value)} placeholder="Ex: Agente Comercial" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
+                              <p className="text-xs text-gray-400 mt-1">Este nome também é usado como assinatura no WhatsApp. Se ficar vazio, usamos "Agente".</p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-200">URL pública do app <span className="text-red-500">*</span></Label>
+                              <Input value={editDifyPublicUrl} onChange={(e) => setEditDifyPublicUrl(e.target.value)} placeholder="https://dify.seudominio.com/chat/APP_ID" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-200">API key</Label>
+                              <Input
+                                type="password"
+                                value={editDifyApiKey}
+                                onChange={(e) => setEditDifyApiKey(e.target.value)}
+                                placeholder={editDifyHasApiKey ? '•••••••• (preenchido — deixe em branco para manter)' : 'Cole a API key do app Dify'}
+                                className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm font-medium text-gray-200">Descrição (opcional)</Label>
+                              <Input value={editDifyDescription} onChange={(e) => setEditDifyDescription(e.target.value)} placeholder="Ex: atende leads e qualifica contato" className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70" />
+                            </div>
+                          </div>
                         </div>
 
-                        {/* Parâmetros de entrada */}
-                        <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 space-y-3">
-                          <div className="flex items-center justify-between">
+                        <details className="rounded-xl border border-gray-700 bg-gray-800/50 p-5" open>
+                          <summary className="cursor-pointer list-none text-sm font-semibold tracking-wide text-gray-200">
+                            Configurações do WhatsApp e roteamento
+                          </summary>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6 mt-4">
                             <div>
-                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Parâmetros de entrada</p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                Campos do agente Dify. Use variáveis: <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{tenant_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{is_open}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{data_hora_atual}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{next_open_time}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_name}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{contact_phone}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{conversation_id}}'}</code>, <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">{'{{department_name}}'}</code>
-                              </p>
+                              <Label className="text-sm font-medium text-gray-200">Departamento padrão (opcional)</Label>
+                              <select
+                                value={editDifyDefaultDepartmentId}
+                                onChange={(e) => setEditDifyDefaultDepartmentId(e.target.value)}
+                                className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+                              >
+                                <option value="">Nenhum</option>
+                                {departments.map((d) => (
+                                  <option key={d.id} value={d.id}>{d.name}</option>
+                                ))}
+                              </select>
                             </div>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
-                              disabled={editDifySyncingSchema || !!difySavingKey}
-                              className="shrink-0 text-xs"
-                            >
-                              {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
-                            </Button>
+                            <div>
+                              <Label className="text-sm font-medium text-gray-200">Instância WhatsApp (opcional)</Label>
+                              <select
+                                value={editDifyWaInstanceId}
+                                onChange={(e) => setEditDifyWaInstanceId(e.target.value)}
+                                className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+                              >
+                                <option value="">Usar instância da conversa</option>
+                                {difyWaInstances.map((i) => (
+                                  <option key={i.id} value={i.id}>{i.friendly_name}</option>
+                                ))}
+                              </select>
+                              <p className="mt-1 text-xs text-gray-400">Opcional. Define por qual instância o agente envia.</p>
+                            </div>
                           </div>
-                          {editDifyInputSchema.length === 0 ? (
-                            <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                              Nenhum campo detectado. Clique em "Sincronizar campos" para buscar os inputs do agente Dify.
-                            </p>
-                          ) : (
-                            <div className="space-y-3">
-                              {editDifyInputSchema.map((field) => {
-                                const fieldLabel = (typeof field.label === 'object' && field.label !== null)
-                                  ? ((field.label as any)['en-US'] || (field.label as any)['pt-BR'] || Object.values(field.label as any)[0] || field.variable)
-                                  : (field.label || field.variable)
-                                return (
-                                  <div key={field.variable}>
-                                    <Label>
-                                      {fieldLabel}
-                                      {field.required && <span className="text-red-500 ml-1">*</span>}
-                                      <span className="ml-1 text-gray-400 dark:text-gray-500 font-normal text-xs">({field.variable})</span>
-                                    </Label>
-                                    {field.type === 'select' && field.options ? (
-                                      <select
-                                        value={editDifyDefaultInputs[field.variable] ?? ''}
-                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-                                      >
-                                        <option value="">-- selecione --</option>
-                                        {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                      </select>
-                                    ) : field.type === 'paragraph' ? (
-                                      <textarea
-                                        value={editDifyDefaultInputs[field.variable] ?? ''}
-                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        placeholder="Ex: {{contact_name}}"
-                                        rows={2}
-                                        maxLength={field.max_length}
-                                        className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm resize-y"
-                                      />
-                                    ) : field.type === 'number' ? (
-                                      <Input
-                                        type="number"
-                                        value={editDifyDefaultInputs[field.variable] ?? ''}
-                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        placeholder="Ex: 30"
-                                      />
-                                    ) : (
-                                      <Input
-                                        type="text"
-                                        value={editDifyDefaultInputs[field.variable] ?? ''}
-                                        onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
-                                        placeholder="Ex: {{contact_name}}"
-                                        maxLength={field.max_length}
-                                      />
-                                    )}
-                                  </div>
-                                )
-                              })}
+                        </details>
+
+                        <details className="rounded-xl border border-gray-700 bg-gray-800/50 p-5" open>
+                          <summary className="cursor-pointer list-none text-sm font-semibold tracking-wide text-gray-200">
+                            Parâmetros de entrada
+                          </summary>
+                          <div className="space-y-4 mt-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-xs text-gray-400">
+                                Campos do agente Dify. Use variáveis: <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{tenant_name}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{is_open}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{data_hora_atual}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{next_open_time}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{contact_name}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{contact_phone}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{conversation_id}}'}</code>, <code className="bg-gray-900 px-1 rounded border border-gray-700">{'{{department_name}}'}</code>
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => editingDifyItemId && void syncDifySchema(editingDifyItemId)}
+                                disabled={editDifySyncingSchema || !!difySavingKey}
+                                className="shrink-0 text-xs border-gray-600 hover:bg-gray-700"
+                              >
+                                {editDifySyncingSchema ? 'Sincronizando...' : 'Sincronizar campos'}
+                              </Button>
                             </div>
-                          )}
-                        </div>
+                            {editDifyInputSchema.length === 0 ? (
+                              <p className="text-xs text-gray-500 italic">
+                                Nenhum campo detectado. Clique em "Sincronizar campos" para buscar os inputs do agente Dify.
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
+                                {editDifyInputSchema.map((field) => {
+                                  const fieldLabel = (typeof field.label === 'object' && field.label !== null)
+                                    ? ((field.label as any)['en-US'] || (field.label as any)['pt-BR'] || Object.values(field.label as any)[0] || field.variable)
+                                    : (field.label || field.variable)
+                                  const fullWidth = field.type === 'paragraph'
+                                  return (
+                                    <div key={field.variable} className={fullWidth ? 'md:col-span-2' : ''}>
+                                      <Label className="text-sm font-medium text-gray-200">
+                                        {fieldLabel}
+                                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                                        <span className="ml-1 text-gray-500 font-normal text-xs">({field.variable})</span>
+                                      </Label>
+                                      {field.type === 'select' && field.options ? (
+                                        <select
+                                          value={editDifyDefaultInputs[field.variable] ?? ''}
+                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                          className="mt-1 h-11 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+                                        >
+                                          <option value="">-- selecione --</option>
+                                          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                        </select>
+                                      ) : field.type === 'paragraph' ? (
+                                        <textarea
+                                          value={editDifyDefaultInputs[field.variable] ?? ''}
+                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                          placeholder="Ex: {{contact_name}}"
+                                          rows={3}
+                                          maxLength={field.max_length}
+                                          className="mt-1 w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-100 placeholder:text-gray-500 resize-y focus:outline-none focus:ring-2 focus:ring-blue-500/70"
+                                        />
+                                      ) : field.type === 'number' ? (
+                                        <Input
+                                          type="number"
+                                          value={editDifyDefaultInputs[field.variable] ?? ''}
+                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                          placeholder="Ex: 30"
+                                          className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
+                                        />
+                                      ) : (
+                                        <Input
+                                          type="text"
+                                          value={editDifyDefaultInputs[field.variable] ?? ''}
+                                          onChange={(e) => setEditDifyDefaultInputs(prev => ({ ...prev, [field.variable]: e.target.value }))}
+                                          placeholder="Ex: {{contact_name}}"
+                                          maxLength={field.max_length}
+                                          className="h-11 mt-1 bg-gray-900 border-gray-700 text-gray-100 placeholder:text-gray-500 focus-visible:ring-2 focus-visible:ring-blue-500/70"
+                                        />
+                                      )}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </details>
                       </div>
-                      <div className="flex gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 shrink-0">
-                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}` || editDifySyncingSchema} className="min-w-[100px]">
+
+                      <div className="sticky bottom-0 z-10 flex flex-wrap gap-3 px-6 py-4 border-t border-gray-700 bg-gray-800/95 backdrop-blur shadow-[0_-6px_14px_rgba(0,0,0,0.25)] shrink-0">
+                        <Button type="button" onClick={() => void saveEditDifyItem()} disabled={difySavingKey === `catalog_edit_${editingDifyItemId}` || editDifySyncingSchema} className="min-w-[110px]">
                           {difySavingKey === `catalog_edit_${editingDifyItemId}` ? <LoadingSpinner size="sm" className="mr-1" /> : null}
                           {difySavingKey === `catalog_edit_${editingDifyItemId}` ? 'Salvando…' : 'Salvar'}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => void testDifyConnection(editingDifyItemId || undefined)} disabled={difySavingKey === 'dify_test_connection'}>
+                        <Button type="button" variant="outline" onClick={() => void testDifyConnection(editingDifyItemId || undefined)} disabled={difySavingKey === 'dify_test_connection'} className="border-gray-600 hover:bg-gray-700">
                           <TestTube className="h-4 w-4 mr-1" />
                           {difySavingKey === 'dify_test_connection' ? 'Testando...' : 'Testar conexão'}
                         </Button>
-                        <Button type="button" variant="outline" onClick={() => { const current = difyCatalog.find(x => x.id === editingDifyItemId); if (current) requestDeleteDifyCatalogItem(current) }} disabled={difySavingKey === `catalog_delete_${editingDifyItemId}`} className="ml-auto text-red-700 dark:text-red-400 border-red-300 dark:border-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
-                          {difySavingKey === `catalog_delete_${editingDifyItemId}` ? 'Excluindo...' : 'Excluir'}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20">
-                          {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
-                        </Button>
-                        <Button type="button" variant="outline" onClick={() => closeEditDifyModal()}>Cancelar</Button>
+                        <div className="ml-auto flex flex-wrap gap-3">
+                          <Button type="button" variant="outline" onClick={() => { const current = difyCatalog.find(x => x.id === editingDifyItemId); if (current) requestDeleteDifyCatalogItem(current) }} disabled={difySavingKey === `catalog_delete_${editingDifyItemId}`} className="text-red-500 border-red-700 hover:bg-red-900/30">
+                            {difySavingKey === `catalog_delete_${editingDifyItemId}` ? 'Excluindo...' : 'Excluir'}
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => void setDifyCatalogItemActive(editingDifyItemId, !difyCatalog.find(x => x.id === editingDifyItemId)?.is_active)} disabled={difySavingKey === `catalog_${editingDifyItemId}`} className="text-amber-400 border-amber-700 hover:bg-amber-900/30">
+                            {difyCatalog.find(x => x.id === editingDifyItemId)?.is_active ? 'Desativar' : 'Ativar'}
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => closeEditDifyModal()} className="border-gray-600 hover:bg-gray-700">Cancelar</Button>
+                        </div>
                       </div>
                     </Card>
                   </motion.div>
