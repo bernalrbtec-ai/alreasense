@@ -110,6 +110,19 @@ def _ensure_aware(value):
     return value
 
 
+def _parse_rag_lookback_months(raw) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        n = 12
+    return max(1, min(n, 120))
+
+
+def _sanitize_rag_context_input_key(raw) -> str:
+    s = str(raw or "").strip()
+    return s[:200] if len(s) > 200 else s
+
+
 def _normalize_bool(value):
     if isinstance(value, bool):
         return value
@@ -3150,6 +3163,10 @@ def dify_catalog(request):
                         "rag_enabled": bool((it.metadata or {}).get("rag_enabled", False)),
                         "rag_scope": str((it.metadata or {}).get("rag_scope") or "tenant_contact"),
                         "rag_dataset_id": str((it.metadata or {}).get("rag_dataset_id") or ""),
+                        "rag_lookback_months": _parse_rag_lookback_months(
+                            (it.metadata or {}).get("rag_lookback_months")
+                        ),
+                        "rag_context_input_key": str((it.metadata or {}).get("rag_context_input_key") or ""),
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
                     }
@@ -3193,6 +3210,8 @@ def dify_catalog(request):
         rag_enabled = bool(_normalize_bool(data.get("rag_enabled")) is True)
         rag_scope = str(data.get("rag_scope") or "tenant_contact").strip() or "tenant_contact"
         rag_dataset_id = str(data.get("rag_dataset_id") or "").strip()
+        rag_lookback_months = _parse_rag_lookback_months(data.get("rag_lookback_months"))
+        rag_context_input_key = _sanitize_rag_context_input_key(data.get("rag_context_input_key"))
 
         if not public_url:
             return Response({"error": "public_url é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
@@ -3254,6 +3273,8 @@ def dify_catalog(request):
         merged_meta["rag_enabled"] = rag_enabled
         merged_meta["rag_scope"] = rag_scope
         merged_meta["rag_dataset_id"] = rag_dataset_id
+        merged_meta["rag_lookback_months"] = rag_lookback_months
+        merged_meta["rag_context_input_key"] = rag_context_input_key
         item.metadata = merged_meta
         # encrypt field cuida da criptografia em repouso
         item.api_key_encrypted = api_key
@@ -3306,6 +3327,10 @@ def dify_catalog(request):
             "rag_enabled": bool((item.metadata or {}).get("rag_enabled", False)),
             "rag_scope": str((item.metadata or {}).get("rag_scope") or "tenant_contact"),
             "rag_dataset_id": str((item.metadata or {}).get("rag_dataset_id") or ""),
+            "rag_lookback_months": _parse_rag_lookback_months(
+                (item.metadata or {}).get("rag_lookback_months")
+            ),
+            "rag_context_input_key": str((item.metadata or {}).get("rag_context_input_key") or ""),
         }
         if _binding_warning:
             resp_data["warning"] = _binding_warning
@@ -3366,17 +3391,30 @@ def dify_catalog(request):
             item.whatsapp_instance_id = wa_uuid
         else:
             item.whatsapp_instance_id = None
-    if "rag_enabled" in data or "rag_scope" in data or "rag_dataset_id" in data:
-        md = item.metadata if isinstance(item.metadata, dict) else {}
+    _rag_patch_keys = (
+        "rag_enabled",
+        "rag_scope",
+        "rag_dataset_id",
+        "rag_lookback_months",
+        "rag_context_input_key",
+    )
+    if any(k in data for k in _rag_patch_keys):
+        # Cópia rasa para não perder chaves (ex.: input_schema) ao atualizar só campos RAG.
+        _prev_md = item.metadata if isinstance(item.metadata, dict) else {}
+        md = {**_prev_md}
         if "rag_enabled" in data:
             md["rag_enabled"] = bool(_normalize_bool(data.get("rag_enabled")) is True)
         if "rag_scope" in data:
             md["rag_scope"] = str(data.get("rag_scope") or "tenant_contact").strip() or "tenant_contact"
         if "rag_dataset_id" in data:
             md["rag_dataset_id"] = str(data.get("rag_dataset_id") or "").strip()
+        if "rag_lookback_months" in data:
+            md["rag_lookback_months"] = _parse_rag_lookback_months(data.get("rag_lookback_months"))
+        if "rag_context_input_key" in data:
+            md["rag_context_input_key"] = _sanitize_rag_context_input_key(data.get("rag_context_input_key"))
         item.metadata = md
     patch_fields = ["display_name", "signature_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
-    if "rag_enabled" in data or "rag_scope" in data or "rag_dataset_id" in data:
+    if any(k in data for k in _rag_patch_keys):
         patch_fields.append("metadata")
     # dify_app_id só entra em patch_fields se public_url foi enviada (e portanto o app_id foi reextrado)
     if "public_url" in data:
@@ -3456,6 +3494,10 @@ def dify_catalog(request):
         "rag_enabled": bool((item.metadata or {}).get("rag_enabled", False)),
         "rag_scope": str((item.metadata or {}).get("rag_scope") or "tenant_contact"),
         "rag_dataset_id": str((item.metadata or {}).get("rag_dataset_id") or ""),
+        "rag_lookback_months": _parse_rag_lookback_months(
+            (item.metadata or {}).get("rag_lookback_months")
+        ),
+        "rag_context_input_key": str((item.metadata or {}).get("rag_context_input_key") or ""),
     }
     if _patch_binding_warning:
         patch_resp["warning"] = _patch_binding_warning

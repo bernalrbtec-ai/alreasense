@@ -20,6 +20,64 @@ from apps.chat.services.business_hours_service import BusinessHoursService
 logger = logging.getLogger(__name__)
 
 
+def _catalog_item_rag_enabled(metadata) -> bool:
+    """
+    Interpreta metadata['rag_enabled'] de forma segura (evita bool("false") == True em JSON legado).
+    """
+    if not isinstance(metadata, dict):
+        return False
+    raw = metadata.get("rag_enabled")
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return False
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"true", "1", "yes", "sim", "on"}
+    if isinstance(raw, (int, float)):
+        return int(raw) == 1
+    return False
+
+
+def _dedupe_transcript_hits(hits: list) -> list:
+    """Remove documentos repetidos pelo mesmo id (defensivo)."""
+    seen = set()
+    out = []
+    for h in hits:
+        hid = h.get("id")
+        if hid is not None:
+            if hid in seen:
+                continue
+            seen.add(hid)
+        out.append(h)
+    return out
+
+
+def _order_transcript_hits_chronological(hits: list) -> list:
+    """
+    Ordena hits por data do fecho (metadata) crescente; desempate por maior similaridade.
+    Requer ingest com closed_at / last_message_at (ISO) — ver dify_rag_memory_service.
+    """
+    from django.utils.dateparse import parse_datetime
+
+    def sort_key(h: dict) -> tuple:
+        md = h.get("metadata") or {}
+        ts = 0.0
+        for key in ("closed_at", "last_message_at", "first_message_at"):
+            raw = md.get(key)
+            if isinstance(raw, str) and raw.strip():
+                dt = parse_datetime(raw)
+                if dt is not None:
+                    try:
+                        ts = dt.timestamp()
+                    except (OSError, OverflowError, ValueError):
+                        ts = 0.0
+                    break
+        sim = float(h.get("similarity") or 0.0)
+        return (ts, -sim)
+
+    return sorted(hits, key=sort_key)
+
+
 @dataclass
 class DifyMessageStub:
     """
@@ -711,6 +769,91 @@ def maybe_handle_dify_takeover(
 
     # ── Fase 3: chamada HTTP ao Dify ─────────────────────────────────────────────
     resolved = _resolve_inputs(getattr(agent, 'default_inputs', None) or {}, conversation)
+
+    # Transcripts de conversas fechadas (ai_knowledge_document) → input do app Dify
+    agent_md = getattr(agent, "metadata", None) or {}
+    if _catalog_item_rag_enabled(agent_md):
+        input_key = (agent_md.get("rag_context_input_key") or "").strip()
+        if input_key:
+            try:
+                from apps.ai.embeddings import embed_text
+                from apps.ai.vector_store import search_transcript_rag_for_contact
+                from apps.chat.utils.contact_phone import normalize_contact_phone_for_rag
+
+                rag_top_k = int(getattr(settings, "DIFY_RAG_CONTEXT_TOP_K", 5) or 5)
+                rag_top_k = max(1, min(rag_top_k, 50))
+                rag_max_chars = int(getattr(settings, "DIFY_RAG_CONTEXT_MAX_CHARS", 12000) or 12000)
+                rag_max_chars = max(500, min(rag_max_chars, 500_000))
+                rag_sim = float(getattr(settings, "DIFY_RAG_CONTEXT_SIMILARITY", 0.22) or 0.22)
+                rag_sim = max(0.0, min(rag_sim, 1.0))
+                try:
+                    months = int(agent_md.get("rag_lookback_months") or 12)
+                except (TypeError, ValueError):
+                    months = 12
+                months = max(1, min(months, 120))
+
+                phone_norm = normalize_contact_phone_for_rag(contact_phone)
+                q_emb = embed_text(msg_content)
+                if not isinstance(q_emb, list):
+                    q_emb = []
+                hits = search_transcript_rag_for_contact(
+                    tenant_id,
+                    phone_norm,
+                    q_emb,
+                    lookback_months=months,
+                    limit=rag_top_k,
+                    similarity_threshold=rag_sim,
+                )
+                hits = _dedupe_transcript_hits(hits)
+                if getattr(settings, "DIFY_RAG_CONTEXT_CHRONOLOGICAL", True):
+                    hits = _order_transcript_hits_chronological(hits)
+
+                if not hits:
+                    logger.info(
+                        "🤖 [DIFY] RAG transcripts: sem documentos (tenant+contato, janela ou similaridade) "
+                        "conv=%s months=%s top_k=%s sim>=%.2f phone_norm_len=%s",
+                        conv_id,
+                        months,
+                        rag_top_k,
+                        rag_sim,
+                        len(phone_norm or ""),
+                    )
+
+                parts = []
+                total = 0
+                for h in hits:
+                    title = (h.get("title") or "").strip()
+                    body = (h.get("content") or "").strip()
+                    block = (f"--- {title}\n{body}" if title else body).strip()
+                    if not block:
+                        continue
+                    sep = "\n\n" if parts else ""
+                    if total + len(sep) + len(block) > rag_max_chars:
+                        remain = rag_max_chars - total - len(sep)
+                        if remain > 80:
+                            parts.append(block[:remain] + "…")
+                        break
+                    parts.append(block)
+                    total += len(sep) + len(block)
+                ctx = "\n\n".join(parts).strip()
+                if ctx:
+                    resolved = dict(resolved)
+                    resolved[input_key] = ctx
+                    logger.info(
+                        "🤖 [DIFY] RAG transcripts injetados em %s (%d chars, %d hits) conversa=%s",
+                        input_key,
+                        len(ctx),
+                        len(hits),
+                        conv_id,
+                    )
+            except Exception as rag_exc:
+                logger.warning(
+                    "⚠️ [DIFY] RAG transcript context falhou conv=%s: %s",
+                    conv_id,
+                    rag_exc,
+                    exc_info=True,
+                )
+
     if resolved:
         logger.info("🤖 [DIFY] Inputs resolvidos (%d campos) para conversa=%s", len(resolved), conv_id)
         # Log dos valores enviados (truncados) para conferência
@@ -774,7 +917,7 @@ def maybe_handle_dify_takeover(
         dify_answer = cleaned_text
         if ctrl_meta.get("recognized"):
             logger.info(
-                "🤖 [DIFY] Instrução #{} processada (closed=%s transferred=%s) conversa=%s",
+                "🤖 [DIFY] Instrução processada (closed=%s transferred=%s) conversa=%s",
                 bool(ctrl_meta.get("closed")),
                 bool(ctrl_meta.get("transferred")),
                 conv_id,
@@ -792,7 +935,7 @@ def maybe_handle_dify_takeover(
             )
             return True
     except Exception as exc:
-        logger.warning("⚠️ [DIFY] Falha ao processar instruções #{}: %s", exc, exc_info=True)
+        logger.warning("⚠️ [DIFY] Falha ao processar instruções de controle: %s", exc, exc_info=True)
 
     if not dify_answer:
         logger.warning(

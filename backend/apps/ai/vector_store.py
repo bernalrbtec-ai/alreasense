@@ -207,6 +207,146 @@ def search_knowledge(
     return results
 
 
+def search_transcript_rag_for_contact(
+    tenant_id: str,
+    contact_phone_normalized: str,
+    query_embedding: List[float],
+    *,
+    lookback_months: int = 12,
+    source: str = "chat_text_transcript",
+    limit: int = 5,
+    similarity_threshold: float = 0.22,
+) -> List[Dict[str, Any]]:
+    """
+    Busca em ai_knowledge_document (ex.: transcripts de conversas fechadas) por tenant + telefone
+    normalizado (metadata.contact_phone) e janela temporal (created_at).
+
+    Usado para injetar histórico fechado nos inputs do Dify; a conversa aberta atual não está
+    nestes documentos até o próximo fechamento.
+    """
+    import json as _json
+
+    if not query_embedding or not contact_phone_normalized:
+        return []
+
+    try:
+        months = int(lookback_months or 12)
+    except (TypeError, ValueError):
+        months = 12
+    months = max(1, min(months, 120))
+    since = timezone.now() - timedelta(days=months * 31)
+
+    if _has_pgvector():
+        vec_str = _to_vector_str(query_embedding)
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    title,
+                    content,
+                    source,
+                    tags,
+                    metadata,
+                    1 - (embedding <=> %s::vector) as similarity_score
+                FROM ai_knowledge_document
+                WHERE tenant_id = %s
+                  AND source = %s
+                  AND embedding IS NOT NULL
+                  AND (expires_at IS NULL OR expires_at > NOW())
+                  AND created_at >= %s
+                  AND (metadata->>'contact_phone') = %s
+                  AND (1 - (embedding <=> %s::vector)) >= %s
+                ORDER BY embedding <=> %s::vector
+                LIMIT %s
+                """,
+                [
+                    vec_str,
+                    tenant_id,
+                    source,
+                    since,
+                    contact_phone_normalized,
+                    vec_str,
+                    similarity_threshold,
+                    vec_str,
+                    limit,
+                ],
+            )
+            rows = cursor.fetchall()
+
+        return [
+            {
+                "id": row[0],
+                "title": row[1],
+                "content": row[2],
+                "source": row[3],
+                "tags": row[4] or [],
+                "metadata": row[5] or {},
+                "similarity": float(row[6] or 0),
+            }
+            for row in rows
+        ]
+
+    fetch_cap = max(limit * 80, 400)
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, title, content, source, tags, metadata, embedding, created_at
+            FROM ai_knowledge_document
+            WHERE tenant_id = %s
+              AND source = %s
+              AND embedding IS NOT NULL
+              AND (expires_at IS NULL OR expires_at > NOW())
+              AND created_at >= %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            [tenant_id, source, since, fetch_cap],
+        )
+        rows = cursor.fetchall()
+
+    scored = []
+    for row in rows:
+        md_raw = row[5]
+        if isinstance(md_raw, str):
+            try:
+                md = _json.loads(md_raw)
+            except Exception:
+                md = {}
+        else:
+            md = md_raw or {}
+        if (md.get("contact_phone") or "") != contact_phone_normalized:
+            continue
+        embedding = row[6] or []
+        similarity = cosine_similarity(query_embedding, embedding)
+        if similarity >= similarity_threshold:
+            scored.append((similarity, row))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    results: List[Dict[str, Any]] = []
+    for similarity, row in scored[:limit]:
+        md_raw = row[5]
+        if isinstance(md_raw, str):
+            try:
+                md = _json.loads(md_raw)
+            except Exception:
+                md = {}
+        else:
+            md = md_raw or {}
+        results.append(
+            {
+                "id": row[0],
+                "title": row[1],
+                "content": row[2],
+                "source": row[3],
+                "tags": row[4] or [],
+                "metadata": md,
+                "similarity": float(similarity),
+            }
+        )
+    return results
+
+
 def search_memory_for_contact(
     tenant_id: str,
     contact_phone: str,

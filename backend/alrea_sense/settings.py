@@ -500,6 +500,13 @@ CHAT_CONVERSATION_TIMELINE_ENABLED = config(
 CHAT_TIMELINE_RAG_RENDER_ENABLED = config(
     'CHAT_TIMELINE_RAG_RENDER_ENABLED', default=True, cast=bool
 )
+
+# Contexto RAG (transcripts fechados) enviado aos inputs do Dify no takeover
+DIFY_RAG_CONTEXT_TOP_K = config('DIFY_RAG_CONTEXT_TOP_K', default=5, cast=int)
+DIFY_RAG_CONTEXT_MAX_CHARS = config('DIFY_RAG_CONTEXT_MAX_CHARS', default=12000, cast=int)
+DIFY_RAG_CONTEXT_SIMILARITY = config('DIFY_RAG_CONTEXT_SIMILARITY', default=0.22, cast=float)
+# True: ordena os top-k hits por closed_at (mais antigo primeiro) para leitura tipo linha do tempo
+DIFY_RAG_CONTEXT_CHRONOLOGICAL = config('DIFY_RAG_CONTEXT_CHRONOLOGICAL', default=True, cast=bool)
 AI_INTERACTION_LOGGING_ENABLED = config('AI_INTERACTION_LOGGING_ENABLED', default=True, cast=bool)
 
 # Evolution API (Consolidated)

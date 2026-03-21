@@ -28,7 +28,18 @@ Grupos WhatsApp (`g.us` no telefone): não gravam eventos (alinhado ao RAG).
 ## Consumidores
 
 - Ingestão RAG ao fechar: `apps/ai/services/dify_rag_memory_service.py` → `render_timeline_plaintext`
+- Takeover Dify: `apps/ai/services/dify_chat_service.py` busca em `ai_knowledge_document` (`source=chat_text_transcript`, `metadata.contact_phone` normalizado) dentro de `rag_lookback_months` e injeta o texto no **input** do app cujo nome de variável está em `rag_context_input_key` (catálogo do agente). A conversa **aberta** não entra nesses documentos até o próximo fechamento; o modelo Dify continua com o **log completo** da sessão atual via `conversation_id` / memória do Dify.
 - Futuro: API, export, UI
+
+### Catálogo Dify (metadata)
+
+| Campo | Efeito |
+|-------|--------|
+| `rag_enabled` | Liga a busca de transcripts fechados no takeover. |
+| `rag_lookback_months` | Janela em meses sobre `created_at` do documento (1–120, default 12). |
+| `rag_context_input_key` | Nome exato da variável de entrada no app Dify; se vazio, nada é injetado (evita 400). |
+
+Limites globais: `DIFY_RAG_CONTEXT_TOP_K`, `DIFY_RAG_CONTEXT_MAX_CHARS`, `DIFY_RAG_CONTEXT_SIMILARITY`, `DIFY_RAG_CONTEXT_CHRONOLOGICAL` (default `True`: ordena os hits por `closed_at` crescente antes de montar o texto) em `settings.py`.
 
 ## Variáveis de ambiente (produção)
 

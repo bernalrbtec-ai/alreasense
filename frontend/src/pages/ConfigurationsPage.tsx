@@ -250,6 +250,8 @@ interface DifyCatalogItem {
   rag_enabled?: boolean
   rag_scope?: string
   rag_dataset_id?: string
+  rag_lookback_months?: number
+  rag_context_input_key?: string
 }
 
 interface DifyWaInstance {
@@ -412,6 +414,8 @@ export default function ConfigurationsPage() {
   const [editDifyRagEnabled, setEditDifyRagEnabled] = useState(false)
   const [editDifyRagScope, setEditDifyRagScope] = useState('tenant_contact')
   const [editDifyRagDatasetId, setEditDifyRagDatasetId] = useState('')
+  const [editDifyRagLookbackMonths, setEditDifyRagLookbackMonths] = useState(12)
+  const [editDifyRagContextInputKey, setEditDifyRagContextInputKey] = useState('')
   const [editDifySyncingSchema, setEditDifySyncingSchema] = useState(false)
   // Rastreia se uma sincronização de schema ocorreu nessa sessão de edição.
   // Necessário para saber se devemos enviar default_inputs={} mesmo quando schema veio [].
@@ -1765,6 +1769,8 @@ export default function ConfigurationsPage() {
     setEditDifyRagEnabled(false)
     setEditDifyRagScope('tenant_contact')
     setEditDifyRagDatasetId('')
+    setEditDifyRagLookbackMonths(12)
+    setEditDifyRagContextInputKey('')
     setEditDifySyncingSchema(false)
     setEditDifySchemaSynced(false)
   }
@@ -1784,6 +1790,9 @@ export default function ConfigurationsPage() {
     setEditDifyRagEnabled(Boolean(item.rag_enabled))
     setEditDifyRagScope(item.rag_scope || 'tenant_contact')
     setEditDifyRagDatasetId(item.rag_dataset_id || '')
+    const lb = Number(item.rag_lookback_months)
+    setEditDifyRagLookbackMonths(Number.isFinite(lb) && lb >= 1 ? Math.min(120, Math.floor(lb)) : 12)
+    setEditDifyRagContextInputKey(item.rag_context_input_key || '')
     setEditDifyOpen(true)
   }
 
@@ -1801,6 +1810,8 @@ export default function ConfigurationsPage() {
         rag_enabled: editDifyRagEnabled,
         rag_scope: editDifyRagScope || 'tenant_contact',
         rag_dataset_id: editDifyRagDatasetId.trim(),
+        rag_lookback_months: Math.min(120, Math.max(1, Math.floor(Number(editDifyRagLookbackMonths) || 12))),
+        rag_context_input_key: editDifyRagContextInputKey.trim(),
       }
       if (!payload.public_url?.trim()) {
         showErrorToast('URL pública é obrigatória')
@@ -3279,7 +3290,11 @@ export default function ConfigurationsPage() {
                             <div className="flex items-center justify-between gap-3">
                               <div>
                                 <Label>Memória (RAG) neste agente</Label>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Quando ativo, este agente usa contexto RAG por tenant+contato.</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                  Quando ativo, o Sense busca transcripts já fechados (resumo + timeline em{' '}
+                                  <code className="text-[11px]">ai_knowledge_document</code>) e envia ao Dify no input abaixo.
+                                  A sessão aberta atual fica no log do próprio Dify (<code className="text-[11px]">conversation_id</code>).
+                                </p>
                               </div>
                               <button
                                 type="button"
@@ -3310,6 +3325,38 @@ export default function ConfigurationsPage() {
                                   placeholder="dataset-id"
                                   className="mt-1"
                                 />
+                              </div>
+                              <div>
+                                <Label>Buscar fechos (últimos N meses)</Label>
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={120}
+                                  value={editDifyRagLookbackMonths}
+                                  onChange={(e) => {
+                                    const v = e.target.valueAsNumber
+                                    if (Number.isFinite(v)) setEditDifyRagLookbackMonths(v)
+                                  }}
+                                  onBlur={() =>
+                                    setEditDifyRagLookbackMonths((m) =>
+                                      Math.min(120, Math.max(1, Math.floor(Number(m)) || 12)),
+                                    )
+                                  }
+                                  className="mt-1"
+                                />
+                                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Filtra por data do documento ingestado (cada fecho).</p>
+                              </div>
+                              <div className="md:col-span-2">
+                                <Label>Variável de input no Dify (transcripts fechados)</Label>
+                                <Input
+                                  value={editDifyRagContextInputKey}
+                                  onChange={(e) => setEditDifyRagContextInputKey(e.target.value)}
+                                  placeholder="ex.: historico_conversas_fechadas"
+                                  className="mt-1"
+                                />
+                                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                                  Deve existir no app Dify com o mesmo nome. Vazio = não injeta (evita erro 400).
+                                </p>
                               </div>
                             </div>
                           </div>
