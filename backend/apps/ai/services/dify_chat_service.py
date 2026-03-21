@@ -271,16 +271,24 @@ def _normalize_phone_for_dify_user(contact_phone: str) -> str:
     return digits[:32]
 
 
-def _normalize_dify_user(tenant_id: str, agent_app_id: str, contact_phone: str) -> str:
+def _normalize_dify_user(
+    tenant_id: str,
+    agent_app_id: str,
+    contact_phone: str,
+    episode_id: str,
+) -> str:
     """
-    Identificador estável para memória do Dify, isolado por tenant + agente + telefone.
-    Ex.: sense:<tenant>:<agent>:<digits>
+    Identificador do `user` no Dify: tenant + agente + telefone + episódio.
+
+    Cada reabertura no Sense (closed → não closed) gera novo `dify_episode_id` nos metadados
+    da conversa, para que o Dify trate como conversa nova (sem reutilizar histórico da sessão
+    anterior). Formato compacto: sense:<tenant>:<agent>:<phone>:<episode>
     """
     tid = (tenant_id or "").strip() or "t"
     aid = (agent_app_id or "").strip() or "a"
     phone = _normalize_phone_for_dify_user(contact_phone) or "p"
-    # manter compacto e com charset seguro
-    return f"sense:{tid}:{aid}:{phone}"
+    ep = (episode_id or "").strip() or "0"
+    return f"sense:{tid}:{aid}:{phone}:{ep}"
 
 
 def _fetch_dify_conversation_for_user(base_url: str, api_key: str, dify_user: str, agent_id) -> str | None:
@@ -681,6 +689,29 @@ def _stop_active_dify_for_conversation(conversation_id: str, tenant_id: str) -> 
     return False
 
 
+def _clear_stored_dify_conversation_id(conversation_id: str, tenant_id: str) -> None:
+    """
+    Zera dify_conversation_id no estado de takeover para não reutilizar thread do Dify
+    após troca de episódio (ex.: reabertura).
+    """
+    if not conversation_id or not tenant_id:
+        return
+    try:
+        with _conn.cursor() as cur:
+            cur.execute(
+                "UPDATE ai_dify_conversation_state SET dify_conversation_id = NULL, updated_at = now() "
+                "WHERE conversation_id = %s AND tenant_id = %s",
+                [str(conversation_id), str(tenant_id)],
+            )
+    except Exception as exc:
+        logger.warning(
+            "⚠️ [DIFY] Falha ao limpar dify_conversation_id (conv=%s tenant=%s): %s",
+            conversation_id,
+            tenant_id,
+            exc,
+        )
+
+
 def maybe_handle_dify_takeover(
     tenant,
     conversation,
@@ -860,7 +891,33 @@ def maybe_handle_dify_takeover(
         preview = {k: (s[:60] + "…" if len(s := str(v)) > 60 else str(v)) for k, v in resolved.items()}
         logger.info("🤖 [DIFY] inputs enviados ao Dify: %s", preview)
 
-    dify_user = _normalize_dify_user(tenant_id, (agent.dify_app_id or ''), contact_phone)
+    conv_md = getattr(conversation, "metadata", None) or {}
+    episode_id = (conv_md.get("dify_episode_id") or "").strip()
+    if not episode_id:
+        import time as _time
+
+        episode_id = str(int(_time.time() * 1000))
+        _patch = dict(conv_md)
+        _patch["dify_episode_id"] = episode_id
+        try:
+            from apps.chat.models import Conversation as _Conv
+
+            _Conv.objects.filter(pk=conversation.id).update(metadata=_patch)
+            conv_md = _patch
+            conversation.metadata = _patch
+        except Exception as _ep_exc:
+            logger.warning(
+                "⚠️ [DIFY] Falha ao persistir dify_episode_id conv=%s: %s",
+                conv_id,
+                _ep_exc,
+            )
+
+    dify_user = _normalize_dify_user(
+        tenant_id,
+        (agent.dify_app_id or ""),
+        contact_phone,
+        episode_id,
+    )
     effective_prev_conv_id = prev_dify_conv_id
     if not effective_prev_conv_id:
         # Tentar retomar memória do Dify por telefone (isolado por tenant+agente)

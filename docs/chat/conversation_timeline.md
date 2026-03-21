@@ -28,7 +28,8 @@ Grupos WhatsApp (`g.us` no telefone): não gravam eventos (alinhado ao RAG).
 ## Consumidores
 
 - Ingestão RAG ao fechar: `apps/ai/services/dify_rag_memory_service.py` → `render_timeline_plaintext`
-- Takeover Dify: `apps/ai/services/dify_chat_service.py` busca em `ai_knowledge_document` (`source=chat_text_transcript`, `metadata.contact_phone` normalizado) dentro de `rag_lookback_months` e injeta o texto no **input** do app cujo nome de variável está em `rag_context_input_key` (catálogo do agente). A conversa **aberta** não entra nesses documentos até o próximo fechamento; o modelo Dify continua com o **log completo** da sessão atual via `conversation_id` / memória do Dify.
+- Takeover Dify: `apps/ai/services/dify_chat_service.py` busca em `ai_knowledge_document` (`source=chat_text_transcript`, `metadata.contact_phone` normalizado) dentro de `rag_lookback_months` e injeta o texto no **input** do app cujo nome de variável está em `rag_context_input_key` (catálogo do agente). A conversa **aberta** não entra nesses documentos até o próximo fechamento; o modelo Dify mantém o **histórico da sessão atual** via `conversation_id` da API Dify.
+- **Episódio Dify** (`metadata.dify_episode_id`, ms UTC): definido na criação da conversa e **renovado** quando o status sai de `closed` (reabertura). O campo `user` enviado ao Dify inclui tenant + app + telefone + episódio, para cada ciclo fechamento/reabertura no Sense corresponder a uma **nova** conversa no Dify; ao reabrir, zera-se `dify_conversation_id` em `ai_dify_conversation_state` (ver `apps/chat/signals.py`).
 - Futuro: API, export, UI
 
 ### Catálogo Dify (metadata)
