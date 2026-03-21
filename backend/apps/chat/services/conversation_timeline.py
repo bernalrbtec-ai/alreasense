@@ -143,7 +143,7 @@ def append_timeline_event_db(
     try:
         with transaction.atomic():
             conv = (
-                Conversation.objects.select_for_update()
+                Conversation.objects.select_for_update(of=["self"])
                 .select_related("department", "assigned_to")
                 .filter(id=conversation_id)
                 .first()

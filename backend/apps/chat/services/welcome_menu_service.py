@@ -454,7 +454,7 @@ class WelcomeMenuService:
 
             with transaction.atomic():
                 locked = (
-                    Conversation.objects.select_for_update()
+                    Conversation.objects.select_for_update(of=["self"])
                     .select_related("department", "assigned_to")
                     .get(pk=conversation.id)
                 )

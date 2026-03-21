@@ -97,7 +97,7 @@ def close_conversation_from_bot(conversation: Conversation, source: str = "bot")
 
         with transaction.atomic():
             locked = (
-                Conversation.objects.select_for_update()
+                Conversation.objects.select_for_update(of=["self"])
                 .select_related("department", "assigned_to")
                 .filter(pk=conversation.id)
                 .first()
@@ -186,7 +186,7 @@ def transfer_conversation_to_department(
 
         with transaction.atomic():
             locked = (
-                Conversation.objects.select_for_update()
+                Conversation.objects.select_for_update(of=["self"])
                 .select_related("department")
                 .filter(pk=conversation.id)
                 .first()

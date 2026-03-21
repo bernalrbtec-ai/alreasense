@@ -3217,8 +3217,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from apps.chat.models_flow import ConversationFlowState
 
         with transaction.atomic():
+            # of=['self']: PostgreSQL não permite FOR UPDATE no lado anulável de OUTER JOIN
+            # gerado por select_related em FKs opcionais (department, assigned_to).
             locked = (
-                Conversation.objects.select_for_update()
+                Conversation.objects.select_for_update(of=["self"])
                 .select_related("department", "assigned_to")
                 .get(pk=conversation.id)
             )

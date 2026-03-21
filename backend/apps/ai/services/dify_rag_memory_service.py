@@ -153,7 +153,7 @@ def _finalize_ingest_under_lock(
     with transaction.atomic():
         _pg_advisory_xact_lock_conversation(conversation_id)
         conversation = (
-            Conversation.objects.select_for_update()
+            Conversation.objects.select_for_update(of=["self"])
             .select_related("tenant")
             .filter(id=conversation_id)
             .first()
