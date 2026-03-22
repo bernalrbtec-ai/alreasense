@@ -918,7 +918,7 @@ export function ChatWindow() {
     : null;
 
   return (
-    <div ref={chatPanelRef} className="flex h-full w-full bg-chat-panel animate-fade-in overflow-hidden">
+    <div ref={chatPanelRef} className="flex h-full w-full min-h-0 bg-chat-panel animate-fade-in">
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
@@ -1124,7 +1124,7 @@ export function ChatWindow() {
             </Button>
 
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50 animate-scale-in">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-[200] animate-scale-in">
                 {/* Informações do Grupo - apenas para grupos */}
                 {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
                 {(activeConversation?.conversation_type || conversationType) === 'group' && (

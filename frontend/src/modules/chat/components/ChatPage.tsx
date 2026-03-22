@@ -57,7 +57,8 @@ export function ChatPage() {
       <DepartmentTabs />
 
       {/* Content: Conversations + Chat Window - OCUPA TODO ESPAÇO */}
-      <div className="flex flex-1 overflow-hidden min-h-0">
+      {/* Sem overflow-hidden aqui: o menu ⋮ do header abre para a esquerda e não pode ser cortado pela lista */}
+      <div className="flex flex-1 min-h-0">
         {/* Lista de conversas - MINIMIZADA quando conversa está aberta */}
         <div
           data-chat-conversation-list
@@ -67,6 +68,7 @@ export function ChatPage() {
             : 'flex w-full md:w-[340px] lg:w-[360px]'
           }
           flex-shrink-0 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out
+          relative z-0
         `}>
           {import.meta.env.VITE_CHAT_UI_V2 !== 'false' ? (
             <ChatConversationSidebarWrapper />
@@ -75,10 +77,10 @@ export function ChatPage() {
           )}
         </div>
         
-        {/* Chat window - EXPANDE AO MÁXIMO quando conversa aberta */}
+        {/* Chat window - EXPANDE AO MÁXIMO quando conversa aberta; z-10 para dropdown do header sobrepor a lista */}
         <div className={`
           ${activeConversation ? 'flex flex-1 animate-slide-in-right' : 'hidden md:flex md:flex-1'}
-          min-w-0 max-w-full
+          min-w-0 max-w-full relative z-10
         `}>
           <ChatWindow />
         </div>
