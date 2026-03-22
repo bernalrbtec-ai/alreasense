@@ -6,6 +6,8 @@ import type { Conversation, Message } from '@/modules/chat/types';
 import { getDisplayName } from '@/modules/chat/utils/phoneFormatter';
 import { getMessagePreviewText } from '@/modules/chat/utils/messageUtils';
 import type { SentimentScore } from '@/utils/sentiment';
+import type { StatusChipVariant } from '@/modules/chat/utils/conversationStatusPresentation';
+import { getConversationStatusPresentation } from '@/modules/chat/utils/conversationStatusPresentation';
 
 /** Item de conversa para a sidebar (spec). */
 export interface ConversationSidebarConversation {
@@ -77,7 +79,13 @@ function getSentimentFromMessage(lastMessage: Conversation['last_message']): Sen
   return 'neutral';
 }
 
-export function conversationToSidebarItem(conv: Conversation): ConversationSidebarConversation {
+export function conversationToSidebarItem(
+  conv: Conversation,
+  opts?: { activeAgentName?: string | null }
+): ConversationSidebarConversation {
+  const agentForPresentation = opts?.activeAgentName ?? null;
+  const pres = getConversationStatusPresentation(conv, { activeAgentName: agentForPresentation });
+
   const name = getDisplayName(conv);
   const lastMsg = conv.last_message;
   const rawPreview = lastMsg
@@ -105,6 +113,10 @@ export function conversationToSidebarItem(conv: Conversation): ConversationSideb
     avatarInitials,
     avatarColor: getAvatarColor(conv.id),
     profilePicUrl: conv.profile_pic_url ?? null,
+    activeAgentName: agentForPresentation,
+    statusLabel: pres.label,
+    statusVariant: pres.variant,
+    showUrgentIndicator: pres.showUrgentIndicator,
     assignedToId:
       typeof (conv as any).assigned_to === 'number'
         ? (conv as any).assigned_to

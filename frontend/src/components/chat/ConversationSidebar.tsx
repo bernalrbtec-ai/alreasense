@@ -6,9 +6,10 @@
 
 import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, Flame } from 'lucide-react';
 import type { ConversationSidebarConversation } from './adapters';
 import { formatTimeAgo } from '@/utils/formatTime';
+import { STATUS_CHIP_VARIANT_CLASSES } from '@/modules/chat/utils/conversationStatusPresentation';
 
 function getMediaProxyUrl(externalUrl: string): string {
   const API_BASE_URL = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -27,6 +28,10 @@ export interface ConversationSidebarProps {
   searchPlaceholder?: string;
   /** Opcional: exibe botão Nova conversa ao lado da busca */
   onNewConversation?: () => void;
+  /** Barra acima da lista (ex.: filtros rápidos) */
+  listToolbar?: React.ReactNode;
+  /** Lista vazia (ex.: filtro sem resultados) */
+  emptyState?: React.ReactNode;
 }
 
 export function ConversationSidebar({
@@ -76,10 +81,20 @@ export function ConversationSidebar({
         </div>
       )}
 
+      {listToolbar ? (
+        <div className="flex-shrink-0 px-2 sm:px-3 pt-1 pb-2 border-b border-gray-100 dark:border-gray-700">
+          {listToolbar}
+        </div>
+      ) : null}
+
       <div
         className="flex-1 overflow-y-auto custom-scrollbar min-h-0"
         aria-label="Lista de conversas"
       >
+        {conversations.length === 0 && emptyState ? (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center min-h-[200px]">{emptyState}</div>
+        ) : null}
+
         <div className="flex flex-col">
           {conversations.map((item) => {
             const isActive = activeId !== null && String(item.id) === String(activeId);
@@ -128,30 +143,28 @@ export function ConversationSidebar({
 
                   <div className="flex-1 min-w-0 text-left">
                     <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                      <span className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm block">
+                      <span className="font-semibold text-gray-900 dark:text-gray-50 truncate text-base leading-tight block">
                         {item.contactName}
                       </span>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+                      <span className="text-[10px] tabular-nums text-gray-400 dark:text-gray-500 flex-shrink-0">
                         {formatTimeAgo(item.lastMessageAt)}
                       </span>
                     </div>
 
-                    {(item.activeAgentName || (item.assignedToId && item.assignedToName)) && (
-                      <div className="mb-0.5">
-                        {item.activeAgentName ? (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded text-[10px] font-medium">
-                            🤖 {item.activeAgentName} está atendendo
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
-                            👤 {item.assignedToName} está atendendo
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 mb-0.5 min-w-0">
+                      <span
+                        className={`inline-flex items-center gap-0.5 max-w-full truncate px-1.5 py-0.5 rounded-md text-[10px] font-medium ${STATUS_CHIP_VARIANT_CLASSES[item.statusVariant]}`}
+                        title={item.statusLabel}
+                      >
+                        {item.showUrgentIndicator ? (
+                          <Flame className="w-3 h-3 flex-shrink-0 text-orange-600 dark:text-orange-400" aria-hidden />
+                        ) : null}
+                        <span className="truncate">{item.statusLabel}</span>
+                      </span>
+                    </div>
 
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500 dark:text-gray-400 truncate flex-1 min-w-0">
+                      <span className="text-sm text-gray-800 dark:text-gray-200 truncate flex-1 min-w-0">
                         {item.lastMessage || 'Sem mensagens'}
                       </span>
                       {item.unreadCount > 0 && (

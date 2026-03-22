@@ -16,6 +16,10 @@ import ContactModal from '@/components/contacts/ContactModal';
 import ContactHistory from '@/components/contacts/ContactHistory';
 import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/Button';
+import {
+  getConversationStatusPresentation,
+  STATUS_CHIP_VARIANT_CLASSES,
+} from '../utils/conversationStatusPresentation';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -27,7 +31,15 @@ const getMediaProxyUrl = (externalUrl: string) => {
 const noopTyping = () => {};
 
 export function ChatWindow() {
-  const { activeConversation, setActiveConversation, openInSpyMode, replyToMessage, clearReply, setDifyActiveConversation } = useChatStore();
+  const {
+    activeConversation,
+    setActiveConversation,
+    openInSpyMode,
+    replyToMessage,
+    clearReply,
+    setDifyActiveConversation,
+    difyActiveConversations,
+  } = useChatStore();
   const { user } = useAuthStore();
   // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
   const permissions = usePermissions();
@@ -893,6 +905,14 @@ export function ChatWindow() {
     );
   }
 
+  const activeDifyNameForStatus =
+    difyHeaderState?.display_name ??
+    (activeConversation ? difyActiveConversations[String(activeConversation.id)] : undefined) ??
+    null;
+  const conversationStatusPresentation = activeConversation
+    ? getConversationStatusPresentation(activeConversation, { activeAgentName: activeDifyNameForStatus })
+    : null;
+
   return (
     <div ref={chatPanelRef} className="flex h-full w-full bg-chat-panel animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
@@ -946,7 +966,7 @@ export function ChatWindow() {
           <div className="flex-1 min-w-0">
             {/* Nome com botão de contato */}
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-medium text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
                 {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
                 {(activeConversation?.conversation_type || conversationType) === 'group' && <span>👥</span>}
                 {displayName}
@@ -989,6 +1009,14 @@ export function ChatWindow() {
             
             {/* Tags: Instância + Tags do Contato + Atendente */}
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+              {conversationStatusPresentation && (
+                <span
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${STATUS_CHIP_VARIANT_CLASSES[conversationStatusPresentation.variant]}`}
+                  title={conversationStatusPresentation.label}
+                >
+                  {conversationStatusPresentation.label}
+                </span>
+              )}
               {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
               {(instanceFriendlyName || instanceName) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200 rounded-full text-xs font-medium">
@@ -1014,16 +1042,6 @@ export function ChatWindow() {
                 </>
               )}
 
-              {/* Badge de agente Dify ativo */}
-              {difyHeaderState && (
-                <span
-                  title={`Agente IA ativo: ${difyHeaderState.display_name}`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 rounded-full text-xs font-medium cursor-default"
-                >
-                  <Bot className="w-3 h-3" />
-                  {difyHeaderState.display_name}
-                </span>
-              )}
             </div>
           </div>
         </div>

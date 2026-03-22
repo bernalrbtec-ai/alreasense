@@ -30,6 +30,7 @@ import { parseMessageSignature } from '../utils/signatureParser';
 import { useTheme } from '@/hooks/useTheme';
 import { InteractiveListModal } from './InteractiveListModal';
 import type { InteractiveListSection } from './InteractiveListModal';
+import { DateSeparator } from '@/components/chat/DateSeparator';
 
 /** Formato de metadata.interactive_list (lista interativa Meta/WhatsApp). */
 type InteractiveListMetadata = {
@@ -79,7 +80,7 @@ function parseTransferLines(content: string): { de: string; para: string; resumo
 
 /** Agrupa mensagens consecutivas "Conversa transferida" em um único item para exibição */
 type DisplayItem =
-  | { type: 'message'; message: Message }
+  | { type: 'message'; message: Message; isGroupStart: boolean }
   | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }
   | { type: 'date_separator'; dayKey: string; label: string };
 
@@ -139,15 +140,49 @@ function withDateSeparators(
     const createdAt = item.type === 'message'
       ? item.message.created_at
       : item.messages[0]?.created_at;
-    const date = new Date(createdAt);
-    const dayKey = getDayKey(date);
-    if (dayKey !== lastDayKey) {
-      result.push({ type: 'date_separator', dayKey, label: getDateLabel(date) });
-      lastDayKey = dayKey;
+    const date = createdAt ? new Date(createdAt) : new Date(NaN);
+    if (!Number.isNaN(date.getTime())) {
+      const dayKey = getDayKey(date);
+      if (dayKey !== lastDayKey) {
+        result.push({ type: 'date_separator', dayKey, label: getDateLabel(date) });
+        lastDayKey = dayKey;
+      }
     }
-    result.push(item);
+    if (item.type === 'message') {
+      result.push({ type: 'message', message: item.message, isGroupStart: true });
+    } else {
+      result.push(item);
+    }
   }
   return result;
+}
+
+/** Chave estável do remetente para agrupar bolhas consecutivas (grupos WA: por participante). */
+function messageAuthorGroupKey(msg: Message): string {
+  const dir = msg.direction === 'incoming' ? 'in' : 'out';
+  const sd = msg.sender_data as { id?: string } | undefined;
+  const sid = sd?.id != null ? String(sd.id) : '';
+  const sn = (msg.sender_name || '').trim();
+  const phone = (msg.sender_phone || '').trim();
+  return `${dir}|${sid}|${sn}|${phone}`;
+}
+
+function applyMessageGroupFlags(items: DisplayItem[]): DisplayItem[] {
+  let lastKey = '';
+  return items.map((item) => {
+    if (item.type === 'date_separator') {
+      lastKey = '';
+      return item;
+    }
+    if (item.type === 'transfer_merged') {
+      lastKey = '';
+      return item;
+    }
+    const key = messageAuthorGroupKey(item.message);
+    const isGroupStart = lastKey === '' || key !== lastKey;
+    lastKey = key;
+    return { ...item, isGroupStart };
+  });
 }
 
 /**
@@ -993,7 +1028,10 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
     safeMessagesIsArray: Array.isArray(safeMessages)
   });
 
-  const displayItems = useMemo(() => withDateSeparators(buildDisplayItems(safeMessages)), [safeMessages]);
+  const displayItems = useMemo(
+    () => applyMessageGroupFlags(withDateSeparators(buildDisplayItems(safeMessages))),
+    [safeMessages]
+  );
 
   const isDark = theme === 'dark';
   return (
@@ -1102,13 +1140,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
           
           {displayItems.map((item) => {
             if (item.type === 'date_separator') {
-              return (
-                <div key={`date-${item.dayKey}`} className="flex justify-center my-3">
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-200/80 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
-                    {item.label}
-                  </span>
-                </div>
-              );
+              return <DateSeparator key={`date-${item.dayKey}`} label={item.label} />;
             }
             if (item.type === 'transfer_merged') {
               if (!item.messages.length) return null;
@@ -1136,13 +1168,8 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
               );
             }
             const messageItem = item.message;
-            console.log('🔍 [MessageList] Renderizando mensagem:', {
-              messageId: messageItem?.id,
-              hasMessageItem: !!messageItem,
-              messageItemType: typeof messageItem
-            });
+            const isGroupStart = item.isGroupStart;
             if (!messageItem || !messageItem.id) {
-              console.warn('⚠️ [MessageList] messageItem inválido, pulando:', messageItem);
               return null;
             }
             const messageKey = messageItem.conversation_id 
@@ -1153,11 +1180,23 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                       ? `${messageItem.conversation.id}-${messageItem.id}`
                       : messageItem.id));
             const isSystemNotification = Boolean(messageItem.is_internal);
+            const verticalGap = isSystemNotification ? 'my-2' : isGroupStart ? 'mt-3' : 'mt-1';
+            const templateMeta =
+              Boolean(messageItem.metadata?.wa_template_id) ||
+              (messageItem.metadata?.template_message != null &&
+                typeof messageItem.metadata.template_message === 'object' &&
+                !Array.isArray(messageItem.metadata.template_message));
+            const showGroupSenderHeader =
+              isGroupStart &&
+              activeConversation?.conversation_type === 'group' &&
+              messageItem.direction === 'incoming' &&
+              Boolean(messageItem.sender_name || messageItem.sender_phone);
+            const showBubbleHeaderRow = showGroupSenderHeader || templateMeta;
             return (
             <div
               key={messageKey}
               data-message-id={messageItem.id}
-              className={`flex flex-col ${isSystemNotification ? 'items-center' : (messageItem.direction === 'outgoing' ? 'items-end' : 'items-start')} ${
+              className={`flex flex-col ${isSystemNotification ? 'items-center' : (messageItem.direction === 'outgoing' ? 'items-end' : 'items-start')} ${verticalGap} ${
                 visibleMessages.has(messageItem.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
@@ -1190,22 +1229,24 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                 }}
               >
                 {/* Label "Agente X está atendendo" para mensagens outgoing da IA (LibreChat) */}
-                {messageItem.direction === 'outgoing' && messageItem.metadata?.from_ai_agent === true && (
+                {isGroupStart &&
+                  messageItem.direction === 'outgoing' &&
+                  messageItem.metadata?.from_ai_agent === true && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
                     Agente {(messageItem.metadata?.agent_display_name || messageItem.sender_name || 'Assistente')} está atendendo
                   </p>
                 )}
-                {/* Cabeçalho da bolha: nome (grupos) à esquerda + badge Template (menor, à direita); só renderiza se houver algo a mostrar */}
-                {(activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone)) || (messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) ? (
+                {/* Cabeçalho da bolha: nome (grupos, só 1.ª do grupo) + badge Template */}
+                {showBubbleHeaderRow ? (
                   <div className="flex justify-between items-center gap-2 mb-1 min-h-0">
                     <div className="min-w-0 flex-1">
-                      {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
+                      {showGroupSenderHeader && (
                         <p className="text-xs font-semibold text-green-600 dark:text-green-400 truncate">
                           {messageItem.sender_name || messageItem.sender_phone}
                         </p>
                       )}
                     </div>
-                    {(messageItem.metadata?.wa_template_id || (messageItem.metadata?.template_message != null && typeof messageItem.metadata.template_message === 'object' && !Array.isArray(messageItem.metadata.template_message))) && (
+                    {templateMeta && (
                       <span className="flex-shrink-0 text-[10px] leading-tight px-1.5 py-0.5 rounded bg-gray-200/90 dark:bg-gray-600/90 text-gray-600 dark:text-gray-400">
                         Template
                       </span>
