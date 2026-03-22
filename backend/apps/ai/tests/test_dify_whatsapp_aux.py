@@ -3,8 +3,24 @@ from unittest.mock import MagicMock, patch
 
 from django.test import SimpleTestCase, override_settings
 
+from apps.ai.services.dify_whatsapp_aux import _last_inbound_whatsapp_message_id
+
 
 class DifyWhatsappAuxTests(SimpleTestCase):
+    def test_last_inbound_wamid_picks_last_incoming(self):
+        msgs = [
+            MagicMock(direction="incoming", is_deleted=False, message_id="a"),
+            MagicMock(direction="incoming", is_deleted=False, message_id="b"),
+        ]
+        self.assertEqual(_last_inbound_whatsapp_message_id(msgs), "b")
+
+    def test_last_inbound_skips_outgoing(self):
+        msgs = [
+            MagicMock(direction="outgoing", is_deleted=False, message_id="x"),
+            MagicMock(direction="incoming", is_deleted=False, message_id="y"),
+        ]
+        self.assertEqual(_last_inbound_whatsapp_message_id(msgs), "y")
+
     @override_settings(DIFY_MARK_INBOUND_READ=False)
     @patch("apps.chat.webhooks.send_read_receipt")
     def test_mark_read_skipped_when_disabled(self, mock_send):

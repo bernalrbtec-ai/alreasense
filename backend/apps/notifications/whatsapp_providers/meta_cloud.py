@@ -522,15 +522,54 @@ class MetaCloudProvider(WhatsAppSenderBase):
         }
         return self._request(payload)
 
-    def send_typing_on(self, phone: str, **kwargs: Any) -> Tuple[bool, Dict[str, Any]]:
+    def send_typing_on(
+        self,
+        phone: str,
+        inbound_message_id: Optional[str] = None,
+        **kwargs: Any,
+    ) -> Tuple[bool, Dict[str, Any]]:
         """
-        Indicador de digitação (Cloud API).
+        Indicador de digitação — **apenas Meta Cloud API** (não usar para Evolution).
+
+        Com `inbound_message_id` (wamid), tenta `typing_indicator` + `message_id`; depois `typing_on`.
         Ver: https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators/
         """
         to = self._to_phone(phone)
         if not to:
             logger.warning("Meta send_typing_on: phone vazio instance_id=%s", str(self.instance.id))
             return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+
+        mid = (inbound_message_id or "").strip()
+        if mid:
+            # Meta: read + typing_indicator; depois só typing_indicator (mensagem já pode estar lida).
+            typing_payloads = [
+                {
+                    'messaging_product': 'whatsapp',
+                    'status': 'read',
+                    'message_id': mid,
+                    'typing_indicator': {'type': 'text'},
+                },
+                {
+                    'messaging_product': 'whatsapp',
+                    'message_id': mid,
+                    'typing_indicator': {'type': 'text'},
+                },
+            ]
+            last_data: Dict[str, Any] = {}
+            for payload_doc in typing_payloads:
+                ok, last_data = self._request(payload_doc)
+                if ok:
+                    logger.info(
+                        "Meta Cloud API typing_indicator OK (instance_id=%s)",
+                        str(self.instance.id),
+                    )
+                    return True, last_data
+            logger.debug(
+                "Meta typing_indicator falhou, tentando action typing_on | instance_id=%s err=%s",
+                str(self.instance.id),
+                (last_data.get('error') or last_data) if isinstance(last_data, dict) else last_data,
+            )
+
         payload: Dict[str, Any] = {
             'messaging_product': 'whatsapp',
             'recipient_type': 'individual',
@@ -542,7 +581,7 @@ class MetaCloudProvider(WhatsAppSenderBase):
         if ok:
             return True, data
         # Fallback: algumas versões rejeitam recipient_type no typing action (400)
-        sc = data.get('status_code')
+        sc = data.get('status_code') if isinstance(data, dict) else None
         if sc == 400:
             payload_min: Dict[str, Any] = {
                 'messaging_product': 'whatsapp',

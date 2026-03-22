@@ -799,6 +799,13 @@ def maybe_handle_dify_takeover(
         )
         return False
 
+    try:
+        from apps.ai.services.dify_whatsapp_aux import _last_inbound_whatsapp_message_id
+
+        typing_anchor_wamid = _last_inbound_whatsapp_message_id(inbound_messages_for_receipt)
+    except Exception:
+        typing_anchor_wamid = ""
+
     # ── Fase 3: chamada HTTP ao Dify ─────────────────────────────────────────────
     resolved = _resolve_inputs(getattr(agent, 'default_inputs', None) or {}, conversation)
 
@@ -1021,7 +1028,12 @@ def maybe_handle_dify_takeover(
         fallback_msg = _get_dify_empty_response_fallback(tenant)
         if fallback_msg:
             _save_and_send_reply(
-                conversation, fallback_msg, agent.dify_app_id, conv_id, effective_instance
+                conversation,
+                fallback_msg,
+                agent.dify_app_id,
+                conv_id,
+                effective_instance,
+                typing_anchor_message_id=typing_anchor_wamid,
             )
         # Retornar True: a mensagem foi tratada pelo takeover (mesmo sem resposta útil)
         # para que o fluxo normal não processe esta mensagem em paralelo
@@ -1029,7 +1041,12 @@ def maybe_handle_dify_takeover(
 
     # ── Fase 5: salvar no banco e enfileirar envio ────────────────────────────────
     return _save_and_send_reply(
-        conversation, dify_answer, agent.dify_app_id, conv_id, effective_instance
+        conversation,
+        dify_answer,
+        agent.dify_app_id,
+        conv_id,
+        effective_instance,
+        typing_anchor_message_id=typing_anchor_wamid,
     )
 
 
@@ -1123,7 +1140,12 @@ def _call_dify_api(base_url: str, api_key: str, payload: dict, agent_id) -> tupl
 
 
 def _save_and_send_reply(
-    conversation, message: str, agent_app_id: str, conv_id: str, effective_instance=None
+    conversation,
+    message: str,
+    agent_app_id: str,
+    conv_id: str,
+    effective_instance=None,
+    typing_anchor_message_id: str = "",
 ) -> bool:
     """
     Salva a resposta do Dify no banco como Message outgoing/pending e enfileira o envio
@@ -1148,7 +1170,11 @@ def _save_and_send_reply(
             try:
                 from apps.ai.services.dify_whatsapp_aux import dify_pre_send_outbound_pause
 
-                dify_pre_send_outbound_pause(conversation, effective_instance)
+                dify_pre_send_outbound_pause(
+                    conversation,
+                    effective_instance,
+                    last_inbound_wa_message_id=typing_anchor_message_id or "",
+                )
             except Exception as _tp_exc:
                 logger.warning(
                     "⚠️ [DIFY] Pré-envio typing/pause falhou conv=%s: %s",
@@ -1181,11 +1207,11 @@ def _save_and_send_reply(
                     (getattr(effective_instance, 'instance_name', None) or '')
                     or (getattr(effective_instance, 'evolution_instance_name', None) or '')
                 ).strip()
-            if (
-                not inst_name
-                and getattr(effective_instance, 'integration_type', None)
-                == _WAI.INTEGRATION_TYPE_META_CLOUD
-            ):
+            _it_eff = (
+                getattr(effective_instance, "integration_type", None)
+                or _WAI.INTEGRATION_TYPE_EVOLUTION
+            )
+            if not inst_name and _it_eff == _WAI.INTEGRATION_TYPE_META_CLOUD:
                 inst_name = (getattr(effective_instance, 'phone_number_id', None) or '').strip()
             if inst_name:
                 meta['flow_prefer_instance_name'] = inst_name

@@ -1,6 +1,8 @@
 """
-Presença / composing na Evolution API (sendPresence).
-Usado por Dify, secretária e outros fluxos que precisam de indicador "digitando".
+Presença / composing na **Evolution API** (`sendPresence`).
+
+Não aplicar a instâncias **Meta Cloud** — o typing Meta está em `MetaCloudProvider.send_typing_on`.
+Usado por Dify, secretária e outros fluxos; o ramo Meta/Evolution no chamador é por `integration_type`.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ def send_evolution_composing_presence(
     Envia presence=composing para o número da conversa na instância Evolution indicada.
 
     Returns:
-        True se HTTP 200/201, False caso contrário ou se instância não for Evolution.
+        True se HTTP 200/201, False caso contrário ou se instância for Meta / inválida para Evolution.
     """
     if not wa_instance or not conversation:
         return False
@@ -29,7 +31,9 @@ def send_evolution_composing_presence(
     from apps.connections.models import EvolutionConnection
     from apps.notifications.models import WhatsAppInstance
 
-    if getattr(wa_instance, "integration_type", None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+    # Mesma regra que `get_sender` / `dify_pre_send_outbound_pause`: None ou evolution → Evolution
+    _it = getattr(wa_instance, "integration_type", None) or WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
+    if _it == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
         return False
 
     contact_phone = (getattr(conversation, "contact_phone", None) or "").strip()
@@ -44,38 +48,74 @@ def send_evolution_composing_presence(
     api_key = getattr(wa_instance, "api_key", None) or (
         evolution_server.api_key if evolution_server else None
     )
-    inst_name = (
-        (getattr(wa_instance, "instance_name", None) or "")
-        or (getattr(wa_instance, "evolution_instance_name", None) or "")
-    ).strip()
+    inst_name = ""
+    try:
+        inst_name = (wa_instance.evolution_api_instance_name or "").strip()
+    except Exception:
+        inst_name = ""
+    if not inst_name:
+        inst_name = (
+            (getattr(wa_instance, "instance_name", None) or "")
+            or (getattr(wa_instance, "evolution_instance_name", None) or "")
+        ).strip()
     if not api_url or not api_key or not inst_name:
         logger.debug("[EVO_PRESENCE] api_url, api_key ou instance_name ausente")
         return False
 
     delay_ms = max(500, int(float(typing_seconds) * 1000))
     presence_url = f"{str(api_url).rstrip('/')}/chat/sendPresence/{inst_name}"
-    presence_data = {
-        "number": contact_phone,
-        "delay": delay_ms,
-        "presence": "composing",
-    }
+
+    raw = (contact_phone or "").strip().replace(" ", "").lstrip("+")
+    if raw.endswith("@g.us"):
+        jid = raw
+        digits = "".join(c for c in raw.split("@", 1)[0] if c.isdigit())
+    elif raw.endswith("@s.whatsapp.net"):
+        jid = raw
+        digits = "".join(c for c in raw.split("@", 1)[0] if c.isdigit())
+    else:
+        digits = "".join(c for c in raw if c.isdigit())
+        if not digits:
+            logger.debug("[EVO_PRESENCE] número sem dígitos: %s", (contact_phone or "")[:30])
+            return False
+        jid = f"{digits}@s.whatsapp.net"
+    # Evolution v2: OpenAPI com `options`; muitos servidores aceitam flat com JID
+    body_variants = [
+        {"number": jid, "delay": delay_ms, "presence": "composing"},
+        {
+            "number": jid,
+            "options": {
+                "delay": delay_ms,
+                "presence": "composing",
+                "number": jid,
+            },
+        },
+    ]
+    if digits and not jid.endswith("@g.us"):
+        body_variants.append({"number": digits, "delay": delay_ms, "presence": "composing"})
     headers = {"Content-Type": "application/json", "apikey": api_key}
 
     try:
         logger.info(
-            "[EVO_PRESENCE] composing → inst=%s delay_ms=%s",
+            "[EVO_PRESENCE] composing → inst=%s delay_ms=%s jid_tail=%s",
             inst_name,
             delay_ms,
+            (digits[-4:] if len(digits) >= 4 else digits) or jid[-12:],
         )
-        response = requests.post(
-            presence_url, json=presence_data, headers=headers, timeout=10
-        )
-        if response.status_code in (200, 201):
-            return True
+        last_status = None
+        last_text = ""
+        for presence_data in body_variants:
+            response = requests.post(
+                presence_url, json=presence_data, headers=headers, timeout=10
+            )
+            last_status = response.status_code
+            last_text = (response.text or "")[:300]
+            if response.status_code in (200, 201):
+                return True
         logger.warning(
-            "[EVO_PRESENCE] HTTP %s: %s",
-            response.status_code,
-            (response.text or "")[:200],
+            "[EVO_PRESENCE] HTTP %s após %s variantes: %s",
+            last_status,
+            len(body_variants),
+            last_text,
         )
         return False
     except Exception as e:
