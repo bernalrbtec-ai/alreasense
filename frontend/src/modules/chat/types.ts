@@ -73,6 +73,8 @@ export interface MessageReaction {
 
 export interface Message {
   id: string;
+  /** Alguns payloads enviam conversation_id em vez de conversation */
+  conversation_id?: string;
   conversation: string;
   sender?: string;
   sender_data?: User;

@@ -31,6 +31,11 @@ import { useTheme } from '@/hooks/useTheme';
 import { InteractiveListModal } from './InteractiveListModal';
 import type { InteractiveListSection } from './InteractiveListModal';
 import { DateSeparator } from '@/components/chat/DateSeparator';
+import { applyHubBubbleRuns, type HubBubbleRun } from '../utils/applyHubBubbleRuns';
+
+function debugLog(...args: unknown[]) {
+  if (import.meta.env.DEV) console.log(...args);
+}
 
 /** Formato de metadata.interactive_list (lista interativa Meta/WhatsApp). */
 type InteractiveListMetadata = {
@@ -80,7 +85,7 @@ function parseTransferLines(content: string): { de: string; para: string; resumo
 
 /** Agrupa mensagens consecutivas "Conversa transferida" em um único item para exibição */
 type DisplayItem =
-  | { type: 'message'; message: Message; isGroupStart: boolean }
+  | { type: 'message'; message: Message; isGroupStart: boolean; hubRun?: HubBubbleRun }
   | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }
   | { type: 'date_separator'; dayKey: string; label: string };
 
@@ -398,13 +403,15 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 export interface MessageListProps {
   /** Ao clicar num botão de resposta (mensagem recebida com interactive_reply_buttons), envia o texto do botão como resposta. Estilo WhatsApp Web. */
   onSendReplyButtonClick?: (buttonText: string, replyToMessageId: string) => void;
+  /** Hub: agrupar bolhas consecutivas (1:1) quando true e VITE_CHAT_HUB_GROUPING !== 'false' */
+  hubGroupingEnabled?: boolean;
 }
 
-export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
-  console.log('🔄 [MessageList] Componente iniciando renderização...');
+export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false }: MessageListProps = {}) {
+  debugLog('🔄 [MessageList] Componente iniciando renderização...');
   
   // ✅ CORREÇÃO CRÍTICA: Inicializar estados ANTES de usar seletores que dependem de activeConversation
-  console.log('📝 [MessageList] Inicializando estados...');
+  debugLog('📝 [MessageList] Inicializando estados...');
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactToAdd, setContactToAdd] = useState<{ name: string; phone: string } | null>(null);
   const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
@@ -423,12 +430,12 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   const [interactiveListModal, setInteractiveListModal] = useState<{ title: string; sections: InteractiveListSection[]; footer?: string; replyToMessageId?: string } | null>(null);
   const interactiveListButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  console.log('✅ [MessageList] Estados inicializados');
+  debugLog('✅ [MessageList] Estados inicializados');
   
   // ✅ CORREÇÃO: Capturar activeConversation ANTES de usar em outros seletores
-  console.log('🔍 [MessageList] Capturando activeConversation do store...');
+  debugLog('🔍 [MessageList] Capturando activeConversation do store...');
   const activeConversation = useChatStore((state) => state.activeConversation);
-  console.log('✅ [MessageList] activeConversation capturado:', {
+  debugLog('✅ [MessageList] activeConversation capturado:', {
     hasActiveConversation: !!activeConversation,
     activeConversationId: activeConversation?.id,
     conversationType: activeConversation?.conversation_type
@@ -438,7 +445,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   
   // ✅ CORREÇÃO: Capturar conversationId de forma segura antes de usar
   const conversationId = activeConversation?.id;
-  console.log('✅ [MessageList] conversationId extraído:', conversationId);
+  debugLog('✅ [MessageList] conversationId extraído:', conversationId);
   
   // ✅ CORREÇÃO CRÍTICA: Usar chave normalizada (lowercase) para coincidir com o store
   const conversationKey = conversationId ? String(conversationId).trim().toLowerCase() : '';
@@ -451,14 +458,14 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
       .filter(Boolean);
   });
   
-  console.log('🔍 [MessageList] Capturando outras funções do store...');
+  debugLog('🔍 [MessageList] Capturando outras funções do store...');
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
   const setMessages = useChatStore((state) => state.setMessages);
   const setReplyToMessage = useChatStore((state) => state.setReplyToMessage);
   const typing = useChatStore((state) => state.typing);
   const typingUser = useChatStore((state) => state.typingUser);
   const getMessagesArray = useChatStore((state) => state.getMessagesArray);
-  console.log('✅ [MessageList] Funções do store capturadas');
+  debugLog('✅ [MessageList] Funções do store capturadas');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const lastMessageIdRef = useRef<string | null>(null); // ✅ NOVO: Rastrear última mensagem para detectar novas vs antigas
@@ -869,15 +876,35 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   const getStatusIcon = useCallback((status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-gray-400 animate-pulse" title="Enviando..." />;
+        return (
+          <span title="Enviando...">
+            <Clock className="w-4 h-4 text-gray-400 animate-pulse" aria-hidden />
+          </span>
+        );
       case 'sent':
-        return <Check className="w-4 h-4 text-gray-400" title="Enviada" />;
+        return (
+          <span title="Enviada">
+            <Check className="w-4 h-4 text-gray-400" aria-hidden />
+          </span>
+        );
       case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-500 dark:text-gray-400" title="Entregue" />;
+        return (
+          <span title="Entregue">
+            <CheckCheck className="w-4 h-4 text-gray-500 dark:text-gray-400" aria-hidden />
+          </span>
+        );
       case 'seen':
-        return <CheckCheck className="w-4 h-4 text-blue-500" title="Vista" />;
+        return (
+          <span title="Vista">
+            <CheckCheck className="w-4 h-4 text-blue-500" aria-hidden />
+          </span>
+        );
       case 'failed':
-        return <AlertCircle className="w-4 h-4 text-red-500" title="Falha no envio" />;
+        return (
+          <span title="Falha no envio">
+            <AlertCircle className="w-4 h-4 text-red-500" aria-hidden />
+          </span>
+        );
       default:
         return null;
     }
@@ -982,7 +1009,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   // IMPORTANTE: Este useMemo deve estar DEPOIS de todos os hooks para evitar problemas de ordem
   const safeMessages = useMemo(() => {
     try {
-      console.log('🔄 [MessageList] useMemo calculando safeMessages:', {
+      debugLog('🔄 [MessageList] useMemo calculando safeMessages:', {
         messagesIsArray: Array.isArray(messages),
         messagesType: typeof messages,
         messagesLength: messages?.length || 0,
@@ -1011,7 +1038,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
         return Boolean(messageItem.id); // Garantir que tem id válido
       });
       
-      console.log('✅ [MessageList] safeMessages calculado:', {
+      debugLog('✅ [MessageList] safeMessages calculado:', {
         originalLength: messages.length,
         safeLength: safe.length
       });
@@ -1023,15 +1050,16 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
     }
   }, [messages]);
 
-  console.log('✅ [MessageList] safeMessages pronto para renderizar:', {
+  debugLog('✅ [MessageList] safeMessages pronto para renderizar:', {
     safeMessagesLength: safeMessages.length,
     safeMessagesIsArray: Array.isArray(safeMessages)
   });
 
-  const displayItems = useMemo(
-    () => applyMessageGroupFlags(withDateSeparators(buildDisplayItems(safeMessages))),
-    [safeMessages]
-  );
+  const displayItems = useMemo(() => {
+    const base = applyMessageGroupFlags(withDateSeparators(buildDisplayItems(safeMessages)));
+    const envGrouping = import.meta.env.VITE_CHAT_HUB_GROUPING !== 'false';
+    return applyHubBubbleRuns(base, hubGroupingEnabled && envGrouping, activeConversation?.conversation_type);
+  }, [safeMessages, hubGroupingEnabled, activeConversation?.conversation_type]);
 
   const isDark = theme === 'dark';
   return (
@@ -1169,18 +1197,31 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
             }
             const messageItem = item.message;
             const isGroupStart = item.isGroupStart;
+            const hubRun = item.hubRun;
             if (!messageItem || !messageItem.id) {
               return null;
             }
-            const messageKey = messageItem.conversation_id 
-              ? `${messageItem.conversation_id}-${messageItem.id}`
-              : (typeof messageItem.conversation === 'string' 
-                  ? `${messageItem.conversation}-${messageItem.id}`
-                  : (typeof messageItem.conversation === 'object' && messageItem.conversation?.id
-                      ? `${messageItem.conversation.id}-${messageItem.id}`
-                      : messageItem.id));
+            const convPart = messageItem.conversation_id ?? messageItem.conversation ?? '';
+            const messageKey = convPart ? `${convPart}-${messageItem.id}` : messageItem.id;
             const isSystemNotification = Boolean(messageItem.is_internal);
-            const verticalGap = isSystemNotification ? 'my-2' : isGroupStart ? 'mt-3' : 'mt-1';
+            const verticalGap = isSystemNotification
+              ? 'my-2'
+              : hubRun === 'mid' || hubRun === 'last'
+                ? 'mt-0.5'
+                : hubRun === 'first'
+                  ? 'mt-3'
+                  : isGroupStart
+                    ? 'mt-3'
+                    : 'mt-1';
+            const bubbleShape =
+              !hubRun || hubRun === 'single'
+                ? 'rounded-2xl'
+                : hubRun === 'first'
+                  ? 'rounded-t-2xl rounded-b-lg'
+                  : hubRun === 'mid'
+                    ? 'rounded-lg'
+                    : 'rounded-b-2xl rounded-t-lg';
+            const showHubTimestamp = !hubRun || hubRun === 'last' || hubRun === 'single';
             const templateMeta =
               Boolean(messageItem.metadata?.wa_template_id) ||
               (messageItem.metadata?.template_message != null &&
@@ -1196,15 +1237,30 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
             <div
               key={messageKey}
               data-message-id={messageItem.id}
-              className={`flex flex-col ${isSystemNotification ? 'items-center' : (messageItem.direction === 'outgoing' ? 'items-end' : 'items-start')} ${verticalGap} ${
+              className={`relative flex flex-col ${isSystemNotification ? 'items-center' : (messageItem.direction === 'outgoing' ? 'items-end' : 'items-start')} ${verticalGap} ${
                 visibleMessages.has(messageItem.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
               } transition-all duration-300 ease-out group group/message`}
             >
+              {!isSystemNotification && (
+                <button
+                  type="button"
+                  className={`absolute z-10 top-1 md:opacity-0 md:group-hover/message:opacity-100 opacity-80 p-1 rounded-full bg-white/95 dark:bg-gray-700/95 shadow-sm text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-600 ${
+                    messageItem.direction === 'outgoing' ? 'left-1' : 'right-1'
+                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReplyToMessage(messageItem);
+                  }}
+                  aria-label="Responder"
+                >
+                  <Reply className="w-3.5 h-3.5" />
+                </button>
+              )}
               <div
                 className={`
-                  max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
+                  max-w-[65%] md:max-w-md ${bubbleShape} px-4 py-2.5 shadow-md
                   transform transition-all duration-200 hover:shadow-lg cursor-pointer
                   ${isSystemNotification
                     ? 'bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600'
@@ -1536,6 +1592,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                   );
                 })()}
                 
+                {showHubTimestamp && (
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   {messageItem.is_edited && (
                     <span className="text-xs text-gray-500 dark:text-gray-400 italic">
@@ -1551,6 +1608,7 @@ export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
                     </span>
                   )}
                 </div>
+                )}
                 {messageItem.direction === 'outgoing' && messageItem.status === 'failed' && (
                   <div className="flex items-center gap-2 mt-2">
                     <button

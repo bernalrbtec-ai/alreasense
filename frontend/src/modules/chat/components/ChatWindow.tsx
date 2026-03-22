@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, MoreVertical, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap, Bot, StopCircle } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock, Eye, Zap, Bot, StopCircle, PanelRight } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -20,6 +20,13 @@ import {
   getConversationStatusPresentation,
   STATUS_CHIP_VARIANT_CLASSES,
 } from '../utils/conversationStatusPresentation';
+import { ChatOpsDashboard } from './hub/ChatOpsDashboard';
+import { ConversationContextPanel } from './ConversationContextPanel';
+import TaskModal from '@/components/tasks/TaskModal';
+
+const hubEnabled = import.meta.env.VITE_CHAT_HUB_UI !== 'false';
+const hubGroupingEnabled =
+  hubEnabled && import.meta.env.VITE_CHAT_HUB_GROUPING !== 'false';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -77,6 +84,12 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Adicionar estado para controlar se está pronto para renderizar
   const [isReady, setIsReady] = useState(false);
   const [loadingStart, setLoadingStart] = useState(false);
+  const [contextPanelOpen, setContextPanelOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true
+  );
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [taskModalDepartments, setTaskModalDepartments] = useState<Array<{ id: string; name: string }>>([]);
+  const [taskModalUsers, setTaskModalUsers] = useState<Array<{ id: string; email: string; first_name?: string; last_name?: string }>>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const chatPanelRef = useRef<HTMLDivElement>(null);
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
@@ -467,6 +480,37 @@ export function ChatWindow() {
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (!hubEnabled) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [deptsRes, usersRes] = await Promise.all([
+          api.get('/auth/departments/'),
+          api.get('/auth/users/'),
+        ]);
+        if (cancelled) return;
+        setTaskModalDepartments(deptsRes.data.results || deptsRes.data || []);
+        setTaskModalUsers(usersRes.data.results || usersRes.data || []);
+      } catch (e) {
+        console.error('[ChatWindow] Erro ao carregar dados do TaskModal', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openTransfer = useCallback(() => {
+    setShowTransferModal(true);
+    setShowMenu(false);
+  }, []);
+
+  const openTaskModalFromHub = useCallback(() => {
+    setShowTaskModal(true);
+    setContextPanelOpen(false);
   }, []);
 
   const handleCloseConversation = async () => {
@@ -918,7 +962,14 @@ export function ChatWindow() {
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
-      <div className="flex flex-col flex-1 min-w-0 transition-all duration-300">
+      <div
+        className={
+          hubEnabled
+            ? 'flex flex-row flex-1 min-h-0 min-w-0'
+            : 'flex flex-col flex-1 min-w-0 transition-all duration-300'
+        }
+      >
+      <div className="flex flex-col flex-1 min-w-0 min-h-0 transition-all duration-300">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-chat-sidebar border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -1045,6 +1096,7 @@ export function ChatWindow() {
             </div>
           </div>
         </div>
+        </div>
 
         {/* INICIAR ATENDIMENTO: atribui ao usuário; mantém no departamento; aparece nos dois lugares (departamento + Minhas conversas) com "X está atendendo" */}
         {/* Mostrar quando: conversa não atribuída E (pending OU open com department OU fallback: status !== 'closed' para payload incompleto ex. Meta) */}
@@ -1096,6 +1148,19 @@ export function ChatWindow() {
             </Button>
           )}
           
+          {hubEnabled && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={contextPanelOpen ? 'Fechar painel de contexto' : 'Abrir painel de contexto'}
+              className={`rounded-full ${contextPanelOpen ? 'bg-gray-200 dark:bg-gray-700' : ''}`}
+              onClick={() => setContextPanelOpen((v) => !v)}
+            >
+              <PanelRight className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="ghost"
@@ -1171,10 +1236,7 @@ export function ChatWindow() {
 
                 {can_transfer_conversations && (
                   <button
-                    onClick={() => {
-                      setShowTransferModal(true);
-                      setShowMenu(false);
-                    }}
+                    onClick={openTransfer}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3"
                   >
                     <ArrowRightLeft className="w-4 h-4" />
@@ -1208,14 +1270,16 @@ export function ChatWindow() {
             )}
           </div>
         </div>
-      </div>
+
+      {hubEnabled && conversationId && <ChatOpsDashboard />}
 
       {/* Messages */}
       {/* ✅ CORREÇÃO: Renderizar MessageList apenas se conversationId estiver inicializado */}
       {conversationId && (
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <MessageList
           onSendReplyButtonClick={openInSpyMode ? undefined : handleSendReplyButtonClick}
+          hubGroupingEnabled={hubGroupingEnabled}
         />
       </div>
       )}
@@ -1233,8 +1297,30 @@ export function ChatWindow() {
           isConnected={isConnected}
             conversationId={conversationId}
             conversationType={(activeConversation?.conversation_type || conversationType) as 'individual' | 'group' | 'broadcast'}
+            hubToolbar={hubEnabled}
+            onHubCommandTransfer={openTransfer}
+            onHubCommandTask={openTaskModalFromHub}
+            aiSuggestionPreview={
+              hubEnabled && !openInSpyMode && activeConversation?.conversation_type === 'individual'
+                ? 'Sugestão (mock): confirme o próximo passo com o cliente de forma breve.'
+                : null
+            }
         />
         )}
+      </div>
+
+      {hubEnabled && (
+        <ConversationContextPanel
+          open={contextPanelOpen}
+          onClose={() => setContextPanelOpen(false)}
+          conversation={activeConversation}
+          activeAgentName={activeDifyNameForStatus}
+          onTransfer={openTransfer}
+          onCloseConversation={handleCloseConversation}
+          onCreateTask={openTaskModalFromHub}
+          canTransfer={can_transfer_conversations}
+        />
+      )}
       </div>
       )}
 
@@ -1629,6 +1715,38 @@ export function ChatWindow() {
           onTransferSuccess={() => {
             setShowTransferModal(false);
           }}
+        />
+      )}
+
+      {hubEnabled && showTaskModal && (
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => setShowTaskModal(false)}
+          onSuccess={() => setShowTaskModal(false)}
+          initialContactId={existingContact?.id}
+          initialDepartmentId={
+            typeof activeConversation?.department === 'string'
+              ? activeConversation.department
+              : activeConversation?.department?.id
+          }
+          departments={taskModalDepartments}
+          users={taskModalUsers}
+        />
+      )}
+
+      {hubEnabled && showTaskModal && (
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => setShowTaskModal(false)}
+          onSuccess={() => setShowTaskModal(false)}
+          initialContactId={existingContact?.id}
+          initialDepartmentId={
+            typeof activeConversation?.department === 'string'
+              ? activeConversation.department
+              : activeConversation?.department?.id
+          }
+          departments={taskModalDepartments}
+          users={taskModalUsers}
         />
       )}
 

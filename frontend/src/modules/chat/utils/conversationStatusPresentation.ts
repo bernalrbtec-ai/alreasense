@@ -12,7 +12,23 @@ export interface ConversationStatusPresentation {
   showUrgentIndicator: boolean;
 }
 
-const URGENT_AFTER_MIN = 30;
+/** Limiar (minutos) alinhado à lista e ao hub de métricas. */
+export const URGENT_AFTER_MIN = 30;
+
+/** Mesma regra que `showUrgentIndicator` em `getConversationStatusPresentation`. */
+export function isConversationUrgent(conv: Conversation): boolean {
+  const status = conv.status ?? 'pending';
+  const lastAt = conv.last_message_at;
+  const ageMs = lastAt ? Date.now() - new Date(lastAt).getTime() : NaN;
+  return (
+    status === 'pending' &&
+    (conv.unread_count ?? 0) > 0 &&
+    lastAt != null &&
+    lastAt !== '' &&
+    !Number.isNaN(ageMs) &&
+    ageMs > URGENT_AFTER_MIN * 60 * 1000
+  );
+}
 
 function parseAssignedToId(conv: Conversation): string | number | null {
   const a = conv.assigned_to;
@@ -29,15 +45,7 @@ export function getConversationStatusPresentation(
   const status = conv.status ?? 'pending';
   const agentName = opts.activeAgentName?.trim() || null;
 
-  const lastAt = conv.last_message_at;
-  const ageMs = lastAt ? Date.now() - new Date(lastAt).getTime() : NaN;
-  const urgent =
-    status === 'pending' &&
-    (conv.unread_count ?? 0) > 0 &&
-    lastAt != null &&
-    lastAt !== '' &&
-    !Number.isNaN(ageMs) &&
-    ageMs > URGENT_AFTER_MIN * 60 * 1000;
+  const urgent = isConversationUrgent(conv);
 
   if (status === 'closed') {
     return { label: 'Encerrada', variant: 'muted', showUrgentIndicator: false };

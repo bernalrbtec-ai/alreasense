@@ -311,32 +311,35 @@ const CampaignsPage: React.FC = () => {
     }
   }
 
-  const filteredCampaigns = Array.isArray(campaigns) ? campaigns
-    .filter(campaign =>
-      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-    ) : []
-    .sort((a, b) => {
-      // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
-      const statusOrder = {
-        'draft': 1,        // RASCUNHOS primeiro
-        'scheduled': 2,    // AGENDADAS
-        'running': 3,      // ATIVAS
-        'paused': 4,       // PAUSADAS
-        'completed': 5,    // CONCLUÍDAS
-        'cancelled': 6     // CANCELADAS
-      }
+  const filteredCampaigns = Array.isArray(campaigns)
+    ? [...campaigns]
+        .filter(
+          (campaign) =>
+            campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+        .sort((a, b) => {
+          // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
+          const statusOrder = {
+            draft: 1, // RASCUNHOS primeiro
+            scheduled: 2, // AGENDADAS
+            running: 3, // ATIVAS
+            paused: 4, // PAUSADAS
+            completed: 5, // CONCLUÍDAS
+            cancelled: 6, // CANCELADAS
+          }
 
-      const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 999
-      const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 999
+          const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 999
+          const bOrder = statusOrder[b.status as keyof typeof statusOrder] || 999
 
-      if (aOrder !== bOrder) {
-        return aOrder - bOrder
-      }
+          if (aOrder !== bOrder) {
+            return aOrder - bOrder
+          }
 
-      // Se mesmo status, ordenar por data de criação (mais recentes primeiro)
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    }) : []
+          // Se mesmo status, ordenar por data de criação (mais recentes primeiro)
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        })
+    : []
 
   if (loading) {
     return (
@@ -598,7 +601,8 @@ const CampaignsPage: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
             </div>
 
             <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
