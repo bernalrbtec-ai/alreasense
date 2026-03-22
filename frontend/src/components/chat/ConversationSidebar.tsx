@@ -43,6 +43,8 @@ export function ConversationSidebar({
   onSearchChange,
   searchPlaceholder = 'Buscar ou iniciar conversa',
   onNewConversation,
+  listToolbar,
+  emptyState,
 }: ConversationSidebarProps) {
   const [failedImageIds, setFailedImageIds] = useState<Set<string>>(() => new Set());
 
