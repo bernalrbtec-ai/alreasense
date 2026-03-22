@@ -121,6 +121,18 @@ def close_conversation_from_bot(conversation: Conversation, source: str = "bot")
             )
             ConversationFlowState.objects.filter(conversation_id=locked.id).delete()
         conversation.refresh_from_db()
+        # Igual à transferência: sem isto a lista do Inbox fica com status antigo até refresh.
+        try:
+            from apps.chat.utils.websocket import broadcast_conversation_updated
+
+            broadcast_conversation_updated(conversation)
+        except Exception as ws_exc:
+            logger.warning(
+                "[%s] Conversa fechada; falha ao broadcast conversation_updated: %s",
+                (source or "bot").upper(),
+                ws_exc,
+                exc_info=True,
+            )
         logger.info("[%s] Conversa %s fechada por instrução", (source or "bot").upper(), conversation.id)
         return True
     except Exception as exc:
