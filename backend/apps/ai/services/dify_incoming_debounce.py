@@ -352,6 +352,7 @@ def execute_debounced_batch(
         conversation=conv,
         message=DifyMessageStub(content=combined),
         wa_instance=wa_inst,
+        inbound_messages_for_receipt=ordered,
     )
 
     logger.info(

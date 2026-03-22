@@ -717,6 +717,7 @@ def maybe_handle_dify_takeover(
     conversation,
     message: DifyMessageStub,
     wa_instance=None,
+    inbound_messages_for_receipt=None,
 ) -> bool:
     """
     Verifica se há um agente Dify ativo para a conversa e, se houver,
@@ -940,6 +941,22 @@ def maybe_handle_dify_takeover(
     if effective_prev_conv_id:
         payload['conversation_id'] = effective_prev_conv_id
 
+    try:
+        from apps.ai.services.dify_whatsapp_aux import dify_mark_inbound_messages_read
+
+        dify_mark_inbound_messages_read(
+            conversation,
+            inbound_messages_for_receipt,
+            preferred_wa_instance=effective_instance,
+        )
+    except Exception as _mr_exc:
+        logger.warning(
+            "⚠️ [DIFY] Mark inbound read (pré-Dify) falhou conv=%s: %s",
+            conv_id,
+            _mr_exc,
+            exc_info=True,
+        )
+
     dify_answer, new_dify_conv_id, http_status, err_body = _call_dify_api(base_url, api_key, payload, agent.id)
     if dify_answer is None:
         # Se o conversation_id antigo for inválido/expirado, tentar 1x sem conversation_id.
@@ -1117,9 +1134,9 @@ def _save_and_send_reply(
     - Seja enviada ao WhatsApp pelo worker assíncrono
     - Tenha status atualizado (pending → sent/failed) após o envio
 
-    effective_instance: quando o agente Dify tem instância específica configurada, seu
-    instance_name é inserido no metadata como 'flow_prefer_instance_name' para que o
-    worker de envio use a instância correta (em vez de depender de conversation.instance_name).
+    effective_instance: quando o agente Dify tem instância específica, o identificador
+    (evolution_api_instance_name, instance_name/evolution_instance_name ou phone_number_id Meta)
+    vai em metadata['flow_prefer_instance_name'] para o worker resolver a instância correta.
     """
     from django.db import transaction
     logger.info(
@@ -1127,6 +1144,19 @@ def _save_and_send_reply(
         conv_id, agent_app_id, len(message)
     )
     try:
+        if (message or "").strip():
+            try:
+                from apps.ai.services.dify_whatsapp_aux import dify_pre_send_outbound_pause
+
+                dify_pre_send_outbound_pause(conversation, effective_instance)
+            except Exception as _tp_exc:
+                logger.warning(
+                    "⚠️ [DIFY] Pré-envio typing/pause falhou conv=%s: %s",
+                    conv_id,
+                    _tp_exc,
+                    exc_info=True,
+                )
+
         from apps.chat.models import Message
         from apps.chat.tasks import send_message_to_evolution
         from apps.chat.utils.websocket import broadcast_message_received
@@ -1139,7 +1169,24 @@ def _save_and_send_reply(
             'include_signature': True,
         }
         if effective_instance:
-            inst_name = getattr(effective_instance, 'instance_name', None) or ''
+            from apps.notifications.models import WhatsAppInstance as _WAI
+
+            inst_name = ''
+            try:
+                inst_name = (effective_instance.evolution_api_instance_name or '').strip()
+            except Exception:
+                inst_name = ''
+            if not inst_name:
+                inst_name = (
+                    (getattr(effective_instance, 'instance_name', None) or '')
+                    or (getattr(effective_instance, 'evolution_instance_name', None) or '')
+                ).strip()
+            if (
+                not inst_name
+                and getattr(effective_instance, 'integration_type', None)
+                == _WAI.INTEGRATION_TYPE_META_CLOUD
+            ):
+                inst_name = (getattr(effective_instance, 'phone_number_id', None) or '').strip()
             if inst_name:
                 meta['flow_prefer_instance_name'] = inst_name
 

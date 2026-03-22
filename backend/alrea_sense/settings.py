@@ -507,6 +507,14 @@ DIFY_RAG_CONTEXT_MAX_CHARS = config('DIFY_RAG_CONTEXT_MAX_CHARS', default=12000,
 DIFY_RAG_CONTEXT_SIMILARITY = config('DIFY_RAG_CONTEXT_SIMILARITY', default=0.22, cast=float)
 # True: ordena os top-k hits por closed_at (mais antigo primeiro) para leitura tipo linha do tempo
 DIFY_RAG_CONTEXT_CHRONOLOGICAL = config('DIFY_RAG_CONTEXT_CHRONOLOGICAL', default=True, cast=bool)
+# Dify + WhatsApp: marcar inbound como lida antes da chamada HTTP ao Dify; typing antes de enfileirar resposta
+DIFY_MARK_INBOUND_READ = config('DIFY_MARK_INBOUND_READ', default=True, cast=bool)
+# 0 = sem limite; >0 = no máximo N mensagens inbound (as mais recentes do batch) antes do Dify
+DIFY_MARK_INBOUND_READ_MAX_MESSAGES = config(
+    'DIFY_MARK_INBOUND_READ_MAX_MESSAGES', default=30, cast=int
+)
+DIFY_PRE_SEND_TYPING = config('DIFY_PRE_SEND_TYPING', default=True, cast=bool)
+DIFY_PRE_SEND_TYPING_SECONDS = config('DIFY_PRE_SEND_TYPING_SECONDS', default=1.2, cast=float)
 AI_INTERACTION_LOGGING_ENABLED = config('AI_INTERACTION_LOGGING_ENABLED', default=True, cast=bool)
 
 # Evolution API (Consolidated)

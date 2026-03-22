@@ -572,15 +572,29 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
 
                         _conv = _Conv.objects.select_related('tenant').filter(id=_conv_id).first()
                         if _conv and _conv.tenant_id:
-                            if getattr(new_msg, "direction", "incoming") != "incoming":
+                            from apps.chat.models import Message as _ChatMessage
+
+                            _msg = (
+                                _ChatMessage.objects.filter(id=_message_id).first()
+                                if _message_id
+                                else None
+                            )
+                            if not _msg:
+                                logger.info(
+                                    "🤖 [DIFY-META] Thread: Message não encontrada conv=%s message_id=%s",
+                                    _conv_id,
+                                    _message_id,
+                                )
+                                return
+                            if getattr(_msg, "direction", "incoming") != "incoming":
                                 logger.info(
                                     "dify_auto_start_skipped reason=non_incoming tenant=%s conversation=%s direction=%s",
                                     _tenant_id,
                                     _conv_id,
-                                    str(getattr(new_msg, "direction", "")),
+                                    str(getattr(_msg, "direction", "")),
                                 )
                                 return
-                            if getattr(new_msg, "is_internal", False):
+                            if getattr(_msg, "is_internal", False):
                                 logger.info(
                                     "dify_auto_start_skipped reason=internal_message tenant=%s conversation=%s",
                                     _tenant_id,
@@ -633,6 +647,7 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                                 conversation=_conv,
                                 message=DifyMessageStub(content=effective_content),
                                 wa_instance=_wa_inst,
+                                inbound_messages_for_receipt=[_msg],
                             )
                             logger.info(
                                 "dify_takeover_result tenant=%s conversation=%s handled=%s",

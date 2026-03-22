@@ -4201,16 +4201,30 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             )
                             if _conv and _conv.tenant_id:
                                 _tenant = _conv.tenant  # já carregado pelo select_related
+                                from apps.chat.models import Message as _ChatMessage
+
+                                _msg = (
+                                    _ChatMessage.objects.filter(id=_message_id).first()
+                                    if _message_id
+                                    else None
+                                )
+                                if not _msg:
+                                    logger.info(
+                                        "🤖 [DIFY] Thread: Message não encontrada conv=%s message_id=%s",
+                                        _conversation_id,
+                                        _message_id,
+                                    )
+                                    return
                                 # Guardrail: takeover Dify é apenas para mensagens incoming de cliente.
-                                if getattr(message, "direction", "incoming") != "incoming":
+                                if getattr(_msg, "direction", "incoming") != "incoming":
                                     logger.info(
                                         "dify_auto_start_skipped reason=non_incoming tenant=%s conversation=%s direction=%s",
                                         str(_tenant.id),
                                         _conversation_id,
-                                        str(getattr(message, "direction", "")),
+                                        str(getattr(_msg, "direction", "")),
                                     )
                                     return
-                                if getattr(message, "is_internal", False):
+                                if getattr(_msg, "is_internal", False):
                                     logger.info(
                                         "dify_auto_start_skipped reason=internal_message tenant=%s conversation=%s",
                                         str(_tenant.id),
@@ -4268,6 +4282,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                     conversation=_conv,
                                     message=DifyMessageStub(content=effective_content),
                                     wa_instance=_wa_inst,
+                                    inbound_messages_for_receipt=[_msg],
                                 )
                                 logger.info(
                                     "dify_takeover_result tenant=%s conversation=%s handled=%s",
@@ -4984,7 +4999,12 @@ def handle_message_delete(data, tenant, connection=None, wa_instance=None):
         logger.error(f"❌ [WEBHOOK DELETE] Erro ao processar mensagem apagada: {e}", exc_info=True)
 
 
-def send_read_receipt(conversation: Conversation, message: Message, max_retries: int = 3):
+def send_read_receipt(
+    conversation: Conversation,
+    message: Message,
+    max_retries: int = 3,
+    preferred_wa_instance=None,
+):
     """
     Envia confirmação de LEITURA (read) para Evolution API.
     Isso fará com que o remetente veja ✓✓ azul no WhatsApp dele.
@@ -4993,6 +5013,8 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
         conversation: Conversa da mensagem
         message: Mensagem a ser marcada como lida
         max_retries: Número máximo de tentativas (com backoff exponencial)
+        preferred_wa_instance: se definida, tenant ativo e coincide com o tenant da conversa,
+            usa esta instância (ex.: mesma do takeover Dify) em vez da resolução por conversation.instance_name.
     
     Returns:
         bool: True se enviado com sucesso, False caso contrário
@@ -5003,7 +5025,18 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
         # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
         from django.db.models import Q
         wa_instance = None
-        if conversation.instance_name and str(conversation.instance_name).strip():
+        if preferred_wa_instance is not None:
+            pwi = preferred_wa_instance
+            try:
+                if (
+                    getattr(pwi, "tenant_id", None) == getattr(conversation, "tenant_id", None)
+                    and getattr(pwi, "is_active", False)
+                    and getattr(pwi, "status", "") == "active"
+                ):
+                    wa_instance = pwi
+            except Exception:
+                wa_instance = None
+        if wa_instance is None and conversation.instance_name and str(conversation.instance_name).strip():
             wa_instance = WhatsAppInstance.objects.filter(
                 Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
                 tenant=conversation.tenant, is_active=True, status='active'
@@ -5046,6 +5079,14 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
                 logger.warning(f"⚠️ [READ RECEIPT] Meta: erro ao marcar como lida: {e}")
                 return False
         
+        # Evolution: exige message_id (id da mensagem no WhatsApp)
+        if not (getattr(message, 'message_id', None) or '').strip():
+            logger.warning(
+                "⚠️ [READ RECEIPT] Evolution: mensagem sem message_id, pulando (msg_db_id=%s)",
+                getattr(message, 'id', '?'),
+            )
+            return False
+
         # Evolution: verificar connection_state antes de enviar (None = tentar mesmo assim)
         connection_state = getattr(wa_instance, 'connection_state', None)
         if connection_state is not None and connection_state not in ('open', 'connected'):
@@ -5066,9 +5107,26 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
         # Formato: POST /chat/markMessageAsRead/{instance}
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
-        # ✅ CRÍTICO: Usar instance da conversa (instância que recebeu a mensagem)
-        instance_name = (conversation.instance_name and str(conversation.instance_name).strip()) or wa_instance.instance_name
-        
+        conv_slug = (conversation.instance_name and str(conversation.instance_name).strip()) or ""
+        inst_slug = (
+            (getattr(wa_instance, "instance_name", None) or "")
+            or (getattr(wa_instance, "evolution_instance_name", None) or "")
+        ).strip()
+        used_preferred = False
+        if preferred_wa_instance is not None and wa_instance is not None:
+            try:
+                used_preferred = wa_instance.pk == preferred_wa_instance.pk
+            except Exception:
+                used_preferred = False
+        # Com instância explícita do Dify/agente: priorizar slug da instância resolvida
+        if used_preferred:
+            instance_name = inst_slug or conv_slug
+        else:
+            instance_name = conv_slug or inst_slug
+        if not instance_name:
+            logger.warning("⚠️ [READ RECEIPT] instance_name vazio; não é possível marcar leitura")
+            return False
+
         url = f"{base_url}/chat/markMessageAsRead/{instance_name}"
         
         # Payload para marcar mensagem como lida

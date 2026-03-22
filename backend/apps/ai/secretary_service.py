@@ -813,85 +813,23 @@ def build_secretary_payload_for_test(
 
 def _send_typing_indicator(conversation, typing_seconds: float = SECRETARY_TYPING_DELAY_SECONDS) -> None:
     """
-    Envia indicador "digitando" para a Evolution API antes da secretária responder.
-    
-    Args:
-        conversation: Objeto Conversation
-        typing_seconds: Tempo em segundos que o indicador ficará ativo
+    Envia indicador "digitando" (Evolution) antes da secretária responder.
+    Meta Cloud: a secretária não usa este caminho de presence da Evolution.
     """
     try:
-        from django.db.models import Q
-        from apps.notifications.models import WhatsAppInstance
-        from apps.connections.models import EvolutionConnection
-        
-        # ✅ MULTI-INSTÂNCIA: Priorizar instância da conversa (que recebeu a mensagem)
-        instance = None
-        if conversation.instance_name and str(conversation.instance_name).strip():
-            instance = WhatsAppInstance.objects.filter(
-                Q(instance_name=conversation.instance_name.strip())
-                | Q(evolution_instance_name=conversation.instance_name.strip()),
-                tenant=conversation.tenant,
-                is_active=True,
-                status='active'
-            ).first()
-        if not instance:
-            instance = WhatsAppInstance.objects.filter(
-                tenant=conversation.tenant,
-                is_active=True,
-                status='active'
-            ).first()
-        
-        if not instance:
-            logger.debug("[SECRETARY TYPING] Nenhuma instância WhatsApp ativa para enviar typing indicator")
-            return
-        
-        # Buscar servidor Evolution (fallback)
-        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        
-        # Preparar URL e credenciais
-        api_url = instance.api_url or (evolution_server.base_url if evolution_server else None)
-        api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
-        
-        if not api_url or not api_key:
-            logger.debug("[SECRETARY TYPING] API URL ou API key não disponível")
-            return
-        
-        # Preparar dados
-        contact_phone = conversation.contact_phone
-        if not contact_phone:
-            logger.debug("[SECRETARY TYPING] Contact phone não disponível")
-            return
-        
-        presence_url = f"{api_url.rstrip('/')}/chat/sendPresence/{instance.instance_name}"
-        presence_data = {
-            "number": contact_phone,
-            "delay": int(typing_seconds * 1000),  # Converter para milissegundos
-            "presence": "composing"
-        }
-        headers = {
-            "Content-Type": "application/json",
-            "apikey": api_key
-        }
-        
-        logger.info(
-            "[SECRETARY TYPING] Enviando indicador 'digitando' para %s (delay=%sms)",
-            contact_phone,
-            presence_data["delay"]
+        from apps.notifications.whatsapp_evolution_presence import (
+            resolve_wa_instance_for_presence,
+            send_evolution_composing_presence,
         )
-        
-        # Enviar request (síncrono, pois estamos em thread)
-        response = requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
-        
-        if response.status_code in [200, 201]:
-            logger.info("[SECRETARY TYPING] Indicador 'digitando' enviado com sucesso")
-        else:
-            logger.warning(
-                "[SECRETARY TYPING] Erro %s ao enviar typing indicator: %s",
-                response.status_code,
-                response.text[:200] if hasattr(response, 'text') else 'N/A'
-            )
+
+        instance = resolve_wa_instance_for_presence(conversation)
+        if not instance:
+            logger.debug("[SECRETARY TYPING] Nenhuma instância WhatsApp ativa")
+            return
+        ok = send_evolution_composing_presence(conversation, instance, float(typing_seconds))
+        if ok:
+            logger.info("[SECRETARY TYPING] composing enviado com sucesso")
     except Exception as e:
-        # Não bloquear o processamento se o typing indicator falhar
         logger.warning("[SECRETARY TYPING] Erro ao enviar typing indicator: %s", e, exc_info=True)
 
 

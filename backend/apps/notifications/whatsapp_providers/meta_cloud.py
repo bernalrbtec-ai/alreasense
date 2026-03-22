@@ -522,6 +522,37 @@ class MetaCloudProvider(WhatsAppSenderBase):
         }
         return self._request(payload)
 
+    def send_typing_on(self, phone: str, **kwargs: Any) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Indicador de digitação (Cloud API).
+        Ver: https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators/
+        """
+        to = self._to_phone(phone)
+        if not to:
+            logger.warning("Meta send_typing_on: phone vazio instance_id=%s", str(self.instance.id))
+            return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        payload: Dict[str, Any] = {
+            'messaging_product': 'whatsapp',
+            'recipient_type': 'individual',
+            'to': to,
+            'type': 'action',
+            'action': {'type': 'typing_on'},
+        }
+        ok, data = self._request(payload)
+        if ok:
+            return True, data
+        # Fallback: algumas versões rejeitam recipient_type no typing action (400)
+        sc = data.get('status_code')
+        if sc == 400:
+            payload_min: Dict[str, Any] = {
+                'messaging_product': 'whatsapp',
+                'to': to,
+                'type': 'action',
+                'action': {'type': 'typing_on'},
+            }
+            return self._request(payload_min)
+        return ok, data
+
     def mark_as_read(self, message_id: str, **kwargs: Any) -> Tuple[bool, Dict[str, Any]]:
         """Marca mensagem como lida (read receipt) via Graph API."""
         if not (message_id or '').strip():
