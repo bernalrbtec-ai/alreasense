@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool, Reply, X, FileText, LayoutList, ListOrdered, UserPlus, ArrowRightLeft, ClipboardList, StickyNote, Sparkles } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X, FileText, LayoutList, ListOrdered, UserPlus } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
@@ -39,14 +39,9 @@ interface MessageInputProps {
   isConnected: boolean;
   conversationId?: string;
   conversationType?: 'individual' | 'group' | 'broadcast';
-  /** Hub: barra de atalhos + comandos /linha única */
-  hubToolbar?: boolean;
-  onHubCommandTransfer?: () => void;
-  onHubCommandTask?: () => void;
-  aiSuggestionPreview?: string | null;
 }
 
-export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendMessageWithContacts, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType, hubToolbar = false, onHubCommandTransfer, onHubCommandTask, aiSuggestionPreview }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWithButtons, sendMessageWithList, sendMessageWithContacts, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage, difyActiveConversations } = useChatStore();
   const { user } = useAuthStore();
   const allowMetaInteractiveButtons = user?.allow_meta_interactive_buttons !== false;
@@ -92,8 +87,6 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
   ]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const [internalNoteMode, setInternalNoteMode] = useState(false);
-  const [aiPreviewDismissed, setAiPreviewDismissed] = useState(false);
   const MAX_FILES = 10;
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
@@ -118,14 +111,8 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
     if (prevConversationIdRef.current !== conversationId) {
       prevConversationIdRef.current = conversationId;
       setShowContactModal(false);
-      setInternalNoteMode(false);
-      setAiPreviewDismissed(false);
     }
   }, [conversationId]);
-
-  useEffect(() => {
-    setAiPreviewDismissed(false);
-  }, [aiSuggestionPreview]);
 
   // Buscar contatos da agenda quando modal está aberto na aba agenda
   useEffect(() => {
@@ -400,29 +387,6 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       return;
     }
 
-    if (hubToolbar && hasText && !hasFiles) {
-      const raw = message.trim();
-      if (!raw.includes('\n') && raw.startsWith('/')) {
-        const cmd = raw.slice(1).split(/\s+/)[0].toLowerCase();
-        if (cmd === 'transfer' || cmd === 'transferir') {
-          onHubCommandTransfer?.();
-          setMessage('');
-          if (conversationId) messageByConversationRef.current.delete(conversationId);
-          return;
-        }
-        if (cmd === 'task' || cmd === 'tarefa') {
-          onHubCommandTask?.();
-          setMessage('');
-          if (conversationId) messageByConversationRef.current.delete(conversationId);
-          return;
-        }
-        toast.info('Comando desconhecido. Use /transfer ou /task (uma linha).', {
-          position: 'bottom-right',
-        });
-        return;
-      }
-    }
-
     try {
       setSending(true);
       sendTyping(false);
@@ -476,7 +440,7 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         const success = requestSendWithAutomationGuard({
           content: messageText,
           includeSignature,
-          isInternal: Boolean(hubToolbar && internalNoteMode),
+          isInternal: false,
           replyToMessageId: replyToId,
           mentions: mentionsToSend,
           mentionEveryone,
@@ -484,7 +448,6 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
         if (success) {
           setMessage('');
           setMentions([]);
-          setInternalNoteMode(false);
           if (conversationId) messageByConversationRef.current.delete(conversationId);
           if (replyToMessage) clearReply();
         } else {
@@ -808,22 +771,6 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
       </div>
     )}
     <div className="relative">
-      {hubToolbar && aiSuggestionPreview && !aiPreviewDismissed && (
-        <div className="px-4 pt-2 pb-1 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700">
-          <div className="flex items-start gap-2 rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50/90 dark:bg-sky-950/30 px-3 py-2">
-            <Sparkles className="w-4 h-4 text-sky-600 dark:text-sky-400 flex-shrink-0 mt-0.5" aria-hidden />
-            <p className="text-xs text-gray-700 dark:text-gray-200 flex-1 min-w-0">{aiSuggestionPreview}</p>
-            <button
-              type="button"
-              onClick={() => setAiPreviewDismissed(true)}
-              className="p-1 rounded-full hover:bg-sky-100 dark:hover:bg-sky-900/50 text-gray-500"
-              aria-label="Dispensar sugestão"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
       {/* ✅ NOVO: Preview de mensagem respondida */}
       {replyToMessage && (
         <div className="px-4 pt-2 pb-1 bg-chat-sidebar border-t border-gray-300 dark:border-gray-700">
@@ -875,46 +822,6 @@ export function MessageInput({ sendMessage, sendMessageAsTemplate, sendMessageWi
               isUploading={uploadingFile}
             />
           ))}
-        </div>
-      )}
-
-      {hubToolbar && !isGroupInputBlocked && (
-        <div className="flex flex-wrap items-center gap-0.5 px-3 py-1 bg-chat-sidebar border-t border-gray-300 dark:border-slate-700/80">
-          {onHubCommandTransfer && (
-            <button
-              type="button"
-              onClick={() => onHubCommandTransfer()}
-              className="p-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1"
-              title="Transferir conversa"
-            >
-              <ArrowRightLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Transferir</span>
-            </button>
-          )}
-          {onHubCommandTask && (
-            <button
-              type="button"
-              onClick={() => onHubCommandTask()}
-              className="p-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 flex items-center gap-1"
-              title="Nova tarefa"
-            >
-              <ClipboardList className="w-4 h-4" />
-              <span className="hidden sm:inline">Tarefa</span>
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setInternalNoteMode((v) => !v)}
-            className={`p-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${
-              internalNoteMode
-                ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-900 dark:text-amber-100'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
-            }`}
-            title="Alternar nota interna (não enviada ao cliente)"
-          >
-            <StickyNote className="w-4 h-4" />
-            <span className="hidden sm:inline">Nota interna</span>
-          </button>
         </div>
       )}
 

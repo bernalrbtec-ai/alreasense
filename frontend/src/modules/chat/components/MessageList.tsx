@@ -31,8 +31,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { InteractiveListModal } from './InteractiveListModal';
 import type { InteractiveListSection } from './InteractiveListModal';
 import { DateSeparator } from '@/components/chat/DateSeparator';
-import { applyHubBubbleRuns, type HubBubbleRun } from '../utils/applyHubBubbleRuns';
-
 function debugLog(...args: unknown[]) {
   if (import.meta.env.DEV) console.log(...args);
 }
@@ -85,7 +83,7 @@ function parseTransferLines(content: string): { de: string; para: string; resumo
 
 /** Agrupa mensagens consecutivas "Conversa transferida" em um único item para exibição */
 type DisplayItem =
-  | { type: 'message'; message: Message; isGroupStart: boolean; hubRun?: HubBubbleRun }
+  | { type: 'message'; message: Message; isGroupStart: boolean }
   | { type: 'transfer_merged'; messages: Message[]; mergedContent: string }
   | { type: 'date_separator'; dayKey: string; label: string };
 
@@ -403,11 +401,9 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 export interface MessageListProps {
   /** Ao clicar num botão de resposta (mensagem recebida com interactive_reply_buttons), envia o texto do botão como resposta. Estilo WhatsApp Web. */
   onSendReplyButtonClick?: (buttonText: string, replyToMessageId: string) => void;
-  /** Hub: agrupar bolhas consecutivas (1:1) quando true e VITE_CHAT_HUB_GROUPING !== 'false' */
-  hubGroupingEnabled?: boolean;
 }
 
-export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false }: MessageListProps = {}) {
+export function MessageList({ onSendReplyButtonClick }: MessageListProps = {}) {
   debugLog('🔄 [MessageList] Componente iniciando renderização...');
   
   // ✅ CORREÇÃO CRÍTICA: Inicializar estados ANTES de usar seletores que dependem de activeConversation
@@ -1056,10 +1052,8 @@ export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false
   });
 
   const displayItems = useMemo(() => {
-    const base = applyMessageGroupFlags(withDateSeparators(buildDisplayItems(safeMessages)));
-    const envGrouping = import.meta.env.VITE_CHAT_HUB_GROUPING !== 'false';
-    return applyHubBubbleRuns(base, hubGroupingEnabled && envGrouping, activeConversation?.conversation_type);
-  }, [safeMessages, hubGroupingEnabled, activeConversation?.conversation_type]);
+    return applyMessageGroupFlags(withDateSeparators(buildDisplayItems(safeMessages)));
+  }, [safeMessages]);
 
   const isDark = theme === 'dark';
   return (
@@ -1197,31 +1191,14 @@ export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false
             }
             const messageItem = item.message;
             const isGroupStart = item.isGroupStart;
-            const hubRun = item.hubRun;
             if (!messageItem || !messageItem.id) {
               return null;
             }
             const convPart = messageItem.conversation_id ?? messageItem.conversation ?? '';
             const messageKey = convPart ? `${convPart}-${messageItem.id}` : messageItem.id;
             const isSystemNotification = Boolean(messageItem.is_internal);
-            const verticalGap = isSystemNotification
-              ? 'my-2'
-              : hubRun === 'mid' || hubRun === 'last'
-                ? 'mt-0.5'
-                : hubRun === 'first'
-                  ? 'mt-3'
-                  : isGroupStart
-                    ? 'mt-3'
-                    : 'mt-1';
-            const bubbleShape =
-              !hubRun || hubRun === 'single'
-                ? 'rounded-2xl'
-                : hubRun === 'first'
-                  ? 'rounded-t-2xl rounded-b-lg'
-                  : hubRun === 'mid'
-                    ? 'rounded-lg'
-                    : 'rounded-b-2xl rounded-t-lg';
-            const showHubTimestamp = !hubRun || hubRun === 'last' || hubRun === 'single';
+            const verticalGap = isSystemNotification ? 'my-2' : isGroupStart ? 'mt-3' : 'mt-1';
+            const bubbleShape = 'rounded-2xl';
             const templateMeta =
               Boolean(messageItem.metadata?.wa_template_id) ||
               (messageItem.metadata?.template_message != null &&
@@ -1592,7 +1569,6 @@ export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false
                   );
                 })()}
                 
-                {showHubTimestamp && (
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   {messageItem.is_edited && (
                     <span className="text-xs text-gray-500 dark:text-gray-400 italic">
@@ -1608,7 +1584,6 @@ export function MessageList({ onSendReplyButtonClick, hubGroupingEnabled = false
                     </span>
                   )}
                 </div>
-                )}
                 {messageItem.direction === 'outgoing' && messageItem.status === 'failed' && (
                   <div className="flex items-center gap-2 mt-2">
                     <button

@@ -8,15 +8,13 @@ export type StatusChipVariant = 'neutral' | 'success' | 'warning' | 'danger' | '
 export interface ConversationStatusPresentation {
   label: string;
   variant: StatusChipVariant;
-  /** Lista: conversa pendente com não lidos há mais de URGENT_AFTER_MIN minutos */
+  /** Lista: conversa pendente com não lidos há mais de 30 minutos */
   showUrgentIndicator: boolean;
 }
 
-/** Limiar (minutos) alinhado à lista e ao hub de métricas. */
-export const URGENT_AFTER_MIN = 30;
+const URGENT_AFTER_MIN = 30;
 
-/** Mesma regra que `showUrgentIndicator` em `getConversationStatusPresentation`. */
-export function isConversationUrgent(conv: Conversation): boolean {
+function isConversationUrgent(conv: Conversation): boolean {
   const status = conv.status ?? 'pending';
   const lastAt = conv.last_message_at;
   const ageMs = lastAt ? Date.now() - new Date(lastAt).getTime() : NaN;
