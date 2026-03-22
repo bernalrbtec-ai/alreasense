@@ -18,7 +18,7 @@ import {
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { api } from '../lib/api'
+import { api, getApiBaseUrl } from '../lib/api'
 import { toast } from 'sonner'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 
