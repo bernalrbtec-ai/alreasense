@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database, MessageCircle, Server, Plus, Pencil, Trash2, CalendarClock } from 'lucide-react'
+import { RefreshCw, Settings, AlertCircle, CheckCircle2, Loader2, ChevronDown, ChevronRight, Database, MessageCircle, Server, Plus, Pencil, Trash2, CalendarClock, Cpu } from 'lucide-react'
 import {
   AreaChart,
   Area,
@@ -185,7 +185,30 @@ interface PostgresOverview {
   disk_free_bytes?: number | null
 }
 
-type TabId = 'proxy' | 'redis' | 'rabbitmq' | 'postgres'
+interface CeleryOverview {
+  config_ok: boolean
+  overview_api_path: string
+  broker_url_masked: string
+  broker_transport: string
+  default_queue: string
+  task_always_eager: boolean
+  broker_reachable: boolean
+  broker_error?: string | null
+  workers_online: number | null
+  workers_error?: string | null
+  worker_start_command: string
+  dify_debounce_task: string
+  celery_queue?: {
+    queue?: string
+    messages_ready?: number | null
+    consumers?: number | null
+    note?: string
+    error?: string
+  } | null
+  warnings: string[]
+}
+
+type TabId = 'proxy' | 'redis' | 'rabbitmq' | 'postgres' | 'celery'
 
 export default function ServicosPage() {
   const [activeTab, setActiveTab] = useState<TabId>('proxy')
@@ -229,6 +252,8 @@ export default function ServicosPage() {
   const [postgresOverview, setPostgresOverview] = useState<PostgresOverview | null>(null)
   const [isLoadingRabbitmqOverview, setIsLoadingRabbitmqOverview] = useState(false)
   const [isLoadingPostgresOverview, setIsLoadingPostgresOverview] = useState(false)
+  const [celeryOverview, setCeleryOverview] = useState<CeleryOverview | null>(null)
+  const [isLoadingCeleryOverview, setIsLoadingCeleryOverview] = useState(false)
 
   const fetchOverview = async () => {
     try {
@@ -374,9 +399,24 @@ export default function ServicosPage() {
     }
   }
 
+  const fetchCeleryOverview = async () => {
+    try {
+      setIsLoadingCeleryOverview(true)
+      const res = await api.get<CeleryOverview>('/servicos/celery/overview/')
+      setCeleryOverview(res.data)
+    } catch (err: any) {
+      console.error('Erro ao carregar overview Celery:', err)
+      toast.error(err.response?.data?.error || 'Erro ao carregar overview Celery')
+      setCeleryOverview(null)
+    } finally {
+      setIsLoadingCeleryOverview(false)
+    }
+  }
+
   useEffect(() => {
     if (activeTab === 'rabbitmq') fetchRabbitmqOverview()
     if (activeTab === 'postgres') fetchPostgresOverview()
+    if (activeTab === 'celery') fetchCeleryOverview()
   }, [activeTab])
 
   const handleRedisCleanup = async () => {
@@ -548,6 +588,7 @@ export default function ServicosPage() {
     { id: 'redis' as TabId, name: 'Redis', icon: Database },
     { id: 'rabbitmq' as TabId, name: 'RabbitMQ', icon: MessageCircle },
     { id: 'postgres' as TabId, name: 'PostgreSQL', icon: Server },
+    { id: 'celery' as TabId, name: 'Celery', icon: Cpu },
   ]
 
   return (
@@ -1549,6 +1590,152 @@ export default function ServicosPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 py-4">
                 Nenhuma limpeza registrada.
               </p>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {activeTab === 'celery' && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Overview – Celery</h2>
+              <Button onClick={fetchCeleryOverview} disabled={isLoadingCeleryOverview} variant="outline" size="sm">
+                <RefreshCw className={`h-4 w-4 mr-1 ${isLoadingCeleryOverview ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+            {isLoadingCeleryOverview ? (
+              <div className="flex justify-center py-8">
+                <LoadingSpinner size="md" />
+              </div>
+            ) : celeryOverview ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-gray-50/50 dark:bg-gray-800/30">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">URL desta API (overview)</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    GET autenticado (superadmin). Útil para documentação ou health manual.
+                  </p>
+                  <code className="block break-all text-sm rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-2 font-mono text-gray-800 dark:text-gray-200">
+                    {`${getApiBaseUrl().replace(/\/$/, '')}${celeryOverview.overview_api_path}`}
+                  </code>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Broker configurado</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      {celeryOverview.config_ok ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+                      )}
+                      <span className="font-medium">{celeryOverview.config_ok ? 'Sim' : 'Não'}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Transporte</p>
+                    <p className="mt-1 font-mono text-sm font-medium">{celeryOverview.broker_transport}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Broker alcançável (API)</p>
+                    <p className="mt-1 font-medium">
+                      {celeryOverview.task_always_eager
+                        ? 'N/A (eager)'
+                        : celeryOverview.broker_reachable
+                          ? 'Sim'
+                          : 'Não'}
+                    </p>
+                    {celeryOverview.broker_error && !celeryOverview.task_always_eager && (
+                      <p className="mt-1 text-xs text-red-600 dark:text-red-400 break-words">{celeryOverview.broker_error}</p>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Workers online (ping)</p>
+                    <p className="mt-1 font-medium">
+                      {celeryOverview.task_always_eager
+                        ? 'N/A (eager)'
+                        : celeryOverview.workers_online === null
+                          ? '—'
+                          : String(celeryOverview.workers_online)}
+                    </p>
+                    {celeryOverview.workers_error && !celeryOverview.task_always_eager && (
+                      <p className="mt-1 text-xs text-amber-700 dark:text-amber-300 break-words">{celeryOverview.workers_error}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Broker (senha mascarada)</p>
+                  <code className="block break-all text-xs rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 font-mono text-gray-800 dark:text-gray-200">
+                    {celeryOverview.broker_url_masked || '—'}
+                  </code>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Fila padrão</p>
+                    <p className="mt-1 font-mono text-sm font-medium">{celeryOverview.default_queue}</p>
+                    <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Task debounce Dify</p>
+                    <p className="mt-1 font-mono text-xs break-all">{celeryOverview.dify_debounce_task}</p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">CELERY_TASK_ALWAYS_EAGER</p>
+                    <p className="mt-1 font-medium">{celeryOverview.task_always_eager ? 'true' : 'false'}</p>
+                    <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">Comando sugerido (Railway / VPS)</p>
+                    <code className="mt-1 block break-all text-xs rounded bg-gray-100 dark:bg-gray-900 px-3 py-2 font-mono">
+                      {celeryOverview.worker_start_command}
+                    </code>
+                  </div>
+                </div>
+
+                {celeryOverview.celery_queue && (
+                  <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Fila no RabbitMQ (passiva)</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                      Só quando o broker é AMQP. Com Redis como broker, use Redis/Outros para inspecionar keys.
+                    </p>
+                    {celeryOverview.celery_queue.error ? (
+                      <p className="text-sm text-red-600 dark:text-red-400">{celeryOverview.celery_queue.error}</p>
+                    ) : (
+                      <ul className="text-sm space-y-1">
+                        <li>
+                          <span className="text-gray-500 dark:text-gray-400">Fila:</span>{' '}
+                          <span className="font-mono">{celeryOverview.celery_queue.queue}</span>
+                        </li>
+                        {celeryOverview.celery_queue.messages_ready != null && (
+                          <li>
+                            <span className="text-gray-500 dark:text-gray-400">Mensagens:</span>{' '}
+                            {celeryOverview.celery_queue.messages_ready}
+                          </li>
+                        )}
+                        {celeryOverview.celery_queue.consumers != null && (
+                          <li>
+                            <span className="text-gray-500 dark:text-gray-400">Consumidores:</span>{' '}
+                            {celeryOverview.celery_queue.consumers}
+                          </li>
+                        )}
+                        {celeryOverview.celery_queue.note && (
+                          <li className="text-amber-700 dark:text-amber-300">{celeryOverview.celery_queue.note}</li>
+                        )}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {(celeryOverview.warnings?.length ?? 0) > 0 && (
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-4">
+                    <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Avisos</p>
+                    <ul className="mt-1 list-disc list-inside text-sm text-amber-700 dark:text-amber-300">
+                      {(celeryOverview.warnings ?? []).map((w, i) => (
+                        <li key={i}>{w}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Carregue os dados com Atualizar.</p>
             )}
           </Card>
         </div>

@@ -12,7 +12,7 @@ Plataforma SaaS multi-tenant para chat e atendimento de clientes em conversas do
 
 ## 🚀 Stack
 
-- **Backend:** Django 5 + DRF + Channels + RabbitMQ (NÃO Celery)
+- **Backend:** Django 5 + DRF + Channels + RabbitMQ + **Celery** (worker opcional; debounce inbound Dify usa fila `celery`)
 - **Frontend:** React + TypeScript + Vite + Tailwind + shadcn/ui
 - **Banco:** PostgreSQL + pgvector
 - **Infra:** Docker + Railway
@@ -84,6 +84,14 @@ npm run dev
 ```bash
 cd backend
 python manage.py run_rabbitmq_worker
+```
+
+#### Celery worker (debounce Dify inbound e outras tasks)
+Usa o mesmo broker AMQP que o Sense (`RABBITMQ_URL` ou `CELERY_BROKER_URL`). Sem worker, o agendamento de debounce falha em log; em dev pode usar `CELERY_TASK_ALWAYS_EAGER=true` (executa na hora, sem fila).
+
+```bash
+cd backend
+celery -A alrea_sense worker -l info -Q celery
 ```
 
 ### Opção 3: Docker

@@ -4283,7 +4283,47 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as _exc:
                             logger.error("❌ [DIFY] Erro no takeover (thread): %s", _exc, exc_info=True)
 
-                    transaction.on_commit(lambda: _launch_dify_thread(_run_dify_takeover))
+                    try:
+                        _created_at_iso = message.created_at.isoformat()
+                    except Exception:
+                        from django.utils import timezone as _dj_tz
+
+                        _created_at_iso = _dj_tz.now().isoformat()
+
+                    _debounce_sec = 0
+                    if not (_is_audio and not (_message_content or "").strip()):
+                        try:
+                            from apps.ai.services.dify_incoming_debounce import (
+                                get_incoming_debounce_delay_seconds,
+                            )
+
+                            _debounce_sec = get_incoming_debounce_delay_seconds(tenant, conversation)
+                        except Exception as _de_exc:
+                            logger.warning(
+                                "dify_debounce delay read failed conv=%s: %s",
+                                _conversation_id,
+                                _de_exc,
+                            )
+                            _debounce_sec = 0
+
+                    if _debounce_sec > 0:
+
+                        def _on_commit_debounce():
+                            from apps.ai.services.dify_incoming_debounce import (
+                                schedule_debounced_dify_inbound,
+                            )
+
+                            schedule_debounced_dify_inbound(
+                                _tenant_id,
+                                _conversation_id,
+                                _wa_instance_id,
+                                _debounce_sec,
+                                _created_at_iso,
+                            )
+
+                        transaction.on_commit(_on_commit_debounce)
+                    else:
+                        transaction.on_commit(lambda: _launch_dify_thread(_run_dify_takeover))
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)

@@ -252,6 +252,8 @@ interface DifyCatalogItem {
   rag_dataset_id?: string
   rag_lookback_months?: number
   rag_context_input_key?: string
+  /** 0–120; 0 = envio imediato ao Dify (debounce via Celery desligado) */
+  incoming_debounce_seconds?: number
 }
 
 interface DifyWaInstance {
@@ -398,6 +400,7 @@ export default function ConfigurationsPage() {
   const [newDifyApiKey, setNewDifyApiKey] = useState('')
   const [newDifyDefaultDepartmentId, setNewDifyDefaultDepartmentId] = useState<string>('')
   const [newDifyWaInstanceId, setNewDifyWaInstanceId] = useState<string>('')
+  const [newDifyIncomingDebounceSeconds, setNewDifyIncomingDebounceSeconds] = useState(0)
   // Editar agente – modal
   const [editDifyOpen, setEditDifyOpen] = useState(false)
   const [editingDifyItemId, setEditingDifyItemId] = useState<string | null>(null)
@@ -417,6 +420,7 @@ export default function ConfigurationsPage() {
   const [editDifyRagLookbackMonths, setEditDifyRagLookbackMonths] = useState(12)
   const [editDifyRagContextInputKey, setEditDifyRagContextInputKey] = useState('')
   const [editDifySyncingSchema, setEditDifySyncingSchema] = useState(false)
+  const [editDifyIncomingDebounceSeconds, setEditDifyIncomingDebounceSeconds] = useState(0)
   // Rastreia se uma sincronização de schema ocorreu nessa sessão de edição.
   // Necessário para saber se devemos enviar default_inputs={} mesmo quando schema veio [].
   const [editDifySchemaSynced, setEditDifySchemaSynced] = useState(false)
@@ -1721,7 +1725,19 @@ export default function ConfigurationsPage() {
     setDifySavingKey('catalog_create')
     try {
       // C15: usar resposta do POST diretamente — atualização otimista sem refetch
-      const response = await api.post('/ai/dify/catalog/', { display_name, description, public_url, api_key, default_department_id, whatsapp_instance_id })
+      const incoming_debounce_seconds = Math.min(
+        120,
+        Math.max(0, Math.floor(Number(newDifyIncomingDebounceSeconds) || 0)),
+      )
+      const response = await api.post('/ai/dify/catalog/', {
+        display_name,
+        description,
+        public_url,
+        api_key,
+        default_department_id,
+        whatsapp_instance_id,
+        incoming_debounce_seconds,
+      })
       const created = response.data as DifyCatalogItem
       setDifyCatalog(prev => [created, ...prev])
       setNewDifyDisplayName('')
@@ -1730,6 +1746,7 @@ export default function ConfigurationsPage() {
       setNewDifyApiKey('')
       setNewDifyDefaultDepartmentId('')
       setNewDifyWaInstanceId('')
+      setNewDifyIncomingDebounceSeconds(0)
       setDifyCreateOpen(false)
       const wasUpdate = response.status === 200
       if (created.warning) {
@@ -1773,6 +1790,7 @@ export default function ConfigurationsPage() {
     setEditDifyRagContextInputKey('')
     setEditDifySyncingSchema(false)
     setEditDifySchemaSynced(false)
+    setEditDifyIncomingDebounceSeconds(0)
   }
 
   const openEditDifyItem = (item: DifyCatalogItem) => {
@@ -1793,6 +1811,10 @@ export default function ConfigurationsPage() {
     const lb = Number(item.rag_lookback_months)
     setEditDifyRagLookbackMonths(Number.isFinite(lb) && lb >= 1 ? Math.min(120, Math.floor(lb)) : 12)
     setEditDifyRagContextInputKey(item.rag_context_input_key || '')
+    const deb = Number(item.incoming_debounce_seconds)
+    setEditDifyIncomingDebounceSeconds(
+      Number.isFinite(deb) && deb >= 0 ? Math.min(120, Math.floor(deb)) : 0,
+    )
     setEditDifyOpen(true)
   }
 
@@ -1812,6 +1834,10 @@ export default function ConfigurationsPage() {
         rag_dataset_id: editDifyRagDatasetId.trim(),
         rag_lookback_months: Math.min(120, Math.max(1, Math.floor(Number(editDifyRagLookbackMonths) || 12))),
         rag_context_input_key: editDifyRagContextInputKey.trim(),
+        incoming_debounce_seconds: Math.min(
+          120,
+          Math.max(0, Math.floor(Number(editDifyIncomingDebounceSeconds) || 0)),
+        ),
       }
       if (!payload.public_url?.trim()) {
         showErrorToast('URL pública é obrigatória')
@@ -3133,6 +3159,37 @@ export default function ConfigurationsPage() {
                           <Label>API key <span className="text-red-500">*</span></Label>
                           <Input type="password" value={newDifyApiKey} onChange={(e) => setNewDifyApiKey(e.target.value)} placeholder="Cole a API key do app Dify" />
                         </div>
+                        <div>
+                          <Label>Agrupar mensagens antes do Dify</Label>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-2">
+                            Atraso em segundos (worker Celery na fila <code className="text-[11px]">celery</code>). 0 = imediato.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {[0, 2, 3, 5].map((s) => (
+                              <Button
+                                key={s}
+                                type="button"
+                                variant={newDifyIncomingDebounceSeconds === s ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => setNewDifyIncomingDebounceSeconds(s)}
+                              >
+                                {s === 0 ? 'Off' : `${s}s`}
+                              </Button>
+                            ))}
+                            <Input
+                              type="number"
+                              min={0}
+                              max={120}
+                              className="w-24"
+                              value={newDifyIncomingDebounceSeconds}
+                              onChange={(e) => {
+                                const v = e.target.valueAsNumber
+                                if (!Number.isFinite(v)) return
+                                setNewDifyIncomingDebounceSeconds(Math.min(120, Math.max(0, Math.floor(v))))
+                              }}
+                            />
+                          </div>
+                        </div>
                         <div className="flex gap-2">
                           <Button type="button" onClick={() => void createDifyCatalogItem()} disabled={difySavingKey === 'catalog_create'}>
                             {difySavingKey === 'catalog_create' ? 'Salvando…' : 'Cadastrar'}
@@ -3285,6 +3342,37 @@ export default function ConfigurationsPage() {
                                 <option key={i.id} value={i.id}>{i.friendly_name}</option>
                               ))}
                             </select>
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label>Agrupar mensagens antes do Dify</Label>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-2">
+                              Atraso em segundos (Celery + Redis). 0 = envio imediato. Máx. 120 s.
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {[0, 2, 3, 5].map((s) => (
+                                <Button
+                                  key={s}
+                                  type="button"
+                                  variant={editDifyIncomingDebounceSeconds === s ? 'default' : 'outline'}
+                                  size="sm"
+                                  onClick={() => setEditDifyIncomingDebounceSeconds(s)}
+                                >
+                                  {s === 0 ? 'Off' : `${s}s`}
+                                </Button>
+                              ))}
+                              <Input
+                                type="number"
+                                min={0}
+                                max={120}
+                                className="w-24"
+                                value={editDifyIncomingDebounceSeconds}
+                                onChange={(e) => {
+                                  const v = e.target.valueAsNumber
+                                  if (!Number.isFinite(v)) return
+                                  setEditDifyIncomingDebounceSeconds(Math.min(120, Math.max(0, Math.floor(v))))
+                                }}
+                              />
+                            </div>
                           </div>
                           <div className="md:col-span-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/30 p-3">
                             <div className="flex items-center justify-between gap-3">

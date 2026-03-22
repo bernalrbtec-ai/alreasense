@@ -3,7 +3,8 @@ Views para a API de serviços (Redis overview, limpeza, histórico).
 Acesso restrito a superadmin.
 """
 import logging
-from typing import Any
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlparse, urlunparse
 
 import redis
 from redis.exceptions import ResponseError
@@ -56,6 +57,164 @@ def _is_superadmin(request) -> bool:
     if not request.user or not request.user.is_authenticated:
         return False
     return bool(request.user.is_superuser or request.user.is_staff)
+
+
+def _mask_broker_url(url: str) -> str:
+    """Mascara senha em redis://, amqp://, etc., para exibição no admin."""
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    try:
+        p = urlparse(raw)
+        if not p.scheme:
+            return "[URL sem esquema]"
+        host = p.hostname or ""
+        port_part = ""
+        if p.port:
+            port_part = f":{p.port}"
+        user = p.username or ""
+        if p.password:
+            netloc = f"{user}:***@{host}{port_part}" if user else f"***@{host}{port_part}"
+        else:
+            netloc = p.netloc
+        return urlunparse((p.scheme, netloc, p.path or "", p.params, p.query, p.fragment))
+    except Exception:
+        return "[URL inválida]"
+
+
+def _celery_broker_transport_label(broker_url: str) -> str:
+    scheme = (urlparse((broker_url or "").strip()).scheme or "").lower()
+    if scheme in ("redis", "rediss"):
+        return "redis"
+    if scheme in ("amqp", "pyamqp"):
+        return "amqp"
+    if scheme == "sqs":
+        return "sqs"
+    return scheme or "unknown"
+
+
+def _celery_broker_ping(broker_url: str) -> Tuple[bool, Optional[str]]:
+    if not (broker_url or "").strip():
+        return False, "CELERY_BROKER_URL vazia"
+    try:
+        from kombu import Connection
+
+        with Connection(broker_url.strip(), connect_timeout=5) as conn:
+            conn.ensure_connection(max_retries=1)
+        return True, None
+    except Exception as e:
+        return False, str(e)[:220]
+
+
+def _celery_workers_online_count() -> Tuple[Optional[int], Optional[str]]:
+    """
+    Retorna quantidade de workers que responderam ao ping.
+    None = não foi possível determinar (erro de rede/Celery).
+    """
+    try:
+        from alrea_sense.celery import app as celery_app
+
+        insp = celery_app.control.inspect(timeout=2.0)
+        if insp is None:
+            return None, "inspect não inicializado"
+        ping = insp.ping()
+        if ping is None:
+            return 0, None
+        return len(ping), None
+    except Exception as e:
+        return None, str(e)[:220]
+
+
+def _overview_celery_info() -> dict[str, Any]:
+    broker_url = (getattr(settings, "CELERY_BROKER_URL", None) or "").strip()
+    default_queue = (getattr(settings, "CELERY_TASK_DEFAULT_QUEUE", None) or "celery").strip() or "celery"
+    always_eager = bool(getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False))
+    transport = _celery_broker_transport_label(broker_url)
+
+    warnings: list[str] = []
+    if always_eager:
+        warnings.append(
+            "CELERY_TASK_ALWAYS_EAGER=true — tarefas executam no processo web (sem fila real). Desligue em produção."
+        )
+    if not broker_url:
+        warnings.append("Defina CELERY_BROKER_URL (ou RABBITMQ_URL como fallback no settings).")
+
+    broker_ok, broker_err = (False, None)
+    if broker_url and not always_eager:
+        broker_ok, broker_err = _celery_broker_ping(broker_url)
+        if not broker_ok and broker_err:
+            warnings.append(f"Broker inacessível a partir da API: {broker_err}")
+
+    workers_count: Optional[int] = None
+    workers_err: Optional[str] = None
+    if broker_url and not always_eager:
+        workers_count, workers_err = _celery_workers_online_count()
+        if workers_err:
+            warnings.append(f"Workers: {workers_err}")
+        elif workers_count == 0:
+            warnings.append(
+                "Nenhum worker Celery respondeu ao ping. Suba um processo: "
+                f"celery -A alrea_sense worker -l info -Q {default_queue}"
+            )
+
+    celery_queue_depth: Optional[Dict[str, Any]] = None
+    if broker_ok and transport == "amqp" and default_queue:
+        try:
+            import pika
+
+            params = pika.URLParameters(broker_url)
+            params.socket_timeout = 5
+            params.blocked_connection_timeout = 5
+            conn = pika.BlockingConnection(params)
+            ch = conn.channel()
+            result = ch.queue_declare(queue=default_queue, passive=True)
+            frame = getattr(result, "method", result) if result else None
+            celery_queue_depth = {
+                "queue": default_queue,
+                "messages_ready": getattr(frame, "message_count", 0) if frame else 0,
+                "consumers": getattr(frame, "consumer_count", 0) if frame else 0,
+            }
+            conn.close()
+        except Exception as e:
+            err = str(e)
+            if "NOT_FOUND" in err or "404" in err:
+                celery_queue_depth = {
+                    "queue": default_queue,
+                    "messages_ready": None,
+                    "consumers": None,
+                    "note": "Fila ainda não criada (normal se nunca houve task).",
+                }
+            else:
+                celery_queue_depth = {"queue": default_queue, "error": err[:200]}
+
+    return {
+        "config_ok": bool(broker_url),
+        "overview_api_path": "/api/servicos/celery/overview/",
+        "broker_url_masked": _mask_broker_url(broker_url),
+        "broker_transport": transport,
+        "default_queue": default_queue,
+        "task_always_eager": always_eager,
+        "broker_reachable": broker_ok,
+        "broker_error": broker_err,
+        "workers_online": workers_count,
+        "workers_error": workers_err,
+        "worker_start_command": f"celery -A alrea_sense worker -l info -Q {default_queue}",
+        "dify_debounce_task": "ai.run_dify_incoming_debounce_batch",
+        "celery_queue": celery_queue_depth,
+        "warnings": warnings,
+    }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def celery_overview(request):
+    """Overview Celery: broker mascarado, fila, ping ao broker e aos workers (superadmin)."""
+    if not _is_superadmin(request):
+        return Response(
+            {"error": "Acesso negado. Apenas superadmin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+    return Response(_overview_celery_info())
 
 
 def _overview_redis_info() -> dict[str, Any]:

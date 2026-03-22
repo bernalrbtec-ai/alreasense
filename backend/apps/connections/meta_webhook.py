@@ -648,7 +648,48 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                     except Exception as _exc:
                         logger.error("❌ [DIFY-META] Erro no takeover (thread): %s", _exc, exc_info=True)
 
+                try:
+                    _created_at_iso = new_msg.created_at.isoformat()
+                except Exception:
+                    _created_at_iso = django_timezone.now().isoformat()
+
+                _debounce_sec = 0
+                if not (_is_audio and not (_msg_content or "").strip()):
+                    try:
+                        from apps.ai.services.dify_incoming_debounce import (
+                            get_incoming_debounce_delay_seconds,
+                        )
+
+                        _debounce_sec = get_incoming_debounce_delay_seconds(tenant, conversation)
+                    except Exception as _de_exc:
+                        logger.warning(
+                            "[DIFY-META] dify_debounce delay read failed conv=%s: %s",
+                            _conv_id,
+                            _de_exc,
+                        )
+                        _debounce_sec = 0
+
                 def _launch_dify_meta_after_commit():
+                    if _debounce_sec > 0:
+                        try:
+                            from apps.ai.services.dify_incoming_debounce import (
+                                schedule_debounced_dify_inbound,
+                            )
+
+                            schedule_debounced_dify_inbound(
+                                _tenant_id,
+                                _conv_id,
+                                _wa_instance_id,
+                                _debounce_sec,
+                                _created_at_iso,
+                            )
+                        except Exception as _sch_exc:
+                            logger.exception(
+                                "[DIFY-META] schedule debounce failed conv=%s: %s",
+                                _conv_id,
+                                _sch_exc,
+                            )
+                        return
                     try:
                         from apps.chat.webhooks import _launch_dify_thread
                         _launch_dify_thread(_run_dify_takeover_meta)

@@ -118,6 +118,15 @@ def _parse_rag_lookback_months(raw) -> int:
     return max(1, min(n, 120))
 
 
+def _parse_incoming_debounce_seconds(raw) -> int:
+    """Debounce inbound Dify por agente: 0 = desligado, máx. 120 s."""
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        n = 0
+    return max(0, min(n, 120))
+
+
 def _sanitize_rag_context_input_key(raw) -> str:
     s = str(raw or "").strip()
     return s[:200] if len(s) > 200 else s
@@ -3167,6 +3176,9 @@ def dify_catalog(request):
                             (it.metadata or {}).get("rag_lookback_months")
                         ),
                         "rag_context_input_key": str((it.metadata or {}).get("rag_context_input_key") or ""),
+                        "incoming_debounce_seconds": _parse_incoming_debounce_seconds(
+                            (it.metadata or {}).get("incoming_debounce_seconds")
+                        ),
                         "created_at": it.created_at.isoformat() if it.created_at else None,
                         "updated_at": it.updated_at.isoformat() if it.updated_at else None,
                     }
@@ -3212,6 +3224,7 @@ def dify_catalog(request):
         rag_dataset_id = str(data.get("rag_dataset_id") or "").strip()
         rag_lookback_months = _parse_rag_lookback_months(data.get("rag_lookback_months"))
         rag_context_input_key = _sanitize_rag_context_input_key(data.get("rag_context_input_key"))
+        incoming_debounce_seconds = _parse_incoming_debounce_seconds(data.get("incoming_debounce_seconds"))
 
         if not public_url:
             return Response({"error": "public_url é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
@@ -3275,6 +3288,7 @@ def dify_catalog(request):
         merged_meta["rag_dataset_id"] = rag_dataset_id
         merged_meta["rag_lookback_months"] = rag_lookback_months
         merged_meta["rag_context_input_key"] = rag_context_input_key
+        merged_meta["incoming_debounce_seconds"] = incoming_debounce_seconds
         item.metadata = merged_meta
         # encrypt field cuida da criptografia em repouso
         item.api_key_encrypted = api_key
@@ -3331,6 +3345,9 @@ def dify_catalog(request):
                 (item.metadata or {}).get("rag_lookback_months")
             ),
             "rag_context_input_key": str((item.metadata or {}).get("rag_context_input_key") or ""),
+            "incoming_debounce_seconds": _parse_incoming_debounce_seconds(
+                (item.metadata or {}).get("incoming_debounce_seconds")
+            ),
         }
         if _binding_warning:
             resp_data["warning"] = _binding_warning
@@ -3397,6 +3414,7 @@ def dify_catalog(request):
         "rag_dataset_id",
         "rag_lookback_months",
         "rag_context_input_key",
+        "incoming_debounce_seconds",
     )
     if any(k in data for k in _rag_patch_keys):
         # Cópia rasa para não perder chaves (ex.: input_schema) ao atualizar só campos RAG.
@@ -3412,6 +3430,10 @@ def dify_catalog(request):
             md["rag_lookback_months"] = _parse_rag_lookback_months(data.get("rag_lookback_months"))
         if "rag_context_input_key" in data:
             md["rag_context_input_key"] = _sanitize_rag_context_input_key(data.get("rag_context_input_key"))
+        if "incoming_debounce_seconds" in data:
+            md["incoming_debounce_seconds"] = _parse_incoming_debounce_seconds(
+                data.get("incoming_debounce_seconds")
+            )
         item.metadata = md
     patch_fields = ["display_name", "signature_name", "description", "public_url", "is_active", "default_department_id", "whatsapp_instance_id", "updated_at"]
     if any(k in data for k in _rag_patch_keys):
@@ -3498,6 +3520,9 @@ def dify_catalog(request):
             (item.metadata or {}).get("rag_lookback_months")
         ),
         "rag_context_input_key": str((item.metadata or {}).get("rag_context_input_key") or ""),
+        "incoming_debounce_seconds": _parse_incoming_debounce_seconds(
+            (item.metadata or {}).get("incoming_debounce_seconds")
+        ),
     }
     if _patch_binding_warning:
         patch_resp["warning"] = _patch_binding_warning

@@ -93,6 +93,26 @@ class RedisServicosAPITestCase(TestCase):
         response = self.client.get("/api/servicos/postgres/overview/")
         self.assertEqual(response.status_code, 403)
 
+    def test_celery_overview_returns_200_for_superuser(self):
+        self.client.force_authenticate(user=self.superuser)
+        response = self.client.get("/api/servicos/celery/overview/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("config_ok", data)
+        self.assertIn("broker_url_masked", data)
+        self.assertIn("broker_transport", data)
+        self.assertIn("default_queue", data)
+        self.assertIn("task_always_eager", data)
+        self.assertIn("overview_api_path", data)
+        self.assertIn("worker_start_command", data)
+        self.assertIn("dify_debounce_task", data)
+        self.assertIn("warnings", data)
+
+    def test_celery_overview_returns_403_for_non_superuser(self):
+        self.client.force_authenticate(user=self.normal_user)
+        response = self.client.get("/api/servicos/celery/overview/")
+        self.assertEqual(response.status_code, 403)
+
     def test_redis_overview_keyspace_parses_string_format(self):
         """Garante que keys_total é extraído do formato Redis 'keys=N,expires=N'."""
         mock_client = MagicMock()

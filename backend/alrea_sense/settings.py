@@ -683,6 +683,18 @@ ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, ca
 # ✅ TESTE: Usar presigned URL diretamente (sem media-proxy) para testes
 USE_PRESIGNED_URL = config('USE_PRESIGNED_URL', default=False, cast=bool)
 
+# Celery (debounce Dify inbound, tarefas futuras). Broker padrão = RabbitMQ já configurado.
+CELERY_BROKER_URL = config("CELERY_BROKER_URL", default=RABBITMQ_URL or "amqp://guest:guest@localhost:5672/")
+CELERY_TASK_DEFAULT_QUEUE = config("CELERY_TASK_DEFAULT_QUEUE", default="celery")
+CELERY_TASK_TIME_LIMIT = config("CELERY_TASK_TIME_LIMIT", default=120, cast=int)
+CELERY_TASK_SOFT_TIME_LIMIT = config("CELERY_TASK_SOFT_TIME_LIMIT", default=90, cast=int)
+CELERY_WORKER_PREFETCH_MULTIPLIER = config("CELERY_WORKER_PREFETCH_MULTIPLIER", default=1, cast=int)
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_IGNORE_RESULT = True
+# Descomentar para testar sem worker: CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_ALWAYS_EAGER = config("CELERY_TASK_ALWAYS_EAGER", default=False, cast=bool)
+
 # Debug settings for Railway deploy - AFTER all configurations are loaded
 print("[READY] [SETTINGS] ==========================================")
 print("[READY] [SETTINGS] DJANGO SETTINGS LOADED SUCCESSFULLY!")
