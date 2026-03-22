@@ -261,12 +261,32 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
   updateConversation: (conversation) => set((state) => {
+    // Estado anterior (antes do upsert) para detetar transição → closed (ex.: fecho remoto / bot)
+    const prevFromList = state.conversations.find((c) => c.id === conversation.id);
+    const prevStatus =
+      prevFromList?.status ??
+      (state.activeConversation?.id === conversation.id ? state.activeConversation.status : undefined);
+
     // ✅ MELHORIA: Usar função unificada upsertConversation (mesma lógica de addConversation)
     const updatedConversations = upsertConversation(state.conversations, conversation);
-    
+
+    const isActiveConversation = state.activeConversation?.id === conversation.id;
+    const transitionedToClosed =
+      prevStatus !== undefined &&
+      prevStatus !== 'closed' &&
+      conversation.status === 'closed';
+
+    // Fechar painel central como no Encerrar manual quando a conversa passa a closed em tempo real
+    if (isActiveConversation && transitionedToClosed) {
+      return {
+        conversations: updatedConversations,
+        activeConversation: null,
+        openInSpyMode: false,
+      };
+    }
+
     // ✅ CORREÇÃO CRÍTICA: SEMPRE atualizar activeConversation se for a mesma conversa
     // Isso garante que nome, foto, last_message, etc. atualizem em tempo real
-    const isActiveConversation = state.activeConversation?.id === conversation.id;
     
     if (isActiveConversation) {
       console.log('🔄 [STORE] Atualizando activeConversation:', {
